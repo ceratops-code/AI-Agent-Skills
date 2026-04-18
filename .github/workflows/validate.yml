@@ -20,5 +20,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6.0.2
 
+      - name: Check common skill core sync
+        run: python scripts/sync-skill-core.py --check
+
       - name: Validate skills
         run: python scripts/validate-skills.py

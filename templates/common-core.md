@@ -1,0 +1,9 @@
+## Core Rules
+
+- Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
+- Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
+- On every run, check current official docs for unstable standards and use 2-3 strong current reference repos when useful.
+- If runtime research reveals a durable missing general rule, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
+- Inspect local state and local auth before asking for credentials or making assumptions.
+- Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
+- If any required item is unmet or unverifiable, report the blocker instead of claiming completion.

@@ -62,10 +62,11 @@ Invoke skills directly with `/skill-name` in Claude Code. In Codex, invoke them 
 Run:
 
 ```powershell
+python .\scripts\sync-skill-core.py --check
 python .\scripts\validate-skills.py
 ```
 
-The validator checks skill frontmatter, folder/name consistency, Codex metadata, placeholder leftovers, README coverage, and high-confidence secret patterns.
+The sync check enforces the shared Ceratops core block across all skills. The validator checks skill frontmatter, folder/name consistency, Codex metadata, placeholder leftovers, README coverage, and high-confidence secret patterns.
 
 ## Releases
 

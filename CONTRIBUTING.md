@@ -17,6 +17,7 @@ Contributions should keep skills practical, current, and safe.
 Run before opening a pull request:
 
 ```powershell
+python .\scripts\sync-skill-core.py
 python .\scripts\validate-skills.py
 ```
 
