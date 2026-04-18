@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 - 2026-04-19
+
+- Required all Ceratops GitHub workflow skills to report each retained security, code-scanning, maturity, or process alert with name or id, blocking status, defer reason, and concrete clearance work.
+- Expanded `ceratops-gh-repo-health-audit` to perform an explicit end-to-end alert audit and forbid collapsing retained alerts into a generic healthy result.
+
 ## 0.1.1 - 2026-04-18
 
 - Tightened publication checks across the publish, ship, audit, and merge skills.

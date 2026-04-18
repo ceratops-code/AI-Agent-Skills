@@ -18,6 +18,7 @@ Validate that an existing GitHub repo is clean, current, secure, documented, pub
 - If runtime research reveals a durable missing general rule, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
+- For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 <!-- CERATOPS_COMMON_CORE_END -->
 
@@ -58,6 +59,8 @@ Infer missing inputs from live repo state and local files before asking.
 - Verify default-branch protection with real checks, strict status checks, PR flow, review policy, stale review dismissal, conversation resolution, admin enforcement, no force pushes, and no deletions as appropriate for the repo.
 - Verify topics are precise and current, and CODEOWNERS contains only valid current owners.
 - Verify versions, tags, releases, package metadata, image digests, and latest-release pointers match intended state.
+- Audit the repo end to end for open security, code-scanning, maturity, and process alerts from GitHub, CI, dependency tooling, scorecards, and equivalent live signals relevant to the repo.
+- Decide whether each alert is safe, fix low-risk items directly, and for every alert left open report its name or id, blocking status, why it is not being fixed now, and the concrete work needed to clear it.
 - Verify no stale PRs, branches, tags, releases, generated files, local path references, or old automation references remain unclassified.
 
 ### 4. Repair Safe Gaps
@@ -94,6 +97,7 @@ Do not ask for credentials if a working local auth path exists.
 Report only:
 
 - health gaps fixed
+- alerts fixed and alerts left open with name or id, blocking status, why they remain open, and the concrete work needed to clear them
 - health gaps intentionally retained with exact reasons
 - remaining blockers or credential steps
 - live GitHub, security, CI, release, and registry verification results
