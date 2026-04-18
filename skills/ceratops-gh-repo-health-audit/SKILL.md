@@ -47,12 +47,13 @@ Infer missing inputs from live repo state and local files before asking.
 ### 3. Audit Repo Health
 
 - Verify README accuracy, install/run/build/test/publish instructions, screenshots/examples, badges, links, release notes, changelog, support path, and registry links.
-- Verify `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, issue templates, pull request template, support/contact routing, `.gitignore`, `.dockerignore`, CI, release workflows, dependency update automation, and code scanning config when relevant.
+- Verify `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, issue templates, issue-template labels, pull request template, support/contact routing, `.gitignore`, `.dockerignore`, CI, release workflows, dependency update automation, and code scanning config when relevant.
 - Verify public repo security posture: private vulnerability reporting or clear private reporting path, Dependabot security updates, secret scanning, push protection, code scanning, dependency graph, and current alert state when available at no extra cost.
 - Verify default-branch protection: required real checks, strict status checks, PR flow, review policy, stale review dismissal, conversation resolution, admin enforcement, no force pushes, and no deletions as appropriate for the repo.
 - Verify topics are precise and current, not spammy or stale.
 - Verify CODEOWNERS points only to existing appropriate owners and no stale upstream/internal teams.
 - Verify versions, tags, releases, package metadata, Docker tags, package registry versions, image digests, and latest-release pointers match the repo's intended state.
+- Verify Docker MCP overrides point at the intended image and, when applicable, verify active runtime tool annotations and at least one safe read-only tool call.
 - Verify no stale PRs, stale setup branches, duplicate dependency PRs, unmerged release PRs, dangling local commits, unpublished artifacts, stale generated files, stale local path references, stale Docker MCP overrides, or old automation config references remain unclassified.
 
 ### 4. Repair Safe Gaps

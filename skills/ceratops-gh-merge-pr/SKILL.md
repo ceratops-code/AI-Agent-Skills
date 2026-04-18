@@ -67,6 +67,7 @@ Infer missing inputs from `gh`, git remotes, current branch, and live repo data 
 - Delete the remote head branch only when the PR is merged, the branch is not protected, deletion is allowed, and the branch is not a reusable release or integration branch.
 - Sync the local default branch to the remote default branch without destructive resets.
 - Prune stale refs safely.
+- Before force-deleting a local branch left behind by a squash or rebase merge, verify its patch is empty against the synced default branch; keep a safety branch and report it if the patch is not empty.
 - Keep a clearly named safety branch only when needed to preserve reachable work after squash/rebase merge or history rewrite.
 - Verify local status is clean or report exact retained local changes.
 

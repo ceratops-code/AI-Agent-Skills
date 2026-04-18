@@ -72,6 +72,7 @@ Infer the safest practical default instead of asking unless the choice is risky,
 - For public repos, ensure `SECURITY.md` has a real private reporting path or explicit private vulnerability reporting instructions. Prefer GitHub private vulnerability reporting when available at no extra cost.
 - For public repos, prefer enabling Dependabot security updates, secret scanning, push protection, code scanning, and private vulnerability reporting when available at no extra cost and relevant.
 - Verify GitHub community-health recognition from the live endpoint when possible.
+- Verify labels referenced by issue forms or templates exist in the target repository.
 - If the project fixes a bug, add a regression test or regression check.
 
 ### 5. Configure Metadata And Governance
@@ -101,11 +102,13 @@ Infer the safest practical default instead of asking unless the choice is risky,
 - Prefer PyPI trusted publishing when already configured or clearly appropriate at no extra cost; otherwise use existing local token-based auth. Apply analogous official publishing guidance for each selected registry.
 - Verify published GitHub, release, Docker Hub, PyPI, npm, Maven, NuGet, crates.io, RubyGems, PowerShell Gallery, GitHub Packages, or other registry endpoints from live endpoints, not only CLI success.
 - Add or update Docker MCP override, catalog, or profile examples only when the project is meant to replace an existing MCP server image.
+- For Docker MCP replacement images, import the override when locally applicable, verify the active runtime tool annotations from the MCP client or Docker MCP CLI, and run at least one safe read-only tool call when credentials/config are available.
 
 ### 8. Tag And Release
 
 - Create and push an initial or next release tag only when the repo is publishable and the version source is clear.
 - Prefer existing version metadata from manifests, release config, changelog, or tag series.
+- For public registry artifacts published from a git tag, create or verify a GitHub release for that tag unless the repo has an explicit tags-only policy; include artifact URLs, tags, and digests or package identifiers in the release notes.
 - If creating a GitHub release, verify the release page, latest-release pointer, tag, target commit, release notes, and attached artifacts from the live endpoint.
 - Skip release tagging when version semantics cannot be derived without invention, and report the skip precisely.
 
