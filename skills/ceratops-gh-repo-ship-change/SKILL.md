@@ -54,6 +54,7 @@ Infer missing inputs from local files and live repo state before asking.
 - Add or update regression tests for bug fixes and meaningful behavior changes.
 - Update README, examples, install/run commands, SECURITY, CONTRIBUTING, changelog, release notes, package metadata, Docker docs, topics, CODEOWNERS, and CI only when the change makes them stale or incomplete.
 - Refresh lockfiles, generated files, schemas, catalogs, Docker MCP overrides, or profile files when they are part of the project contract.
+- Verify labels referenced by issue forms or templates exist when the change adds or edits those templates.
 - Keep repo-specific cleanup separate from official requirements in the final reasoning.
 
 ### 4. Validate Locally
@@ -78,6 +79,8 @@ Infer missing inputs from local files and live repo state before asking.
 - Derive versions from trustworthy project metadata and tag history. Do not invent semantics when versioning is ambiguous.
 - Publish only after the merge target is correct and required checks are green, unless the repo's official release flow intentionally publishes from the PR or tag.
 - Verify live registry endpoints, tags, digests, package pages, release pages, and artifacts.
+- For public registry artifacts published from a git tag, create or verify a GitHub release for that tag unless the repo has an explicit tags-only policy; include artifact URLs, tags, and digests or package identifiers in the release notes.
+- For Docker MCP replacement images, import the override when locally applicable, verify active runtime tool annotations from the MCP client or Docker MCP CLI, and run at least one safe read-only tool call when credentials/config are available.
 - Install, pull, or consume the published artifact locally using the public endpoint or intended registry endpoint.
 
 ## Credential Handling
