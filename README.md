@@ -67,6 +67,10 @@ python .\scripts\validate-skills.py
 
 The validator checks skill frontmatter, folder/name consistency, Codex metadata, placeholder leftovers, README coverage, and high-confidence secret patterns.
 
+## Releases
+
+Releases use `vMAJOR.MINOR.PATCH` tags. See `CHANGELOG.md` for release notes.
+
 ## Artifact Publishing
 
 This repository publishes skill source files only. It does not publish Docker images, PyPI packages, npm packages, or other runtime artifacts.
