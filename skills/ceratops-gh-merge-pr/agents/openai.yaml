@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops GH Merge PR"
+  short_description: "Merge GitHub PRs with cleanup"
+  default_prompt: "Use $ceratops-gh-merge-pr to merge this GitHub PR safely, verify checks and branch protection, clean up branches, and sync local state."

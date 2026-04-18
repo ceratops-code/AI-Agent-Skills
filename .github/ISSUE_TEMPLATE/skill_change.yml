@@ -1,0 +1,27 @@
+name: Skill change
+description: Suggest a durable workflow or checklist improvement.
+title: "[Skill]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: change
+    attributes:
+      label: Proposed change
+      description: What should the skill do differently?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Link official docs or current strong reference repos when possible.
+    validations:
+      required: false
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Explain why this is durable and broadly useful, not project-specific boilerplate.
+    validations:
+      required: true

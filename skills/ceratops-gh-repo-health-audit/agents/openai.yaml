@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops GH Repo Health Audit"
+  short_description: "Audit and repair GitHub repo health"
+  default_prompt: "Use $ceratops-gh-repo-health-audit to validate this GitHub repo end-to-end, fix safe repo-health gaps, and report real blockers."

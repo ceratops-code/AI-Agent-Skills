@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops GH Repo Publish"
+  short_description: "Publish repos and artifacts end-to-end"
+  default_prompt: "Use $ceratops-gh-repo-publish to publish this local project to public GitHub and the correct public registry with Ceratops defaults."

@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a broken or unsafe skill behavior.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: dropdown
+    id: skill
+    attributes:
+      label: Skill
+      options:
+        - ceratops-gh-repo-publish
+        - ceratops-gh-repo-ship-change
+        - ceratops-gh-repo-dependency-update
+        - ceratops-gh-repo-health-audit
+        - ceratops-gh-merge-pr
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What happened, and what should have happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include a minimal prompt, repo state, or command sequence if safe to share.
+    validations:
+      required: false
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety notes
+      description: Do not include secrets, tokens, private endpoints, or personal data.
+    validations:
+      required: false
