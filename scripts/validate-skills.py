@@ -11,6 +11,9 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKILLS_DIR = ROOT / "skills"
 README = ROOT / "README.md"
+COMMON_CORE_TEMPLATE = ROOT / "templates" / "common-core.md"
+CORE_START = "<!-- CERATOPS_COMMON_CORE_START -->"
+CORE_END = "<!-- CERATOPS_COMMON_CORE_END -->"
 
 NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 SECRET_PATTERNS = [
@@ -80,6 +83,19 @@ def check_skill(skill_dir: pathlib.Path, readme_text: str) -> list[str]:
         errors.append(f"{name}: missing body")
     if name not in readme_text:
         errors.append(f"{name}: missing from README")
+    if "## Boundaries" not in skill_md.read_text(encoding="utf-8"):
+        errors.append(f"{name}: missing Boundaries section")
+    core_text = skill_md.read_text(encoding="utf-8")
+    start = core_text.find(CORE_START)
+    end = core_text.find(CORE_END)
+    if start == -1 or end == -1 or end < start:
+        errors.append(f"{name}: missing common core markers")
+    else:
+        end += len(CORE_END)
+        actual = core_text[start:end]
+        expected = f"{CORE_START}\n{COMMON_CORE_TEMPLATE.read_text(encoding='utf-8').strip(chr(10))}\n{CORE_END}"
+        if actual != expected:
+            errors.append(f"{name}: common core block is out of sync with template")
 
     if not openai_yaml.is_file():
         errors.append(f"{name}: missing agents/openai.yaml")
@@ -116,6 +132,8 @@ def main() -> int:
         errors.append("missing skills/ directory")
     if not README.is_file():
         errors.append("missing README.md")
+    if not COMMON_CORE_TEMPLATE.is_file():
+        errors.append("missing templates/common-core.md")
 
     readme_text = README.read_text(encoding="utf-8") if README.is_file() else ""
     skill_dirs = sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir()) if SKILLS_DIR.is_dir() else []
