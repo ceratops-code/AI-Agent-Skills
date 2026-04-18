@@ -49,6 +49,7 @@ Infer missing inputs from live repo state and local files before asking.
 - Verify README accuracy, install/run/build/test/publish instructions, screenshots/examples, badges, links, release notes, changelog, support path, and registry links.
 - Verify `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, issue templates, issue-template labels, pull request template, support/contact routing, `.gitignore`, `.dockerignore`, CI, release workflows, dependency update automation, and code scanning config when relevant.
 - Verify public repo security posture: private vulnerability reporting or clear private reporting path, Dependabot security updates, secret scanning, push protection, code scanning, dependency graph, and current alert state when available at no extra cost.
+- Distinguish broken security controls from Scorecard-style maturity or process alerts. Do not silently omit non-blocking open alerts; report each retained item and the not-performed work needed to clear it.
 - Verify default-branch protection: required real checks, strict status checks, PR flow, review policy, stale review dismissal, conversation resolution, admin enforcement, no force pushes, and no deletions as appropriate for the repo.
 - Verify topics are precise and current, not spammy or stale.
 - Verify CODEOWNERS points only to existing appropriate owners and no stale upstream/internal teams.

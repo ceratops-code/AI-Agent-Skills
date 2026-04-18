@@ -82,6 +82,7 @@ Infer the safest practical default instead of asking unless the choice is risky,
 - Configure default-branch protection after checking available no-cost features. Preferred solo-maintainer baseline: required real CI checks, strict status checks, pull-request flow required, zero required approvers unless requested, stale reviews dismissed, conversation resolution required, admins enforced, no force pushes, and no deletions.
 - Enable auto-merge and delete-branch-on-merge when compatible with the repo workflow and available at no extra cost.
 - Verify branch protection, security controls, topics, community files, code scanning status, Dependabot security updates, secret scanning, push protection, private vulnerability reporting, and alert counts from live endpoints.
+- Distinguish broken security controls from non-blocking maturity or process alerts such as Scorecard-only signals. Report retained items and the not-performed work explicitly instead of collapsing them into a generic healthy/published result.
 
 ### 6. Validate Before Publishing
 

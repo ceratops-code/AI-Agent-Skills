@@ -62,6 +62,7 @@ Infer missing inputs from local files and live repo state before asking.
 - Run format, lint, tests, smoke tests, build, packaging, container build, generated-file checks, and security checks relevant to the changed files.
 - For packages, build local artifacts and install or consume them locally before publishing.
 - For images, build locally and run a smoke test before publishing.
+- Distinguish broken security controls from non-blocking maturity or process alerts such as Scorecard-only signals. Report retained items and the not-performed work explicitly instead of collapsing them into a generic shipped/healthy result.
 - Fix in-scope failures instead of stopping at the first error. Classify unrelated or pre-existing failures precisely.
 
 ### 5. PR, CI, And Merge
