@@ -1,6 +1,6 @@
 ---
 name: ceratops-thread-resume-from-handoff
-description: Resume work in a new thread from a pasted handoff bundle. Use when Codex should treat the handoff as a compact hypothesis set, validate it against current local and remote state, refresh stale pieces narrowly, and continue from the next justified stage.
+description: Resume work in a new thread from a pasted handoff bundle. Use when Codex should treat the handoff as a compact hypothesis set, validate the handed-off issue and deferred questions against current local and remote state, refresh stale pieces narrowly, and continue from the next justified stage.
 ---
 
 # Ceratops Thread Resume From Handoff
@@ -16,6 +16,7 @@ Start a new thread from a handoff bundle without trusting stale assumptions.
 - If runtime research reveals a durable missing general rule, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
+- When a skill touches a public GitHub repo and reports repo, security, maturity, or process health, inspect the live community profile and equivalent no-cost moderation or community-health signals instead of inferring health from files, CI, or alert counts alone.
 - For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 <!-- CERATOPS_COMMON_CORE_END -->
@@ -26,12 +27,15 @@ Start a new thread from a handoff bundle without trusting stale assumptions.
 - Validate only what matters for the next stage or final completion.
 - Refresh stale pieces narrowly instead of rediscovering the whole task.
 - Preserve useful verified handoff facts; replace only what is stale, wrong, or missing.
+- Respect the handoff scope. Do not drift back into issues that the handoff explicitly left in the old thread unless the user broadens scope.
+- Treat deferred questions in the handoff as in-scope next-thread work unless the user reprioritizes.
 
 ## Inputs To Capture
 
 - The pasted handoff bundle
 - Any user note about what changed after the handoff was created
 - The next justified step claimed by the handoff
+- Any deferred questions or next-thread asks carried by the handoff
 
 ## Boundaries
 
@@ -43,7 +47,7 @@ Start a new thread from a handoff bundle without trusting stale assumptions.
 
 ### 1. Parse the handoff
 
-- Extract the current goal, claimed current state, unresolved issues, retained items, source-of-truth entities, and proposed next step.
+- Extract the handoff scope, any remaining scope left in the old thread, the current goal, claimed current state, unresolved issues, deferred questions, retained items, source-of-truth entities, and proposed next step.
 
 ### 2. Validate narrow state
 
@@ -58,6 +62,7 @@ Start a new thread from a handoff bundle without trusting stale assumptions.
 ### 4. Continue from the next justified stage
 
 - Resume the task from the earliest unconfirmed or unfinished stage.
+- Answer or execute deferred questions when they are part of the handed-off issue and no newer priority overrides them.
 - Before completion, run the narrowest justified closure pass for the resumed task.
 
 ## Credential Handling
