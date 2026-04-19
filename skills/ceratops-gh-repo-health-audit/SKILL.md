@@ -18,6 +18,7 @@ Validate that an existing GitHub repo is clean, current, secure, documented, pub
 - If runtime research reveals a durable missing general rule, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
+- When a skill touches a public GitHub repo and reports repo, security, maturity, or process health, inspect the live community profile and equivalent no-cost moderation or community-health signals instead of inferring health from files, CI, or alert counts alone.
 - For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 <!-- CERATOPS_COMMON_CORE_END -->
@@ -44,6 +45,7 @@ Infer missing inputs from live repo state and local files before asking.
 
 - Inspect git status, remotes, branches, refs, tags, releases, generated files, artifacts, temp paths, package outputs, and local consumer references.
 - Inspect live GitHub repo metadata, topics, description, default branch, open PRs, branches, tags, releases, Actions runs, code scanning, Dependabot, security settings, branch protection, rulesets, and community profile.
+- For public repos, inspect live community-profile moderation signals such as reported-content health and `content_reports_enabled`, not just file completeness and security alerts.
 - Inspect published packages or images relevant to the repo.
 
 ### 2. Research Current Standards
