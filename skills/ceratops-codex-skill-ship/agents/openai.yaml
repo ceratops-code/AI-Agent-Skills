@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops Codex Skill Ship"
+  short_description: "Ship skills to GitHub and local install"
+  default_prompt: "Use $ceratops-codex-skill-ship to validate, publish, and locally install the changed Ceratops skills from the codex-skills repo."

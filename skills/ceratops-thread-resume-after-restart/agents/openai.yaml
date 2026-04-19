@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops Thread Resume After Restart"
+  short_description: "Reconstruct and resume after restart"
+  default_prompt: "Use $ceratops-thread-resume-after-restart to reconstruct progress from disk and runtime state after a restart or crash, then continue in the current thread."
