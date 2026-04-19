@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops Thread Create Handoff"
+  short_description: "Create a compact new-thread handoff"
+  default_prompt: "Use $ceratops-thread-create-handoff to produce a compact verified handoff bundle for starting a new thread on this task."

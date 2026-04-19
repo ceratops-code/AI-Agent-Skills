@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops Thread Resume Manual"
+  short_description: "Resume same thread after manual stop"
+  default_prompt: "Use $ceratops-thread-resume-manual-stop to resume this interrupted task in the current thread after a manual stop, verify current local state, and continue from the next justified stage."
