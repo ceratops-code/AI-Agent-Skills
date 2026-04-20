@@ -18,6 +18,7 @@ Use the same repo-health scope as `$ceratops-gh-repo-health-audit`, but treat th
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
 - When a skill touches a public GitHub repo and reports repo, security, maturity, or process health, inspect the live community profile and equivalent no-cost moderation or community-health signals instead of inferring health from files, CI, or alert counts alone.
 - For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
+- In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 <!-- CERATOPS_COMMON_CORE_END -->
 
@@ -92,11 +93,10 @@ Do not ask for credentials if a working local auth path exists.
 Report only:
 
 - health gaps fixed
-- live GitHub findings fixed and findings left open with check name, blocking status, why they remain open, and the concrete work needed to clear them
+- alerts or findings left open with name or id, blocking status, why they remain open, and the concrete work needed to clear them
 - health gaps intentionally retained with exact reasons
 - remaining blockers or credential steps
-- live GitHub, security, CI, release, and registry verification results
-- branches, PRs, tags, releases, local paths, temp paths, or artifacts removed or retained
+- anything important not verified
 - paid requirement with product, reason, and price if encountered
 
 ## Example Invocation
