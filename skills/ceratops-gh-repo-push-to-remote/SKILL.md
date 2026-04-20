@@ -1,5 +1,5 @@
 ---
-name: ceratops-gh-repo-ship-change
+name: ceratops-gh-repo-push-to-remote
 description: Ship local repository changes through GitHub and any relevant artifact registry with Ceratops defaults, using scripted live repo and PR checks before merge decisions.
 ---
 
@@ -41,7 +41,7 @@ Infer missing inputs from local files and live repo state before asking.
 ## Boundaries
 
 - Use this skill when the repo already exists and there are actual local changes to complete, merge, and optionally release.
-- If the repo is not yet published or lacks a usable remote, stop and use `$ceratops-gh-repo-publish`.
+- If the repo is not yet published or lacks a usable remote, stop and use `$ceratops-gh-repo-create-and-publish`.
 - If the task is only repo validation or stale-state cleanup with no content changes, stop and use `$ceratops-gh-repo-health-audit`.
 - If only PR finalization remains and no content changes are needed, stop and use `$ceratops-gh-merge-pr`.
 
@@ -130,4 +130,4 @@ Report only:
 
 ## Example Invocation
 
-`Use $ceratops-gh-repo-ship-change to ship these local changes through GitHub with the bundled live checks, publish any relevant artifacts, verify them locally, and clean up state.`
+`Use $ceratops-gh-repo-push-to-remote to push these local changes through GitHub with the bundled live checks, publish any relevant artifacts, verify them locally, and clean up state.`

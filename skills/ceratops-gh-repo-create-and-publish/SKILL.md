@@ -1,5 +1,5 @@
 ---
-name: ceratops-gh-repo-publish
+name: ceratops-gh-repo-create-and-publish
 description: Create, fork, or production-harden a local software project as a public GitHub repository and publish the correct public artifact registry output with Ceratops defaults, using live scripted GitHub checks before closing.
 ---
 
@@ -42,7 +42,7 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 ## Boundaries
 
 - Use this skill for first-time publication, repo creation or forking, visibility decisions, initial hardening, and first release setup.
-- If the repo already exists and only local changes or a normal release need shipping, stop and use `$ceratops-gh-repo-ship-change`.
+- If the repo already exists and only local changes or a normal release need shipping, stop and use `$ceratops-gh-repo-push-to-remote`.
 - If the user only wants a state check, stale-item cleanup, or settings validation on an existing repo, stop and use `$ceratops-gh-repo-health-audit`.
 - If only PR finalization remains, stop and use `$ceratops-gh-merge-pr`.
 
@@ -129,4 +129,4 @@ Report only:
 
 ## Example Invocation
 
-`Use $ceratops-gh-repo-publish for this project. Publish it end-to-end to GitHub and the right public registry, and prove live GitHub settings with the bundled checks before closing.`
+`Use $ceratops-gh-repo-create-and-publish for this project. Create or harden the GitHub repo, then publish the right public artifact and prove live GitHub settings with the bundled checks before closing.`

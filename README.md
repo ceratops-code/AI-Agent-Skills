@@ -6,8 +6,8 @@ Reusable Ceratops skills for Codex and other `SKILL.md`-compatible agents.
 
 | Skill | Purpose |
 | --- | --- |
-| `ceratops-gh-repo-publish` | Create or production-harden a public GitHub repo and publish the right artifact target when relevant. |
-| `ceratops-gh-repo-ship-change` | Ship local repo changes through PR, CI, merge, artifact publishing when relevant, and cleanup. |
+| `ceratops-gh-repo-create-and-publish` | Create or production-harden a public GitHub repo and publish the right artifact target when relevant. |
+| `ceratops-gh-repo-push-to-remote` | Ship local repo changes through PR, CI, merge, artifact publishing when relevant, and cleanup. |
 | `ceratops-gh-repo-dependency-update` | Process Dependabot, Renovate, security, and manual dependency update work recursively. |
 | `ceratops-gh-repo-health-audit` | Audit and repair GitHub repo health, security posture, stale state, and publication gaps. |
 | `ceratops-gh-merge-pr` | Safely merge a GitHub PR, verify checks and protection with live scripted readiness checks, clean up branches, and sync local state. |
