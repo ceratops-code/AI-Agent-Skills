@@ -86,7 +86,7 @@ Infer missing inputs from local files and live repo state before asking.
 - Use the live script findings plus current GitHub state to decide whether to merge now, enable auto-merge, or stop on a blocker.
 - When this skill merges the PR directly, use `gh pr merge --admin` with the allowed merge-method flag and `--delete-branch` when cleanup is intended and allowed.
 - Use `gh pr merge --auto` only when GitHub should wait for remaining requirements instead of closing the PR immediately.
-- Delete the branch when safe, sync the local default branch, prune stale refs, and keep a safety branch only when needed.
+- Delete the branch when safe, remove any temporary worktree created for the run after its branch is no longer needed, sync the local default branch, prune stale refs, and keep a safety branch only when needed.
 - If the repo is public and the run touches repo settings, release posture, or reports repo or process health, inspect the live community profile including moderation or reported-content health before closing.
 
 ### 7. Publish artifacts when relevant
@@ -116,6 +116,7 @@ Do not ask for credentials if a working local auth path exists.
 - Verify live GitHub state for the repo with `python <resolved-helper-path> repo-health` when repo settings or process health were part of the run.
 - Verify live registry state for every published artifact and verify local install, pull, or consumption when relevant.
 - Verify local state: default branch, worktree, remotes, refs, generated files, artifacts, temp paths, caches, credential changes, and local consumer paths.
+- Verify any temporary branch or worktree created for the run was removed unless intentionally retained.
 
 ## Output Contract
 
