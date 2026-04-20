@@ -3,7 +3,7 @@ name: ceratops-gh-repo-publish
 description: Create, fork, or production-harden a local software project as a public GitHub repository and publish the correct public artifact registry output with Ceratops defaults, using live scripted GitHub checks before closing.
 ---
 
-# Ceratops GH Repo Publish
+# Ceratops GH Repo Create And Publish
 
 Turn a local project into a real public GitHub repository and the right published artifact with minimal back-and-forth. Use the free path by default, prefer public visibility only after verifying the project is safe to expose, and prove machine-checkable live GitHub settings with the bundled helper scripts before closing.
 
