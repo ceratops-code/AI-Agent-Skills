@@ -30,6 +30,7 @@ Use the same first-time publish and hardening scope as `$ceratops-gh-repo-publis
 
 - GitHub owner or org. Prefer `ceratops-code` only when user or existing org context explicitly indicates Ceratops ownership and access is available at no extra cost.
 - Repo name, default branch, visibility, branch naming, and whether the repo should remain a fork.
+- Maintainer merge policy: by Ceratops default, require 1 approving review on the default branch and add the authenticated maintainer account as the bypass actor so the owner can still self-ship; only choose a different review policy when the user explicitly asks for it.
 - Package or image identity for the real deliverable: Docker, PyPI, npm, Maven, NuGet, crates.io, RubyGems, PowerShell Gallery, GitHub Packages, or another relevant registry.
 - Version source, release policy, tag style, changelog or release-note source, and first-release expectations.
 - License intent, topics, CODEOWNERS owners, support route, and security reporting path.
@@ -65,6 +66,7 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 
 - Create or fork the GitHub repo, push it, and verify the live endpoint.
 - Turn off unused live features such as wiki or projects when the repo does not actually use them.
+- Configure the default-branch review rule to require 1 approval and add the authenticated maintainer account to the bypass list unless the user explicitly asks for stricter review gating.
 - Run the bundled repo-health script after GitHub settings changes and before closing publish work.
 - Treat the script findings as the first source of truth for settings such as `content_reports_enabled`, branch protection, strict checks, required approvals, stale review dismissal, code scanning default setup, secret scanning, push protection, Dependabot security updates, delete-branch-on-merge, and auto-merge.
 - For first-time public publish, also check the live community profile and do not close while the remaining gap is a safe standard-file addition you can still make directly.
@@ -95,6 +97,7 @@ Do not ask for credentials if a working local auth path exists. Do not prefer co
 ## Completion Gate
 
 - Verify the final GitHub setting claims are backed by a fresh `python <resolved-helper-path> repo-health` run.
+- Verify live review protection still shows `required_approving_review_count: 1` and the intended maintainer bypass actor unless the user explicitly chose a different merge policy.
 - Verify live external state for every touched repo, protection rule, security setting, release, package, image, CI run, code scanning result, PR state, registry artifact, and docs endpoint.
 - Verify local state for every touched repo, worktree, generated file, artifact directory, cache, temp path, credential or config change, local consumer path, shortcut, scheduled task, service, shell profile, and cleanup side effect.
 
