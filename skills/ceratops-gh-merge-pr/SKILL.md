@@ -34,6 +34,7 @@ Merge one GitHub PR only after proving the repo will remain healthy. This is the
 - PR URL, number, branch, or local branch that identifies the PR.
 - Repo owner and name, default branch, merge method preference, and whether auto-merge or immediate merge is expected.
 - Required checks, review policy, conversation-resolution policy, merge queue, admin enforcement, branch deletion policy, and whether the branch is from a fork.
+- Whether the PR changes workflow refs or GitHub Actions permissions.
 - Local branch and worktree state that might be affected by syncing or cleanup.
 
 Infer missing inputs from `gh`, git remotes, the current branch, and live repo data before asking.
@@ -71,6 +72,7 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 - Confirm required reviews are satisfied and no blocking review remains.
 - Confirm required conversations are resolved.
 - Confirm the PR is up to date when strict status checks require it.
+- If the PR changes workflow refs or GitHub Actions permissions, confirm it does not introduce mutable external action refs that violate the repo's SHA-pinning policy. If it does, stop and use `$ceratops-gh-ship-change`.
 
 ### 5. Merge or enable auto-merge
 

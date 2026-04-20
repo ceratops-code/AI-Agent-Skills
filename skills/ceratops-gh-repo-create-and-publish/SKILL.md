@@ -32,6 +32,7 @@ Turn a local project into a real public GitHub repository and the right publishe
 - GitHub owner or org. Prefer `ceratops-code` only when user or existing org context explicitly indicates Ceratops ownership and access is available at no extra cost.
 - Repo name, default branch, visibility, branch naming, and whether the repo should remain a fork.
 - Maintainer merge policy: by Ceratops default, require 1 approving review on the default branch and add a pull-request-only bypass for the authenticated maintainer role or account so the owner can still self-ship; only choose a different review policy when the user explicitly asks for it.
+- Actions policy: by Ceratops default, pin every non-local action to a full commit SHA with a same-line release comment and enable the repo-level SHA-pinning setting once the workflows are compliant; only keep a weaker posture when the user explicitly chooses it.
 - Package or image identity for the real deliverable: Docker, PyPI, npm, Maven, NuGet, crates.io, RubyGems, PowerShell Gallery, GitHub Packages, or another relevant registry.
 - Version source, release policy, tag style, changelog or release-note source, and first-release expectations.
 - License intent, topics, CODEOWNERS owners, support route, and security reporting path.
@@ -65,6 +66,7 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 ### 3. Make the repo publishable
 
 - Add or update only the relevant repo files and workflows for the project type.
+- In repo-owned workflows, pin every non-local action to a full commit SHA and keep the intended release tag or version on the same line in a comment so Dependabot can keep updating it.
 - For first-time public repos, add the standard public-repo community files unless a stronger project-specific alternative already exists: `README`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, and at least one issue or pull-request intake template.
 - Replace internal, misleading, or broken defaults before publication.
 - Add ecosystem-standard manifests and metadata only when relevant to the actual project type.
@@ -77,9 +79,10 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 - Turn off unused live features such as wiki or projects when the repo does not actually use them.
 - Configure default-branch protection with real required checks, strict status checks, PR flow, `required_approving_review_count: 1`, stale review dismissal, conversation resolution, admin enforcement, no force pushes, and no deletions when available at no extra cost.
 - When the host supports repository rulesets, implement the maintainer exception as a pull-request-only ruleset bypass for the authenticated maintainer role or account instead of relying only on classic branch-protection bypass allowances.
+- Enable `sha_pinning_required` once the repo workflows are compliant. Treat an unpinned external action as a blocking publish hardening gap unless the user explicitly accepts the weaker tradeoff.
 - Enable auto-merge and delete-branch-on-merge when compatible with the workflow.
 - Run the bundled repo-health script after GitHub settings changes and before closing publish work.
-- Treat the script findings as the first source of truth for settings such as `content_reports_enabled`, branch protection, strict checks, required approvals, stale review dismissal, code scanning default setup, secret scanning, push protection, Dependabot security updates, delete-branch-on-merge, and auto-merge.
+- Treat the script findings as the first source of truth for settings such as `content_reports_enabled`, branch protection, strict checks, required approvals, stale review dismissal, code scanning default setup, secret scanning, push protection, Dependabot security updates, `sha_pinning_required`, delete-branch-on-merge, and auto-merge.
 - Verify branch protection, security controls, community health, moderation or reported-content health, and alert state from live endpoints. Do not assume repo-creation defaults already produced the intended moderation settings.
 - For first-time public publish, also check the live community profile and do not close while the remaining gap is a safe standard-file addition you can still make directly.
 
@@ -112,6 +115,7 @@ Do not ask for credentials if a working local auth path exists. Do not prefer co
 - Verify the final GitHub setting claims are backed by a fresh `python <resolved-helper-path> repo-health` run.
 - Verify live review protection still shows `required_approving_review_count: 1` and the intended maintainer bypass actor unless the user explicitly chose a different merge policy.
 - Verify the maintainer bypass is implemented through a live pull-request-only ruleset when the platform supports it.
+- Verify live Actions permissions still show `sha_pinning_required: true` whenever the repo uses external actions and the user did not explicitly choose a weaker policy.
 - Verify live external state for every touched repo, protection rule, security setting, release, package, image, CI run, code scanning result, PR state, registry artifact, and docs endpoint.
 - Verify local state for every touched repo, worktree, generated file, artifact directory, cache, temp path, credential or config change, local consumer path, shortcut, scheduled task, service, shell profile, and cleanup side effect.
 - Ensure the local repo is clean on the default branch and tracking the remote default branch. If a squash merge or history rewrite would strand useful local work, keep one clearly named safety branch and report it.

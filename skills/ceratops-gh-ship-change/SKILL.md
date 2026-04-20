@@ -34,6 +34,7 @@ Take an existing published repo from local changes to a verified merged result. 
 - Version bump, tag, release-note, changelog, and artifact-publish expectations.
 - Affected ecosystems and registries, if any.
 - Required local checks, CI checks, security gates, branch protection, release workflow, and package verification commands.
+- Whether the run touches GitHub Actions workflows or repo Actions permissions, and whether the repo already enforces SHA pinning.
 - Topics, CODEOWNERS, SECURITY instructions, README examples, and local consumer paths affected by the change.
 
 Infer missing inputs from local files and live repo state before asking.
@@ -68,6 +69,7 @@ Infer missing inputs from local files and live repo state before asking.
 ### 4. Complete the change
 
 - Finish in-scope code, docs, tests, generated files, and packaging metadata.
+- If the run touches workflow files or GitHub Actions settings, pin every non-local action in the changed workflows to a verified full SHA with a same-line version comment and do not introduce new mutable refs.
 - Add regression tests or regression checks for meaningful behavior fixes or behavior changes.
 - Update README, examples, install or run commands, SECURITY, CONTRIBUTING, changelog, release notes, package metadata, topics, CODEOWNERS, and CI only when the change makes them stale.
 
@@ -115,6 +117,7 @@ Do not ask for credentials if a working local auth path exists.
 - Verify the merge decision is backed by a fresh `python <resolved-helper-path> pr-readiness` run.
 - Verify live GitHub state for the repo with `python <resolved-helper-path> repo-health` when repo settings or process health were part of the run.
 - Verify live registry state for every published artifact and verify local install, pull, or consumption when relevant.
+- Verify changed workflow files still use the intended full-SHA action refs when the run touched GitHub Actions workflows or settings.
 - Verify local state: default branch, worktree, remotes, refs, generated files, artifacts, temp paths, caches, credential changes, and local consumer paths.
 - Verify any temporary branch or worktree created for the run was removed unless intentionally retained.
 
