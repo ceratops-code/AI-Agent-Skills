@@ -1,4 +1,4 @@
 interface:
-  display_name: "Ceratops GH Repo Publish"
-  short_description: "Publish repos with live scripted GitHub checks"
-  default_prompt: "Use $ceratops-gh-repo-publish for this project. Publish it end-to-end to GitHub and the right public registry, and prove live GitHub settings with the bundled checks before closing."
+  display_name: "Ceratops GH Repo Create And Publish"
+  short_description: "Create or first-publish repos with live GitHub checks"
+  default_prompt: "Use $ceratops-gh-repo-publish for this project. Create or harden the GitHub repo, then publish the right public artifact and prove live GitHub settings with the bundled checks before closing."
