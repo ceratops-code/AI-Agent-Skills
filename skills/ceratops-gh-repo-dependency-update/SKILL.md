@@ -71,7 +71,9 @@ Infer missing inputs from local files and live GitHub state before asking.
 - Refresh lockfiles or generated dependency metadata using the project package manager unless the ecosystem explicitly expects manual edits.
 - Run targeted tests first when useful, then full required checks before merge.
 - Fix in-scope failures. If a failure is flaky, unrelated, or upstream, prove that classification with evidence.
-- Merge or enable auto-merge only when required checks, reviews, conversations, and branch protection allow it.
+- Decide from the fresh readiness check plus live GitHub state whether to merge now, enable auto-merge, or stop on a blocker.
+- When this skill merges a dependency PR directly, use `gh pr merge --admin` with the allowed merge-method flag and `--delete-branch` when cleanup is intended and allowed.
+- Use `gh pr merge --auto` only when GitHub should wait for remaining requirements instead of closing the PR immediately.
 - After each merge, sync the default branch, re-check the queue, and continue until no actionable update remains, no progress is being made, or a real blocker is reached.
 
 ### 5. Publish and verify when required
