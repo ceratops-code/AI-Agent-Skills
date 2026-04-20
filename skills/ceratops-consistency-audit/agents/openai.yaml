@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops Consistency Audit"
+  short_description: "Audit merged refactors for contradictions and drift"
+  default_prompt: "Use $ceratops-consistency-audit to audit this repo for post-merge contradictions, docs-to-code drift, stale assumptions, and merged-only edge cases without turning it into a style review."

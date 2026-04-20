@@ -3,7 +3,7 @@
 ## Full Prompt
 
 ```text
-Run a post-merge consistency audit on this repository.
+Run a consistency audit on this repository after large merges, refactors, or parallel agent work.
 
 This is not a style review or generic code-quality pass. Focus on repository coherence after combined changes, large refactors, branch merges, or parallel agent threads.
 
@@ -34,11 +34,11 @@ Output only:
 ## Short Prompt
 
 ```text
-Run a post-merge consistency audit. Ignore style. Find contradictions, docs-to-code drift, stale assumptions, partial follow-through, duplicate logic drift, and merged-only edge cases by comparing declared behavior against actual behavior.
+Run a consistency audit. Ignore style. Find contradictions, docs-to-code drift, stale assumptions, partial follow-through, duplicate logic drift, and merged-only edge cases by comparing declared behavior against actual behavior.
 ```
 
 ## Audit-And-Fix Variant
 
 ```text
-Run a post-merge consistency audit, then apply only the smallest safe fixes for confirmed contradictions that are clearly in scope. Ignore style. Re-run the relevant checks after each fix and report only real findings, fixes, and anything important not verified.
+Run a consistency audit, then apply only the smallest safe fixes for confirmed contradictions that are clearly in scope. Ignore style. Re-run the relevant checks after each fix and report only real findings, fixes, and anything important not verified.
 ```

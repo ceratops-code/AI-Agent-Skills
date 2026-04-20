@@ -1,15 +1,14 @@
 ---
-name: ceratops-post-merge-consistency-audit
+name: ceratops-consistency-audit
 description: Audit a repository after large refactors, branch merges, or parallel agent threads for contradictions between implementation, docs, configs, tests, examples, and control files. Use when the goal is post-merge validation, release-readiness consistency checking, documentation-drift detection, or merged-only edge-case hunting rather than style review.
 ---
 
-# Ceratops Post Merge Consistency Audit
+# Ceratops Consistency Audit
 
 Audit repository coherence after combined changes. Across teams this work is usually split across post-merge validation, integration and regression testing, release-readiness review, documentation-drift checks, and architectural fitness functions. Use this skill to run the cross-cutting consistency pass those labels only partially cover.
 
 Use these references when helpful:
 
-- Naming and workflow research: `references/naming-and-patterns.md`
 - Reusable prompt templates: `references/prompt-template.md`
 
 <!-- CERATOPS_COMMON_CORE_START -->
@@ -121,4 +120,4 @@ If no findings remain, say so explicitly and mention the main residual risk area
 
 ## Example Invocation
 
-`Use $ceratops-post-merge-consistency-audit on this repo. Ignore style. Find post-merge contradictions, docs-to-code drift, stale assumptions, and merged-only edge cases.`
+`Use $ceratops-consistency-audit on this repo. Ignore style. Find post-merge contradictions, docs-to-code drift, stale assumptions, and merged-only edge cases.`
