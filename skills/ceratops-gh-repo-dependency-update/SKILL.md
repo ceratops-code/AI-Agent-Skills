@@ -34,6 +34,7 @@ Handle dependency updates as an end-to-end maintenance loop. Prefer safe automat
 - Release policy, artifact-publish policy, versioning rules, changelog expectations, and local verification commands.
 - Registry targets, if any.
 - Branch protection, required checks, code scanning, vulnerability alerts, auto-merge policy, and delete-branch policy.
+- Whether `github-actions` updates are in scope and whether the repo enforces SHA pinning.
 
 Infer missing inputs from local files and live GitHub state before asking.
 
@@ -69,6 +70,7 @@ Infer missing inputs from local files and live GitHub state before asking.
 - Prioritize security and low-risk updates unless ordering constraints require otherwise.
 - Inspect the diff, manifest changes, lockfile changes, transitive changes, CI impact, and release impact for each update.
 - Refresh lockfiles or generated dependency metadata using the project package manager unless the ecosystem explicitly expects manual edits.
+- For `github-actions` updates, keep action refs on full commit SHAs with same-line version comments so Dependabot can keep updating them. If the repo enforces SHA pinning, do not merge a PR that downgrades a workflow back to tag-only refs.
 - Run targeted tests first when useful, then full required checks before merge.
 - Fix in-scope failures. If a failure is flaky, unrelated, or upstream, prove that classification with evidence.
 - Decide from the fresh readiness check plus live GitHub state whether to merge now, enable auto-merge, or stop on a blocker.

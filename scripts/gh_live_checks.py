@@ -46,6 +46,30 @@ def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object],
     is_public = not bool(repo_info.get("private"))
     is_archived = bool(repo_info.get("archived"))
 
+    actions_permissions_result = gh_api(f"repos/{repo}/actions/permissions", cwd=cwd)
+    if actions_permissions_result.ok and isinstance(actions_permissions_result.data, dict):
+        sha_pinning_required = actions_permissions_result.data.get("sha_pinning_required")
+        if sha_pinning_required is True:
+            add(findings, "PASS", "sha_pinning_required", "Actions SHA pinning is enforced in live repo settings.")
+        else:
+            add(
+                findings,
+                "WARN",
+                "sha_pinning_required",
+                "Actions SHA pinning is not enforced. Prefer enabling it after external workflow actions are pinned to verified full SHAs.",
+                actual=sha_pinning_required,
+                expected=True,
+            )
+    else:
+        add(
+            findings,
+            "WARN",
+            "sha_pinning_required",
+            "Could not verify the live Actions SHA-pinning setting.",
+            actual=actions_permissions_result.stderr or actions_permissions_result.status,
+            expected="enabled or intentionally retained false",
+        )
+
     profile_result = gh_api(f"repos/{repo}/community/profile", cwd=cwd)
     profile = profile_result.data if profile_result.ok and isinstance(profile_result.data, dict) else {}
     if is_public and owner_type == "Organization" and not is_archived:
