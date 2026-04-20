@@ -1,4 +1,0 @@
-interface:
-  display_name: "Ceratops GH Scripted Repo Health Audit"
-  short_description: "Audit repo health with live scripted GitHub checks"
-  default_prompt: "Use $ceratops-gh-scripted-repo-health-audit to validate this GitHub repo with the bundled live checks first, fix safe repo-health gaps, and report real blockers."

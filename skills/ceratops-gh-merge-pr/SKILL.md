@@ -1,13 +1,11 @@
 ---
 name: ceratops-gh-merge-pr
-description: Merge a GitHub pull request safely with Ceratops defaults. Use when Codex needs to inspect a PR, verify branch protection, reviews, conversations, CI, code scanning, mergeability, auto-merge, merge queue, or required checks, merge or enable auto-merge, delete the branch, sync the local default branch, prune refs, and verify the final repo state.
+description: Merge a GitHub pull request safely with Ceratops defaults, starting with a live scripted readiness check and ending with verified cleanup.
 ---
 
 # Ceratops GH Merge PR
 
-## Overview
-
-Merge one GitHub PR only after proving the repo will remain healthy. This is the narrow finalization workflow for PR completion; it does not take ownership of code changes, dependency campaigns, or first-time publication.
+Merge one GitHub PR only after proving the repo will remain healthy. This is the narrow finalization workflow for PR completion; it does not take ownership of code changes, dependency campaigns, or first-time publication. Start with the bundled live PR check instead of relying on prose summaries or stale screenshots.
 
 <!-- CERATOPS_COMMON_CORE_START -->
 ## Core Rules
@@ -23,6 +21,12 @@ Merge one GitHub PR only after proving the repo will remain healthy. This is the
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 <!-- CERATOPS_COMMON_CORE_END -->
+
+## Script Bundle
+
+- Shared helper path relative to this skill: `..\ceratops-gh-runtime\scripts\gh_live_checks.py`
+- PR readiness check: `python <resolved-helper-path> pr-readiness --pr NUMBER_OR_URL`
+- Repo settings check when repo health is part of the merge closeout: `python <resolved-helper-path> repo-health --repo OWNER/REPO`
 
 ## Inputs To Capture
 
@@ -42,18 +46,24 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 
 ## Workflow
 
-### 1. Inspect Local And Remote State
+### 1. Inspect local and remote state
 
 - Inspect local git status, current branch, remotes, upstream, default branch, and whether the local branch maps to a PR.
 - Check GitHub auth through `gh`, git credentials, env vars, and connected GitHub tooling before asking for login.
 - Inspect the live PR base, head, mergeability, draft state, labels, assignees, reviews, unresolved conversations, requested changes, checks, code scanning state, deployments, merge queue state, and branch protection.
 
-### 2. Research Current Rules When Needed
+### 2. Research current rules when needed
 
 - Check current official GitHub docs or `gh` help when merge queue, auto-merge, branch protection, required status checks, review behavior, or cleanup semantics are unclear or likely changed.
 - Prefer live GitHub API or CLI state over memory.
 
-### 3. Prepare The PR
+### 3. Run the live PR check first
+
+- Run `python <resolved-helper-path> pr-readiness` before merge or auto-merge decisions.
+- Treat the script output as the first source of truth for draft state, mergeability, blocking review decisions, visible status-check failures, and pending status checks.
+- Re-run the script after any action that could change readiness, such as rebasing, updating the branch, dismissing a blocker, or waiting for CI.
+
+### 4. Prepare the PR
 
 - Confirm the PR is not draft unless the user explicitly wants to keep it draft.
 - Confirm required checks are green or pending in a state suitable for auto-merge.
@@ -61,20 +71,22 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 - Confirm required conversations are resolved.
 - Confirm the PR is up to date when strict status checks require it.
 
-### 4. Merge Or Enable Auto-Merge
+### 5. Merge or enable auto-merge
 
 - Use merge queue if required by the repo.
 - Use auto-merge when checks are pending but all other merge requirements are satisfied.
-- If all non-review requirements are green and the only remaining blocker is the acting maintainer's own required review, and the repo intentionally allows that maintainer to self-merge, use the admin merge path instead of fabricating approval or waiting for a second account.
+- If the readiness check is green on checks and mergeability and the only remaining blocker is the acting maintainer's own required review, and the repo intentionally allows that maintainer to self-merge, use the admin merge path instead of fabricating approval or waiting for a second account.
 - Use the repo's allowed and preferred merge method.
 - Verify the merge or queued auto-merge from the live PR endpoint instead of trusting only the command exit code.
 
-### 5. Clean Up
+### 6. Clean up and verify
 
 - Delete the remote head branch only when the PR is merged, deletion is allowed, and the branch is not a reusable release or integration branch.
+- After the merge, verify the live PR endpoint shows the PR as merged instead of reusing the pre-merge readiness script on a now-closed PR.
 - Sync the local default branch to the remote default branch without destructive resets.
 - Prune stale refs safely.
 - Keep a clearly named safety branch only when needed to preserve reachable work after a squash or rebase merge.
+- Run the repo-health script if repo-health claims are part of the closeout.
 
 ## Credential Handling
 
@@ -90,6 +102,7 @@ Do not ask for credentials if a working local auth path exists.
 
 ## Completion Gate
 
+- Verify the final merge decision was backed by a fresh pre-merge `python <resolved-helper-path> pr-readiness` run, then verify the post-merge PR state separately from the live PR endpoint.
 - Verify live PR state, merge commit or queue state, checks, reviews, conversations, branch protection result, branch deletion, and default branch state.
 - Verify local repo state, branch, remotes, refs, worktree cleanliness, and retained safety branches.
 
@@ -103,8 +116,6 @@ Report only:
 - anything important not verified
 - exact credential step if blocked
 
-## Example Invocations
+## Example Invocation
 
-`Use $ceratops-gh-merge-pr for PR #12. Merge it when checks pass, delete the branch, and sync local main.`
-
-`Use $ceratops-gh-merge-pr for the PR attached to this branch. Use auto-merge if checks are still pending.`
+`Use $ceratops-gh-merge-pr for PR #12. Run the bundled live PR check first, merge it when gates are satisfied, delete the branch, and sync local main.`

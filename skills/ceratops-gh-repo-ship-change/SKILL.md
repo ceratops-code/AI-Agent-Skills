@@ -1,13 +1,11 @@
 ---
 name: ceratops-gh-repo-ship-change
-description: Ship local repository changes through GitHub and any relevant artifact registry with Ceratops defaults. Use when Codex needs to inspect a dirty repo, update docs, metadata, README, SECURITY, tags, versions, package manifests, CI, tests, changelog, release notes, branch protection impact, open a PR, fix CI, merge or auto-merge, publish Docker, PyPI, npm, Maven, NuGet, crates, RubyGems, PowerShell Gallery, GitHub Packages, or other changed artifacts, install or pull the published artifact locally, and clean up branches and stale state.
+description: Ship local repository changes through GitHub and any relevant artifact registry with Ceratops defaults, using scripted live repo and PR checks before merge decisions.
 ---
 
 # Ceratops GH Repo Ship Change
 
-## Overview
-
-Take an existing published repo from local changes to a verified merged result. Publish external artifacts only when the change affects a releasable package, image, module, binary, or other public artifact.
+Take an existing published repo from local changes to a verified merged result. Publish external artifacts only when the change affects a releasable package, image, module, binary, or other public artifact. Verify machine-checkable GitHub state through the bundled helper scripts before trusting prose or stale screenshots.
 
 <!-- CERATOPS_COMMON_CORE_START -->
 ## Core Rules
@@ -23,6 +21,12 @@ Take an existing published repo from local changes to a verified merged result. 
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 <!-- CERATOPS_COMMON_CORE_END -->
+
+## Script Bundle
+
+- Shared helper path relative to this skill: `..\ceratops-gh-runtime\scripts\gh_live_checks.py`
+- Repo settings check: `python <resolved-helper-path> repo-health --repo OWNER/REPO`
+- PR readiness check: `python <resolved-helper-path> pr-readiness --pr NUMBER_OR_URL`
 
 ## Inputs To Capture
 
@@ -43,46 +47,54 @@ Infer missing inputs from local files and live repo state before asking.
 
 ## Workflow
 
-### 1. Inspect State And Scope
+### 1. Inspect state and scope
 
 - Inspect git status, diff, untracked files, remotes, current branch, upstream, open PRs, tags, releases, CI config, manifests, lockfiles, docs, generated files, and registry metadata.
 - Identify whether the change is code, docs, config, dependency, release, packaging, security, CI, or generated-artifact work.
 - Confirm no secrets, private data, machine-local paths, or internal-only references are being introduced.
 - Reuse an existing branch or PR when appropriate instead of creating duplicates.
 
-### 2. Research Current Standards
+### 2. Research current standards
 
 - Check current official docs for GitHub PR, Actions, security, release behavior, and any touched registry or package-manager workflow.
 - Compare 2-3 strong reference repos only when that will catch expected docs, security, CI, release, or packaging updates for this repo type.
 
-### 3. Complete The Change
+### 3. Prove live GitHub state with scripts
 
-- Finish in-scope code, docs, tests, generated files, and packaging metadata needed for the change to be coherent.
+- Run the bundled repo-health script whenever the run touches repo settings, release posture, or repo-health claims, including review-policy or code-scanning expectations.
+- Run the bundled PR-readiness script before merge or auto-merge decisions instead of relying on prose summaries of checks, reviews, or mergeability.
+- Re-run the relevant script after any live GitHub change that could invalidate the prior result.
+
+### 4. Complete the change
+
+- Finish in-scope code, docs, tests, generated files, and packaging metadata.
 - Add regression tests or regression checks for meaningful behavior fixes or behavior changes.
 - Update README, examples, install or run commands, SECURITY, CONTRIBUTING, changelog, release notes, package metadata, topics, CODEOWNERS, and CI only when the change makes them stale.
 
-### 4. Validate Locally
+### 5. Validate locally
 
 - Run the relevant local checks: format, lint, tests, smoke tests, build, packaging, generated-file checks, container build, or security checks.
 - For packages, build local artifacts and install or consume them locally before publishing.
 - For images, build locally and run a smoke test before publishing.
 - Fix in-scope failures instead of stopping at the first error.
 
-### 5. PR, CI, And Merge
+### 6. PR, CI, and merge
 
 - Create or update a branch and commit intentionally.
 - Push the branch and create or update a PR with concise change and validation evidence.
 - Wait for required CI, code scanning, and branch protection checks, and fix in-scope failures.
-- Merge or enable auto-merge only when checks, reviews, and conversations allow it.
+- Use the live script findings plus current GitHub state to decide whether to merge now, enable auto-merge, or stop on a blocker.
 - Delete the branch when safe, sync the local default branch, prune stale refs, and keep a safety branch only when needed.
 - If the repo is public and the run touches repo settings, release posture, or reports repo or process health, inspect the live community profile including moderation or reported-content health before closing.
 
-### 6. Publish Artifacts When Relevant
+### 7. Publish artifacts when relevant
 
 - Determine whether the merged change requires a release, tag, package, image, or other registry publish.
 - Use the current official release flow for the relevant ecosystem.
 - Derive versions from trustworthy project metadata and tag history instead of inventing semantics.
+- Publish external artifacts only when the merged change affects a releasable artifact.
 - Verify live registry endpoints, tags, digests, package pages, release pages, and artifacts when a publish actually happens.
+- Re-run the repo-health script after any live GitHub setting change and the PR-readiness script immediately before the final merge action.
 
 ## Credential Handling
 
@@ -98,9 +110,10 @@ Do not ask for credentials if a working local auth path exists.
 
 ## Completion Gate
 
-- Verify live GitHub state for the PR, merge, checks, code scanning, branch protection, tags, release, branch deletion, and default branch.
+- Verify the merge decision is backed by a fresh `python <resolved-helper-path> pr-readiness` run.
+- Verify live GitHub state for the repo with `python <resolved-helper-path> repo-health` when repo settings or process health were part of the run.
 - Verify live registry state for every published artifact and verify local install, pull, or consumption when relevant.
-- Verify local state: clean worktree on the default branch, remotes, refs, generated files, artifacts, temp paths, caches, credential changes, and local consumer paths.
+- Verify local state: default branch, worktree, remotes, refs, generated files, artifacts, temp paths, caches, credential changes, and local consumer paths.
 
 ## Output Contract
 
@@ -113,8 +126,6 @@ Report only:
 - anything important not verified
 - exact credential step or paid requirement if blocked
 
-## Example Invocations
+## Example Invocation
 
-`Use $ceratops-gh-repo-ship-change to ship the current changes, merge the PR, publish any changed artifact, and verify it locally.`
-
-`Use $ceratops-gh-repo-ship-change. This is a Python CLI change; update packaging and docs, publish to PyPI if a release is required, install it locally, and verify the command works.`
+`Use $ceratops-gh-repo-ship-change to ship these local changes through GitHub with the bundled live checks, publish any relevant artifacts, verify them locally, and clean up state.`

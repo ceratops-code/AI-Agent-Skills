@@ -1,13 +1,11 @@
 ---
 name: ceratops-gh-repo-dependency-update
-description: Process Dependabot, Renovate, security, and manual dependency update work through GitHub with Ceratops defaults. Use when Codex needs to discover dependency PRs or alerts, update packages recursively, inspect changelogs and advisories, refresh lockfiles, fix CI, merge safe updates, publish affected artifacts when the repo requires it, install or pull the result locally, and continue until no actionable dependency update remains or a real blocker is reached.
+description: Process Dependabot, Renovate, security, and manual dependency update work through GitHub with Ceratops defaults, using scripted live repo and PR checks before merge decisions.
 ---
 
 # Ceratops GH Repo Dependency Update
 
-## Overview
-
-Handle dependency updates as an end-to-end maintenance loop. Prefer safe automation for security, patch, and minor updates, and stop on ambiguous major upgrades, production risk, unavailable credentials, or paid requirements.
+Handle dependency updates as an end-to-end maintenance loop. Prefer safe automation for security, patch, and minor updates, stop on ambiguous major upgrades, production risk, unavailable credentials, or paid requirements, and ground queue handling and merge decisions in the bundled GitHub helper scripts first.
 
 <!-- CERATOPS_COMMON_CORE_START -->
 ## Core Rules
@@ -23,6 +21,12 @@ Handle dependency updates as an end-to-end maintenance loop. Prefer safe automat
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 <!-- CERATOPS_COMMON_CORE_END -->
+
+## Script Bundle
+
+- Shared helper path relative to this skill: `..\ceratops-gh-runtime\scripts\gh_live_checks.py`
+- Repo settings check: `python <resolved-helper-path> repo-health --repo OWNER/REPO`
+- PR readiness check: `python <resolved-helper-path> pr-readiness --pr NUMBER_OR_URL`
 
 ## Inputs To Capture
 
@@ -42,39 +46,44 @@ Infer missing inputs from local files and live GitHub state before asking.
 
 ## Workflow
 
-### 1. Inspect Queue And Risk
+### 1. Inspect queue and risk
 
-- Inspect git state, open PRs, dependency alerts, Dependabot or Renovate config, manifests, lockfiles, CI, security settings, tags, releases, and registry metadata.
+- Inspect git state, open PRs, dependency alerts, bot config, manifests, lockfiles, CI, security settings, tags, releases, and registry metadata.
 - Check GitHub auth, registry auth, and connected tooling before asking for credentials.
-- Build an update queue from live PRs, alerts, and local manifests, and classify each update as security, patch, minor, major, toolchain, grouped, or manual.
+- Build an update queue from live PRs, alerts, and local manifests, and classify each update by risk.
 
-### 2. Research Update Evidence
+### 2. Research update evidence
 
 - Use official package metadata, release notes, changelogs, advisories, compatibility notes, migration guides, and package-manager docs before merging meaningful updates.
 - Use strong current reference repos only when ecosystem-specific update patterns are unclear and comparison will reduce risk.
 - Do not infer that an update is safe from version number alone.
 
-### 3. Process Updates Recursively
+### 3. Re-check each candidate with scripts
+
+- Run the bundled PR-readiness script before enabling auto-merge or merging a dependency PR.
+- Run the repo-health script when the queue touches repo security posture, branch protection assumptions, review-policy expectations, moderation or community-health claims, code-scanning posture, or other live GitHub settings.
+- Re-run the relevant script after each merge or settings change instead of carrying stale queue assumptions forward.
+
+### 4. Process updates recursively
 
 - Prioritize security and low-risk updates unless ordering constraints require otherwise.
-- For each update, inspect the diff, manifest changes, lockfile changes, transitive changes, CI impact, and release impact.
+- Inspect the diff, manifest changes, lockfile changes, transitive changes, CI impact, and release impact for each update.
 - Refresh lockfiles or generated dependency metadata using the project package manager unless the ecosystem explicitly expects manual edits.
 - Run targeted tests first when useful, then full required checks before merge.
 - Fix in-scope failures. If a failure is flaky, unrelated, or upstream, prove that classification with evidence.
 - Merge or enable auto-merge only when required checks, reviews, conversations, and branch protection allow it.
 - After each merge, sync the default branch, re-check the queue, and continue until no actionable update remains, no progress is being made, or a real blocker is reached.
 
-### 4. Publish And Verify When Required
+### 5. Publish and verify when required
 
 - Determine whether merged dependency updates require a release or artifact publish under the repo's policy.
-- If required, publish the relevant package, image, or artifact using the current official flow for that ecosystem.
-- Verify the live registry or release endpoint and install, pull, or consume the published artifact locally enough to catch packaging or runtime failures.
+- Publish artifacts only when the merged dependency change requires it under the repo's release policy.
+- Verify live registry or release endpoints and install, pull, or consume the published artifact locally enough to catch packaging or runtime failures.
 
-### 5. Cleanup
+### 6. Cleanup
 
 - Close or classify stale, superseded, duplicate, or blocked dependency PRs only when the reason is proven.
-- Delete merged branches when safe and allowed.
-- Sync the local default branch, prune stale refs, and verify the worktree is clean.
+- Delete merged branches when safe and allowed, sync the local default branch, and prune stale refs.
 
 ## Credential Handling
 
@@ -90,6 +99,8 @@ Do not ask for credentials if a working local auth path exists.
 
 ## Completion Gate
 
+- Verify every dependency PR decision is backed by a fresh `python <resolved-helper-path> pr-readiness` run.
+- Verify live repo settings with `python <resolved-helper-path> repo-health` when repo posture was part of the run.
 - Verify live GitHub state for every dependency PR, alert, merge, check, branch, release, code scanning result, and branch protection gate touched.
 - Verify live registry state and local install, pull, or consumption for every artifact published.
 - Verify local state: default branch, worktree, remotes, refs, lockfiles, generated files, temp paths, caches, credentials, and retained branches.
@@ -105,8 +116,6 @@ Report only:
 - anything important not verified
 - exact credential step or paid requirement if blocked
 
-## Example Invocations
+## Example Invocation
 
-`Use $ceratops-gh-repo-dependency-update for this repo. Process Dependabot PRs recursively, merge safe updates, and stop only on real blockers.`
-
-`Use $ceratops-gh-repo-dependency-update. Prioritize security updates, publish any required package release, and verify the installed artifact locally.`
+`Use $ceratops-gh-repo-dependency-update. Process dependency PRs with the bundled live checks, merge safe updates, and stop only on real blockers.`

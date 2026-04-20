@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops GH Runtime"
+  short_description: "Shared live-check helper bundle"
+  default_prompt: "Use $ceratops-gh-runtime only when maintaining the shared helper bundle for the Ceratops GitHub skills."
