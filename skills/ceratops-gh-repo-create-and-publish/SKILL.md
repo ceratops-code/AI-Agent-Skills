@@ -42,7 +42,7 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 ## Boundaries
 
 - Use this skill for first-time publication, repo creation or forking, visibility decisions, initial hardening, and first release setup.
-- If the repo already exists and only local changes or a normal release need shipping, stop and use `$ceratops-gh-repo-push-to-remote`.
+- If the repo already exists and only local changes or a normal release need shipping, stop and use `$ceratops-gh-ship-change`.
 - If the user only wants a state check, stale-item cleanup, or settings validation on an existing repo, stop and use `$ceratops-gh-repo-health-audit`.
 - If only PR finalization remains, stop and use `$ceratops-gh-merge-pr`.
 
