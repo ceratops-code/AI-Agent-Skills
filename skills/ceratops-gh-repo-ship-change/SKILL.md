@@ -84,6 +84,8 @@ Infer missing inputs from local files and live repo state before asking.
 - Push the branch and create or update a PR with concise change and validation evidence.
 - Wait for required CI, code scanning, and branch protection checks, and fix in-scope failures.
 - Use the live script findings plus current GitHub state to decide whether to merge now, enable auto-merge, or stop on a blocker.
+- When this skill merges the PR directly, use `gh pr merge --admin` with the allowed merge-method flag and `--delete-branch` when cleanup is intended and allowed.
+- Use `gh pr merge --auto` only when GitHub should wait for remaining requirements instead of closing the PR immediately.
 - Delete the branch when safe, sync the local default branch, prune stale refs, and keep a safety branch only when needed.
 - If the repo is public and the run touches repo settings, release posture, or reports repo or process health, inspect the live community profile including moderation or reported-content health before closing.
 

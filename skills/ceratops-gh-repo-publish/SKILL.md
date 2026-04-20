@@ -87,7 +87,7 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 
 - Run the relevant local validation, ensure the latest relevant CI and code-scanning runs on the default branch are green, and publish the real external artifact only when the project actually has one.
 - Verify live GitHub, release, and registry endpoints instead of trusting only local CLI success.
-- If a single-maintainer fixture or sandbox repo needs one last hardening PR and GitHub self-approval rules would otherwise deadlock the run, you may temporarily lower required approvals just enough to merge that hardening PR, then immediately restore the intended review rule and verify the final live state.
+- If a single-maintainer fixture or sandbox repo needs one last hardening PR and GitHub self-approval rules would otherwise deadlock the run, merge that PR with `gh pr merge --admin` using the allowed method instead of weakening the steady-state review rule, then verify the final live state.
 
 ### 6. Tag and release
 

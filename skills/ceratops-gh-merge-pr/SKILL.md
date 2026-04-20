@@ -27,6 +27,7 @@ Merge one GitHub PR only after proving the repo will remain healthy. This is the
 - Shared helper path relative to this skill: `..\ceratops-gh-runtime\scripts\gh_live_checks.py`
 - PR readiness check: `python <resolved-helper-path> pr-readiness --pr NUMBER_OR_URL`
 - Repo settings check when repo health is part of the merge closeout: `python <resolved-helper-path> repo-health --repo OWNER/REPO`
+- Direct merge command: `gh pr merge --admin NUMBER_OR_URL_OR_BRANCH [--merge|--squash|--rebase] [--delete-branch]`
 
 ## Inputs To Capture
 
@@ -73,9 +74,10 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 
 ### 5. Merge or enable auto-merge
 
-- Use merge queue if required by the repo.
-- Use auto-merge when checks are pending but all other merge requirements are satisfied.
-- If the readiness check is green on checks and mergeability and the only remaining blocker is the acting maintainer's own required review, and the repo intentionally allows that maintainer to self-merge, use the admin merge path instead of fabricating approval or waiting for a second account.
+- Use `gh pr merge --admin` for every direct merge this skill performs. Add the PR selector, the repo's allowed merge-method flag, and `--delete-branch` when cleanup is intended and allowed.
+- Use `gh pr merge --auto` only when the user explicitly wants GitHub to defer the final merge until remaining requirements finish; otherwise close the PR now with `gh pr merge --admin`.
+- If the repo would otherwise route the PR through a merge queue, treat `gh pr merge --admin` as an intentional queue bypass and use it only after the fresh readiness check and live PR state show the bypass is justified.
+- If the readiness check is green on checks and mergeability and the only remaining blocker is the acting maintainer's own required review, and the repo intentionally allows that maintainer to self-merge, use `gh pr merge --admin` instead of fabricating approval or waiting for a second account.
 - Use the repo's allowed and preferred merge method.
 - Verify the merge or queued auto-merge from the live PR endpoint instead of trusting only the command exit code.
 

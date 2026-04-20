@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Added staged-task, same-thread resume, handoff, and skill-shipping Ceratops skills for recurring Codex workflow management.
+- Switched the Ceratops GitHub merge-capable skills to explicit `gh pr merge --admin` direct-merge guidance.
 
 ## 0.1.2 - 2026-04-19
 
