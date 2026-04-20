@@ -40,8 +40,8 @@ Infer missing inputs from live repo state and local files before asking.
 ## Boundaries
 
 - Use this skill when the task is primarily validation, stale-state cleanup, or safe repo-health repair and the repo has live GitHub state worth machine-checking.
-- If the repo is not yet published or still needs first-time hardening, stop and use `$ceratops-gh-repo-publish`.
-- If a safe fix turns into a content change that should go through normal PR and release flow, stop audit-only mode and use `$ceratops-gh-repo-ship-change`.
+- If the repo is not yet published or still needs first-time hardening, stop and use `$ceratops-gh-repo-create-and-publish`.
+- If a safe fix turns into a content change that should go through normal PR and release flow, stop audit-only mode and use `$ceratops-gh-repo-push-to-remote`.
 - If only PR finalization remains after prior fixes, stop and use `$ceratops-gh-merge-pr`.
 
 ## Workflow

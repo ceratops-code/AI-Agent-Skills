@@ -46,7 +46,7 @@ Ship changes to the local Codex skill source repo and keep the installed Ceratop
 
 - Use this skill when working in the `codex-skills` source repo or another skill source repo with the same local-install pattern.
 - If the task is only creating or editing the skill contents and not shipping them, stop and use the system `$skill-creator` guidance plus the relevant task skill.
-- If the task is general repo shipping not focused on Codex skills and local skill installation, stop and use `$ceratops-gh-repo-ship-change`.
+- If the task is general repo shipping not focused on Codex skills and local skill installation, stop and use `$ceratops-gh-repo-push-to-remote`.
 
 ## Workflow
 
@@ -69,7 +69,7 @@ Ship changes to the local Codex skill source repo and keep the installed Ceratop
 
 ### 4. Ship the repo change
 
-- Use `$ceratops-gh-repo-ship-change` when repo changes need to be committed, pushed, PR'd, merged, and cleaned up.
+- Use `$ceratops-gh-repo-push-to-remote` when repo changes need to be committed, pushed, PR'd, merged, and cleaned up.
 - If the work is only validation or stale-state cleanup with no content changes, use `$ceratops-gh-repo-health-audit` instead.
 
 ### 5. Verify final installed state

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Ceratops GH Repo Push To Remote"
-  short_description: "Push repo changes to remote with live GitHub checks"
-  default_prompt: "Use $ceratops-gh-repo-ship-change to push these local changes to the remote through GitHub with the bundled live checks, publish any relevant artifacts, verify them locally, and clean up state."
