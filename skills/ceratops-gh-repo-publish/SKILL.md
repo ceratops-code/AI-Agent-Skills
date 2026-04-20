@@ -27,6 +27,7 @@ Turn a local project into a real public GitHub repository and the right publishe
 
 - GitHub owner or org. Prefer `ceratops-code` only when user or existing org context explicitly indicates Ceratops ownership and access is available at no extra cost.
 - Repo name, default branch, visibility, branch naming, and whether the repo should remain a fork.
+- Maintainer merge policy: by Ceratops default, require 1 approving review on the default branch and add a pull-request-only bypass for the authenticated maintainer role or account so the owner can still self-ship; only choose a different review policy when the user explicitly asks for it.
 - Package or image identity for the real deliverable: Docker, PyPI, npm, Maven, NuGet, crates.io, RubyGems, PowerShell Gallery, GitHub Packages, or another relevant registry.
 - Version source, release policy, tag style, changelog or release-note source, and first-release expectations.
 - License intent, topics, CODEOWNERS owners, support route, and security reporting path.
@@ -68,7 +69,8 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 
 - Create or fork the GitHub repo, preserve upstream linkage when needed, push the repo, and verify the live endpoint.
 - Set precise topics. Keep `CODEOWNERS` minimal and accurate.
-- Configure default-branch protection with real required checks, strict status checks, PR flow, stale review dismissal, conversation resolution, admin enforcement, no force pushes, and no deletions when available at no extra cost.
+- Configure default-branch protection with real required checks, strict status checks, PR flow, `required_approving_review_count: 1`, stale review dismissal, conversation resolution, admin enforcement, no force pushes, and no deletions when available at no extra cost.
+- When the host supports repository rulesets, prefer a pull-request-only ruleset bypass for the authenticated maintainer role or account instead of relying only on classic branch-protection bypass allowances.
 - Enable auto-merge and delete-branch-on-merge when compatible with the workflow.
 - Verify branch protection, security controls, community health, moderation or reported-content health, and alert state from live endpoints. Do not assume repo-creation defaults already produced the intended moderation settings.
 
@@ -100,6 +102,8 @@ Do not ask for credentials if a working local auth path exists. Do not prefer co
 ## Completion Gate
 
 - Verify live external state for every touched repo, protection rule, security setting, release, package, image, CI run, code scanning result, PR state, registry artifact, and docs endpoint.
+- Verify the live default-branch review rule includes `required_approving_review_count: 1` and the intended maintainer bypass actor unless the user explicitly chose a different merge policy.
+- Verify the maintainer bypass is implemented through a live pull-request-only ruleset when the platform supports it.
 - Verify local state for every touched repo, worktree, generated file, artifact directory, cache, temp path, credential/config change, local consumer path, shortcut, scheduled task, service, shell profile, and cleanup side effect.
 - Ensure the local repo is clean on the default branch and tracking the remote default branch. If a squash merge or history rewrite would strand useful local work, keep one clearly named safety branch and report it.
 

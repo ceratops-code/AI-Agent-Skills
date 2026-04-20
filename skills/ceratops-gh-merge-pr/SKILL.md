@@ -64,6 +64,7 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 
 - Use merge queue if required by the repo.
 - Use auto-merge when checks are pending but all other merge requirements are satisfied.
+- If all non-review requirements are green and the only remaining blocker is the acting maintainer's own required review, and the repo intentionally allows that maintainer to self-merge, use the admin merge path instead of fabricating approval or waiting for a second account.
 - Use the repo's allowed and preferred merge method.
 - Verify the merge or queued auto-merge from the live PR endpoint instead of trusting only the command exit code.
 
