@@ -1,4 +1,4 @@
 interface:
   display_name: "Ceratops Thread Create Handoff"
   short_description: "Create a compact new-thread handoff"
-  default_prompt: "Use $ceratops-thread-create-handoff to produce a compact verified handoff bundle for a whole task or sub-issue; if I say to include questions, carry them into the handoff for the new thread instead of answering them here."
+  default_prompt: "Use $ceratops-thread-create-handoff to produce a compact handoff bundle for a whole task or sub-issue; reuse fresh state already established in this thread, refresh only what the next step depends on, and if I say to include questions, carry them into the handoff for the new thread instead of answering them here."

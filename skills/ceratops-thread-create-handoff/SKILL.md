@@ -1,11 +1,11 @@
 ---
 name: ceratops-thread-create-handoff
-description: Create a compact verified handoff bundle for opening a new thread on an existing task or sub-issue. Use when Codex should compress the handed-off issue, verified current state, unresolved issues, deferred questions, exact source-of-truth entities, and next justified step into paste-ready text without dragging along the whole thread.
+description: Create a compact handoff bundle for opening a new thread on an existing task or sub-issue. Use when Codex should compress the handed-off issue, current working state, unresolved issues, deferred questions, exact source-of-truth entities, and next justified step into paste-ready text without dragging along the whole thread.
 ---
 
 # Ceratops Thread Create Handoff
 
-Produce a compact handoff for a new thread without copying the whole conversation.
+Produce a compact handoff for a new thread without copying the whole conversation or re-auditing the whole task.
 
 <!-- CERATOPS_COMMON_CORE_START -->
 ## Core Rules
@@ -23,7 +23,9 @@ Produce a compact handoff for a new thread without copying the whole conversatio
 
 ## Skill-Specific Rules
 
-- Verify current state before writing the handoff.
+- Do not broaden work just to verify the handoff.
+- Reuse fresh state already established in the current thread when the source-of-truth entity is already identified.
+- Refresh only items whose staleness would change the next step or make the handoff misleading.
 - Keep the handoff short and operational, not narrative.
 - Include only information the next thread actually needs.
 - Exclude already-fixed details unless they matter to the remaining state or the next decision.
@@ -37,10 +39,10 @@ Produce a compact handoff for a new thread without copying the whole conversatio
 - Handoff scope: the exact issue or sub-issue being moved
 - Remaining scope in the current thread, if any
 - Current goal
-- Verified current state
+- Current working state
 - Unresolved blockers or unresolved non-blocking debt
 - Deferred questions or next-thread asks, if any
-- Intentionally retained items with reasons
+- Intentionally retained items with reasons, if non-obvious or material
 - Exact source-of-truth repos, files, PRs, tags, releases, images, paths, or automations
 - Next justified step
 - Active instructions or constraints that materially affect the work
@@ -53,10 +55,11 @@ Produce a compact handoff for a new thread without copying the whole conversatio
 
 ## Workflow
 
-### 1. Verify before summarizing
+### 1. Refresh only what matters before summarizing
 
-- Refresh only the local or remote state that materially affects the handoff.
-- Resolve easy stale-state confusion before writing the bundle.
+- Reuse fresh state from the current thread by default.
+- Refresh only the local or remote state that materially affects the next step or would change the handoff.
+- Resolve easy stale-state confusion before writing the bundle when that confusion affects the handoff.
 - Identify whether the handoff covers the whole task or only a newly arising sub-issue.
 
 ### 2. Compress aggressively
@@ -80,7 +83,7 @@ Produce a compact handoff for a new thread without copying the whole conversatio
 ## Completion Gate
 
 - Verify the handoff includes the required fields and exact source-of-truth references.
-- Verify the handoff does not claim unverified state as confirmed.
+- Verify the handoff does not pretend a fresh re-check happened when it did not.
 
 ## Output Contract
 
@@ -88,7 +91,7 @@ Emit one compact handoff bundle with the required fields above and nothing extra
 
 ## Example Invocation
 
-`Use $ceratops-thread-create-handoff to prepare a compact verified handoff for moving this task into a new thread.`
+`Use $ceratops-thread-create-handoff to prepare a compact handoff for moving this task into a new thread.`
 
 `Use $ceratops-thread-create-handoff. Keep the MCP issue in this thread, but hand off the credit-usage issue to a new thread and include my following credit-usage questions in that handoff instead of answering them here.`
 
