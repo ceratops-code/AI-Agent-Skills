@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops GH Scripted Dependency Update"
+  short_description: "Process dependency PRs with live scripted checks"
+  default_prompt: "Use $ceratops-gh-scripted-repo-dependency-update to process dependency PRs with the bundled live checks, merge safe updates, and stop only on real blockers."

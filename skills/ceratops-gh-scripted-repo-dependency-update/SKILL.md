@@ -1,0 +1,107 @@
+---
+name: ceratops-gh-scripted-repo-dependency-update
+description: Process dependency updates through GitHub with scripted live repo and PR checks first, while keeping the original Ceratops dependency-update skill family untouched.
+---
+
+# Ceratops GH Scripted Repo Dependency Update
+
+Use the same dependency-maintenance scope as `$ceratops-gh-repo-dependency-update`, but ground queue handling and merge decisions in the bundled GitHub helper scripts first.
+
+<!-- CERATOPS_COMMON_CORE_START -->
+## Core Rules
+
+- Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
+- Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
+- On every run, check current official docs for unstable standards and use 2-3 strong current reference repos when useful.
+- If runtime research reveals a durable missing general rule, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
+- Inspect local state and local auth before asking for credentials or making assumptions.
+- Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
+- When a skill touches a public GitHub repo and reports repo, security, maturity, or process health, inspect the live community profile and equivalent no-cost moderation or community-health signals instead of inferring health from files, CI, or alert counts alone.
+- For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
+- If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
+<!-- CERATOPS_COMMON_CORE_END -->
+
+## Script Bundle
+
+- Shared helper path relative to this skill: `..\ceratops-gh-scripted-runtime\scripts\gh_live_checks.py`
+- Repo settings check: `python <resolved-helper-path> repo-health --repo OWNER/REPO`
+- PR readiness check: `python <resolved-helper-path> pr-readiness --pr NUMBER_OR_URL`
+
+## Inputs To Capture
+
+- Target repo, branch, dependency PRs, package-manager ecosystems, and whether security updates are priority-only.
+- Release policy, artifact-publish policy, versioning rules, changelog expectations, and local verification commands.
+- Registry targets, if any.
+- Branch protection, required checks, code scanning, vulnerability alerts, auto-merge policy, and delete-branch policy.
+
+Infer missing inputs from local files and live GitHub state before asking.
+
+## Boundaries
+
+- Use this skill when the work is primarily dependency updates, alert cleanup, or dependency bot PR processing.
+- If the repo is not yet published or lacks a usable remote, stop and use `$ceratops-gh-scripted-repo-publish`.
+- If the work is broader than dependency maintenance or includes substantial non-dependency code changes, stop and use `$ceratops-gh-scripted-repo-ship-change`.
+- If only PR finalization remains for already-prepared dependency PRs, stop and use `$ceratops-gh-scripted-merge-pr`.
+
+## Workflow
+
+### 1. Inspect queue and risk
+
+- Inspect git state, open PRs, dependency alerts, bot config, manifests, lockfiles, CI, security settings, tags, releases, and registry metadata.
+- Build an update queue from live PRs, alerts, and local manifests, and classify each update by risk.
+
+### 2. Re-check each candidate with scripts
+
+- Run the bundled PR-readiness script before enabling auto-merge or merging a dependency PR.
+- Run the repo-health script when the queue touches repo security posture, branch protection assumptions, review-policy expectations, moderation or community-health claims, code-scanning posture, or other live GitHub settings.
+- Re-run the relevant script after each merge or settings change instead of carrying stale queue assumptions forward.
+
+### 3. Process updates recursively
+
+- Prioritize security and low-risk updates unless ordering constraints require otherwise.
+- Inspect the diff, manifest changes, lockfile changes, transitive changes, CI impact, and release impact for each update.
+- Run targeted tests first when useful, then full required checks before merge.
+
+### 4. Publish and verify when required
+
+- Publish artifacts only when the merged dependency change requires it under the repo's release policy.
+- Verify live registry or release endpoints and install, pull, or consume the published artifact locally enough to catch packaging or runtime failures.
+
+### 5. Cleanup
+
+- Close or classify stale, superseded, duplicate, or blocked dependency PRs only when the reason is proven.
+- Delete merged branches when safe and allowed, sync the local default branch, and prune stale refs.
+
+## Credential Handling
+
+If credentials are truly required after local checks, report only:
+
+1. which GitHub or registry credential is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, or connector
+
+Do not ask for credentials if a working local auth path exists.
+
+## Completion Gate
+
+- Verify every dependency PR decision is backed by a fresh `python <resolved-helper-path> pr-readiness` run.
+- Verify live repo settings with `python <resolved-helper-path> repo-health` when repo posture was part of the run.
+- Verify local state: default branch, worktree, remotes, refs, lockfiles, generated files, temp paths, caches, credentials, and retained branches.
+
+## Output Contract
+
+Report only:
+
+- dependency updates merged and PR URLs
+- dependency updates skipped, retained, or blocked with exact reasons
+- checks and security evidence
+- release or registry URLs when relevant
+- artifact version, digest, package details, and local verification result when relevant
+- stale PRs or branches closed or deleted
+- exact credential step or paid requirement
+
+## Example Invocation
+
+`Use $ceratops-gh-scripted-repo-dependency-update. Process dependency PRs with the bundled live checks, merge safe updates, and stop only on real blockers.`

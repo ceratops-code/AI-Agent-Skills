@@ -11,6 +11,12 @@ Reusable Ceratops skills for Codex and other `SKILL.md`-compatible agents.
 | `ceratops-gh-repo-dependency-update` | Process Dependabot, Renovate, security, and manual dependency update work recursively. |
 | `ceratops-gh-repo-health-audit` | Audit and repair GitHub repo health, security posture, stale state, and publication gaps. |
 | `ceratops-gh-merge-pr` | Safely merge a GitHub PR, verify checks/protection, clean up branches, and sync local state. |
+| `ceratops-gh-scripted-repo-publish` | Parallel scripted publish workflow that proves live GitHub settings with bundled checks before closing. |
+| `ceratops-gh-scripted-repo-ship-change` | Parallel scripted ship workflow that uses bundled live GitHub and PR checks instead of prose-first validation. |
+| `ceratops-gh-scripted-repo-dependency-update` | Parallel scripted dependency workflow that re-checks each dependency PR and repo posture with bundled checks. |
+| `ceratops-gh-scripted-repo-health-audit` | Parallel scripted repo-health workflow that enforces live GitHub settings such as `content_reports_enabled`. |
+| `ceratops-gh-scripted-merge-pr` | Parallel scripted PR merge workflow that gates merging on bundled live PR checks. |
+| `ceratops-gh-scripted-runtime` | Shared helper bundle installed alongside the scripted GH skills so their live-check scripts resolve outside the source repo. |
 | `ceratops-task-execute-in-stages` | Drive substantial tasks stage by stage, preferring the simplest standard fix and asking before complex paths. |
 | `ceratops-thread-resume-manual-stop` | Resume a same-thread task after a manual stop or pause without rebuilding everything from scratch. |
 | `ceratops-thread-resume-after-restart` | Reconstruct and resume a same-thread task after Codex restarted, crashed, or was hard-stopped. |
@@ -70,9 +76,11 @@ Run:
 ```powershell
 python .\scripts\sync-skill-core.py --check
 python .\scripts\validate-skills.py
+python .\scripts\gh_live_checks.py repo-health --repo ceratops-code/codex-skills
 ```
 
 The sync check enforces the shared Ceratops core block across all skills. The validator checks skill frontmatter, folder/name consistency, Codex metadata, placeholder leftovers, README coverage, and high-confidence secret patterns.
+`gh_live_checks.py` is the repo-local helper entrypoint for the parallel scripted GitHub skill family. The installed scripted GH skills resolve the same helper logic through the sibling `ceratops-gh-scripted-runtime` skill bundle.
 
 ## Releases
 

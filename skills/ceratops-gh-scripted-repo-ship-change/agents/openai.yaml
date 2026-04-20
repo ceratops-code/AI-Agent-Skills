@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops GH Scripted Ship Change"
+  short_description: "Ship changes with live scripted GitHub checks"
+  default_prompt: "Use $ceratops-gh-scripted-repo-ship-change to ship these local changes through GitHub with the bundled live checks, publish any relevant artifacts, verify them locally, and clean up state."
