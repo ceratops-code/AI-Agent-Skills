@@ -1,4 +1,4 @@
 interface:
   display_name: "Ceratops Thread Resume From Handoff"
   short_description: "Resume a task from handoff"
-  default_prompt: "Use $ceratops-thread-resume-from-handoff to validate a pasted handoff bundle, including deferred questions, refresh stale parts narrowly, and continue the handed-off issue in this new thread."
+  default_prompt: "Use $ceratops-thread-resume-from-handoff to continue a pasted handoff bundle in this new thread, including deferred questions, and refresh only the parts the next stage depends on."

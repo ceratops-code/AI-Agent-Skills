@@ -1,11 +1,11 @@
 ---
 name: ceratops-thread-resume-from-handoff
-description: Resume work in a new thread from a pasted handoff bundle. Use when Codex should treat the handoff as a compact hypothesis set, validate the handed-off issue and deferred questions against current local and remote state, refresh stale pieces narrowly, and continue from the next justified stage.
+description: Resume work in a new thread from a pasted handoff bundle. Use when Codex should treat the handoff as working state, refresh only the pieces needed for the next justified stage, and continue without re-checking the whole bundle.
 ---
 
 # Ceratops Thread Resume From Handoff
 
-Start a new thread from a handoff bundle without trusting stale assumptions.
+Start a new thread from a handoff bundle without re-checking the whole bundle.
 
 <!-- CERATOPS_COMMON_CORE_START -->
 ## Core Rules
@@ -23,10 +23,10 @@ Start a new thread from a handoff bundle without trusting stale assumptions.
 
 ## Skill-Specific Rules
 
-- Treat the handoff as a compact hypothesis set, not automatic ground truth.
+- Treat the handoff as working state by default, not as something to re-audit end-to-end.
 - Validate only what matters for the next stage or final completion.
 - Refresh stale pieces narrowly instead of rediscovering the whole task.
-- Preserve useful verified handoff facts; replace only what is stale, wrong, or missing.
+- Preserve useful handoff facts; replace only what is stale, wrong, or missing.
 - Respect the handoff scope. Do not drift back into issues that the handoff explicitly left in the old thread unless the user broadens scope.
 - Treat deferred questions in the handoff as in-scope next-thread work unless the user reprioritizes.
 
@@ -49,10 +49,10 @@ Start a new thread from a handoff bundle without trusting stale assumptions.
 
 - Extract the handoff scope, any remaining scope left in the old thread, the current goal, claimed current state, unresolved issues, deferred questions, retained items, source-of-truth entities, and proposed next step.
 
-### 2. Validate narrow state
+### 2. Refresh only next-step dependencies
 
-- Check the repos, files, branches, PRs, releases, images, automations, or runtime signals that matter to the next step.
-- Mark each important handoff claim as confirmed, stale, partially stale, or unverifiable.
+- Check only the repos, files, branches, PRs, releases, images, automations, or runtime signals that matter to the next step or final answer.
+- Mark a handoff claim as stale, partially stale, or unverifiable only when that classification is needed to proceed safely or correct the answer.
 
 ### 3. Repair stale handoff state
 
@@ -72,20 +72,20 @@ Start a new thread from a handoff bundle without trusting stale assumptions.
 
 ## Completion Gate
 
-- Verify the important handoff claims are confirmed, corrected, or explicitly marked stale or unverifiable.
+- Verify the resumed task relies only on handoff claims that are still usable as-is or were refreshed narrowly where needed.
 - Verify the resumed task state is coherent enough for the next action or final answer.
 
 ## Output Contract
 
 Report only:
 
-- any handoff claims that were stale or wrong
+- any handoff claims that mattered and were stale or wrong
 - the corrected current state
 - the resumed stage or completed outcome
 - unresolved blockers or non-blocking debt
-- intentionally retained items with reasons
+- intentionally retained items with reasons, if material
 - anything important not verified
 
 ## Example Invocation
 
-`Use $ceratops-thread-resume-from-handoff to validate this pasted handoff and continue the task in this new thread.`
+`Use $ceratops-thread-resume-from-handoff to continue this pasted handoff in a new thread and refresh only what the next stage depends on.`

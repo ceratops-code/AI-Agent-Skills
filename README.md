@@ -20,8 +20,8 @@ Reusable Ceratops skills for Codex and other `SKILL.md`-compatible agents.
 | `ceratops-task-execute-in-stages` | Drive substantial tasks stage by stage, preferring the simplest standard fix and asking before complex paths. |
 | `ceratops-thread-resume-manual-stop` | Resume a same-thread task after a manual stop or pause without rebuilding everything from scratch. |
 | `ceratops-thread-resume-after-restart` | Reconstruct and resume a same-thread task after Codex restarted, crashed, or was hard-stopped. |
-| `ceratops-thread-create-handoff` | Create a compact verified handoff bundle for moving work into a new thread. |
-| `ceratops-thread-resume-from-handoff` | Resume a task in a new thread from a pasted handoff bundle after validating it. |
+| `ceratops-thread-create-handoff` | Create a compact handoff bundle for moving work into a new thread without re-auditing the whole task. |
+| `ceratops-thread-resume-from-handoff` | Resume a task in a new thread from a pasted handoff bundle by refreshing only what the next stage depends on. |
 | `ceratops-codex-skill-ship` | Validate, publish, and locally install changed Ceratops skills from the `codex-skills` repo. |
 
 ## Layout
