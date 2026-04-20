@@ -13,6 +13,7 @@ Reusable Ceratops skills for Codex and other `SKILL.md`-compatible agents.
 | `ceratops-gh-merge-pr` | Safely merge a GitHub PR, verify checks and protection with live scripted readiness checks, clean up branches, and sync local state. |
 | `ceratops-gh-runtime` | Shared helper bundle installed alongside the GH skills so their live-check scripts resolve outside the source repo. |
 | `ceratops-task-execute-in-stages` | Drive substantial tasks stage by stage, preferring the simplest standard fix and asking before complex paths. |
+| `ceratops-post-merge-consistency-audit` | Audit merged refactors for contradictions, docs drift, stale follow-through, and merged-only edge cases. |
 | `ceratops-thread-resume-manual-stop` | Resume a same-thread task after a manual stop or pause without rebuilding everything from scratch. |
 | `ceratops-thread-resume-after-restart` | Reconstruct and resume a same-thread task after Codex restarted, crashed, or was hard-stopped. |
 | `ceratops-thread-create-handoff` | Create a compact handoff bundle for moving work into a new thread without re-auditing the whole task. |
