@@ -20,6 +20,7 @@ Handle dependency updates as an end-to-end maintenance loop. Prefer safe automat
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
 - When a skill touches a public GitHub repo and reports repo, security, maturity, or process health, inspect the live community profile and equivalent no-cost moderation or community-health signals instead of inferring health from files, CI, or alert counts alone.
 - For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
+- In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 <!-- CERATOPS_COMMON_CORE_END -->
 
@@ -97,13 +98,12 @@ Do not ask for credentials if a working local auth path exists.
 
 Report only:
 
-- dependency updates merged and PR URLs
+- dependency updates applied
 - dependency updates skipped, retained, or blocked with exact reasons
-- checks and security evidence
-- release or registry URLs when relevant
-- artifact version, digest, package details, and local verification result when relevant
-- stale PRs or branches closed or deleted
-- exact credential step or paid requirement
+- released or published artifact details when materially relevant to downstream use
+- unresolved blockers or non-blocking debt
+- anything important not verified
+- exact credential step or paid requirement if blocked
 
 ## Example Invocations
 
