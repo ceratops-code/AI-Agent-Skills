@@ -41,7 +41,7 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 ## Boundaries
 
 - Use this skill when the PR content is already ready and the remaining work is to verify gates, merge, and clean up.
-- If the PR needs code, docs, CI, or packaging changes first, stop and use `$ceratops-gh-repo-push-to-remote`.
+- If the PR needs code, docs, CI, or packaging changes first, stop and use `$ceratops-gh-ship-change`.
 - If the PR queue is part of a broader dependency-update campaign, stop and use `$ceratops-gh-repo-dependency-update`.
 - If the repo itself is not yet published or still needs first-time hardening, stop and use `$ceratops-gh-repo-create-and-publish`.
 

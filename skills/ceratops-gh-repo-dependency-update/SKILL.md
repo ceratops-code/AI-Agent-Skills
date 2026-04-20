@@ -41,7 +41,7 @@ Infer missing inputs from local files and live GitHub state before asking.
 
 - Use this skill when the work is primarily dependency updates, alert cleanup, or dependency bot PR processing.
 - If the repo is not yet published or lacks a usable remote, stop and use `$ceratops-gh-repo-create-and-publish`.
-- If the work is broader than dependency maintenance or includes substantial non-dependency code changes, stop and use `$ceratops-gh-repo-push-to-remote`.
+- If the work is broader than dependency maintenance or includes substantial non-dependency code changes, stop and use `$ceratops-gh-ship-change`.
 - If only PR finalization remains for already-prepared dependency PRs, stop and use `$ceratops-gh-merge-pr`.
 
 ## Workflow
