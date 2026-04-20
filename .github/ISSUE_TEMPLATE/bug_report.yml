@@ -9,8 +9,8 @@ body:
     attributes:
       label: Skill
       options:
-        - ceratops-gh-repo-publish
-        - ceratops-gh-repo-ship-change
+        - ceratops-gh-repo-create-and-publish
+        - ceratops-gh-repo-push-to-remote
         - ceratops-gh-repo-dependency-update
         - ceratops-gh-repo-health-audit
         - ceratops-gh-merge-pr
