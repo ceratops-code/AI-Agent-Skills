@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops GH Scripted Repo Publish"
+  short_description: "Publish repos with live scripted GitHub checks"
+  default_prompt: "Use $ceratops-gh-scripted-repo-publish for this project. Publish it end-to-end to GitHub and the right public registry, and prove live GitHub settings with the bundled checks before closing."
