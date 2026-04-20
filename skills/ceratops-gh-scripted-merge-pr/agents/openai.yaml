@@ -1,4 +1,0 @@
-interface:
-  display_name: "Ceratops GH Scripted Merge PR"
-  short_description: "Merge PRs with live scripted readiness checks"
-  default_prompt: "Use $ceratops-gh-scripted-merge-pr to run the bundled live PR check first, merge this GitHub PR safely, clean up branches, and sync local state."

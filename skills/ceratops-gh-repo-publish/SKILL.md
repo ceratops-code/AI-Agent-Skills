@@ -1,13 +1,11 @@
 ---
 name: ceratops-gh-repo-publish
-description: Create, fork, or production-harden a local software project as a public GitHub repository and publish the correct public artifact registry output with Ceratops defaults. Use when Codex must inspect a local project, create or update a GitHub repo, preserve an upstream fork when appropriate, configure topics, branch protection, CODEOWNERS, security, CI, release tags, and publish Docker Hub images, PyPI packages, npm packages, Maven artifacts, NuGet packages, crates, RubyGems, PowerShell Gallery modules, GitHub Packages, or another ecosystem registry selected from the project type.
+description: Create, fork, or production-harden a local software project as a public GitHub repository and publish the correct public artifact registry output with Ceratops defaults, using live scripted GitHub checks before closing.
 ---
 
 # Ceratops GH Repo Publish
 
-## Overview
-
-Turn a local project into a real public GitHub repository and the right published artifact with minimal back-and-forth. Use the free path by default, and prefer public visibility only after verifying the project is safe to expose.
+Turn a local project into a real public GitHub repository and the right published artifact with minimal back-and-forth. Use the free path by default, prefer public visibility only after verifying the project is safe to expose, and prove machine-checkable live GitHub settings with the bundled helper scripts before closing.
 
 <!-- CERATOPS_COMMON_CORE_START -->
 ## Core Rules
@@ -23,6 +21,11 @@ Turn a local project into a real public GitHub repository and the right publishe
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 <!-- CERATOPS_COMMON_CORE_END -->
+
+## Script Bundle
+
+- Shared helper path relative to this skill: `..\ceratops-gh-runtime\scripts\gh_live_checks.py`
+- Repo settings check: `python <resolved-helper-path> repo-health --repo OWNER/REPO`
 
 ## Inputs To Capture
 
@@ -45,46 +48,50 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 
 ## Workflow
 
-### 1. Inspect Local State
+### 1. Inspect local state
 
-- Inspect git state, tags, branches, remotes, ignored files, generated artifacts, README, license, CI files, docs, security files, manifests, lockfiles, package metadata, and any existing release data.
+- Inspect git state, tags, branches, remotes, ignored files, generated artifacts, README, license, CI files, docs, security files, manifests, lockfiles, package metadata, and existing release data.
 - Identify the real build, lint, test, package, publish, and release commands from local files.
 - Identify whether the project is a library, app, CLI, service, module, template, fork, or internal snapshot that needs cleanup before publishing.
 - If renaming or moving anything, audit and update local consumers before closing.
 
-### 2. Research And Decide
+### 2. Research and decide
 
-- Check current official docs for GitHub community health, Actions, branch protection, code scanning, Dependabot, secret scanning, private vulnerability reporting, releases, and the selected registry or packaging ecosystem.
-- Compare 2-3 strong current reference repos of the same project type when that will catch relevant missing repo structure, security, release, or packaging expectations.
+- Check current official docs for GitHub community health, moderation, Actions, branch protection, code scanning, Dependabot, secret scanning, private vulnerability reporting, releases, and the selected registry or packaging ecosystem.
+- Compare 2-3 strong reference repos only when that will catch relevant missing repo structure, security, release, or packaging expectations for this project type.
 - Select the actual distribution target from the project type instead of forcing Docker everywhere.
 - Do not choose paid features unless they are already available at no extra cost.
 
-### 3. Make The Repo Publishable
+### 3. Make the repo publishable
 
-- Add or update only the relevant repo files for this project: `README`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, issue intake, pull request template, support routing, CI workflows, release or publish workflows, dependency update config, code scanning config, and install or run instructions.
-- Replace upstream-specific, internal, misleading, or broken defaults before publication.
+- Add or update only the relevant repo files and workflows for the project type.
+- For first-time public repos, add the standard public-repo community files unless a stronger project-specific alternative already exists: `README`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, and at least one issue or pull-request intake template.
+- Replace internal, misleading, or broken defaults before publication.
 - Add ecosystem-standard manifests and metadata only when relevant to the actual project type.
 - Prefer a real private reporting path for vulnerabilities and enable no-cost security controls when available and relevant.
 
-### 4. Configure GitHub
+### 4. Configure GitHub and prove the result
 
 - Create or fork the GitHub repo, preserve upstream linkage when needed, push the repo, and verify the live endpoint.
 - Set precise topics. Keep `CODEOWNERS` minimal and accurate.
+- Turn off unused live features such as wiki or projects when the repo does not actually use them.
 - Configure default-branch protection with real required checks, strict status checks, PR flow, `required_approving_review_count: 1`, stale review dismissal, conversation resolution, admin enforcement, no force pushes, and no deletions when available at no extra cost.
-- When the host supports repository rulesets, prefer a pull-request-only ruleset bypass for the authenticated maintainer role or account instead of relying only on classic branch-protection bypass allowances.
+- When the host supports repository rulesets, implement the maintainer exception as a pull-request-only ruleset bypass for the authenticated maintainer role or account instead of relying only on classic branch-protection bypass allowances.
 - Enable auto-merge and delete-branch-on-merge when compatible with the workflow.
+- Run the bundled repo-health script after GitHub settings changes and before closing publish work.
+- Treat the script findings as the first source of truth for settings such as `content_reports_enabled`, branch protection, strict checks, required approvals, stale review dismissal, code scanning default setup, secret scanning, push protection, Dependabot security updates, delete-branch-on-merge, and auto-merge.
 - Verify branch protection, security controls, community health, moderation or reported-content health, and alert state from live endpoints. Do not assume repo-creation defaults already produced the intended moderation settings.
+- For first-time public publish, also check the live community profile and do not close while the remaining gap is a safe standard-file addition you can still make directly.
 
-### 5. Validate And Publish
+### 5. Validate and publish
 
-- Run the relevant local validation for the project: format, lint, tests, build, packaging, container build, generated-file refresh, and release validation.
-- Ensure the latest relevant CI and code scanning runs on the default branch are green before closing.
-- Publish the correct external artifact only when the project actually has one.
+- Run the relevant local validation, ensure the latest relevant CI and code-scanning runs on the default branch are green, and publish the real external artifact only when the project actually has one.
 - Verify live GitHub, release, and registry endpoints instead of trusting only local CLI success.
+- If a single-maintainer fixture or sandbox repo needs one last hardening PR and GitHub self-approval rules would otherwise deadlock the run, you may temporarily lower required approvals just enough to merge that hardening PR, then immediately restore the intended review rule and verify the final live state.
 
-### 6. Tag And Release
+### 6. Tag and release
 
-- Create and push an initial release tag only when the repo is publishable and the version source is clear.
+- Create and push a release tag only when the repo is publishable and the version source is clear.
 - Prefer existing version metadata from manifests, release config, changelog, or tag series.
 - Skip tagging when version semantics are unclear without invention, and report the skip precisely.
 
@@ -102,10 +109,11 @@ Do not ask for credentials if a working local auth path exists. Do not prefer co
 
 ## Completion Gate
 
-- Verify live external state for every touched repo, protection rule, security setting, release, package, image, CI run, code scanning result, PR state, registry artifact, and docs endpoint.
-- Verify the live default-branch review rule includes `required_approving_review_count: 1` and the intended maintainer bypass actor unless the user explicitly chose a different merge policy.
+- Verify the final GitHub setting claims are backed by a fresh `python <resolved-helper-path> repo-health` run.
+- Verify live review protection still shows `required_approving_review_count: 1` and the intended maintainer bypass actor unless the user explicitly chose a different merge policy.
 - Verify the maintainer bypass is implemented through a live pull-request-only ruleset when the platform supports it.
-- Verify local state for every touched repo, worktree, generated file, artifact directory, cache, temp path, credential/config change, local consumer path, shortcut, scheduled task, service, shell profile, and cleanup side effect.
+- Verify live external state for every touched repo, protection rule, security setting, release, package, image, CI run, code scanning result, PR state, registry artifact, and docs endpoint.
+- Verify local state for every touched repo, worktree, generated file, artifact directory, cache, temp path, credential or config change, local consumer path, shortcut, scheduled task, service, shell profile, and cleanup side effect.
 - Ensure the local repo is clean on the default branch and tracking the remote default branch. If a squash merge or history rewrite would strand useful local work, keep one clearly named safety branch and report it.
 
 ## Output Contract
@@ -119,10 +127,6 @@ Report only:
 - anything important not verified
 - exact credential step or paid requirement if blocked
 
-## Example Invocations
+## Example Invocation
 
-`Use $ceratops-gh-repo-publish for this project. Publish it end-to-end to public GitHub and the right public registry. Use the free path by default.`
-
-`Use $ceratops-gh-repo-publish for this project. Owner: ceratops-code. Topics: asar, automation, codex, electron, powershell, windows.`
-
-`Use $ceratops-gh-repo-publish for this project. It is a Python library, so publish it to GitHub and PyPI.`
+`Use $ceratops-gh-repo-publish for this project. Publish it end-to-end to GitHub and the right public registry, and prove live GitHub settings with the bundled checks before closing.`

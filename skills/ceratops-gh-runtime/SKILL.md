@@ -1,11 +1,11 @@
 ---
-name: ceratops-gh-scripted-runtime
-description: Shared runtime helper bundle for the parallel scripted Ceratops GitHub skill family. Use when maintaining the bundled live GitHub check scripts themselves.
+name: ceratops-gh-runtime
+description: Shared runtime helper bundle for the Ceratops GitHub skill family. Use when maintaining the bundled live GitHub check scripts themselves.
 ---
 
-# Ceratops GH Scripted Runtime
+# Ceratops GH Runtime
 
-Maintain the shared helper scripts consumed by the parallel scripted Ceratops GitHub skill family.
+Maintain the shared helper scripts consumed by the Ceratops GitHub skill family.
 
 <!-- CERATOPS_COMMON_CORE_START -->
 ## Core Rules
@@ -24,14 +24,14 @@ Maintain the shared helper scripts consumed by the parallel scripted Ceratops Gi
 
 ## Inputs To Capture
 
-- Which scripted Ceratops GH skills depend on the helper change.
+- Which Ceratops GH skills depend on the helper change.
 - Which machine-checkable GitHub states or PR gates the helper should prove.
 - Which current official GitHub docs or live APIs justify the helper behavior.
 
 ## Boundaries
 
-- Use this skill only when maintaining the shared helper scripts consumed by the scripted Ceratops GH skill family.
-- If the task is about running repo-health, publish, ship, merge, or dependency work itself, stop and use the corresponding scripted GH skill instead.
+- Use this skill only when maintaining the shared helper scripts consumed by the Ceratops GH skill family.
+- If the task is about running repo-health, publish, ship, merge, or dependency work itself, stop and use the corresponding GH skill instead.
 
 ## Workflow
 
@@ -46,7 +46,7 @@ Maintain the shared helper scripts consumed by the parallel scripted Ceratops Gi
 
 ### 3. Validate dependents
 
-- Update any scripted GH skills or local repo wrappers that depend on the helper path or behavior.
+- Update any GH skills or local repo wrappers that depend on the helper path or behavior.
 - Run the local validation commands needed to prove the helper still works.
 
 ## Credential Handling
@@ -56,13 +56,13 @@ Maintain the shared helper scripts consumed by the parallel scripted Ceratops Gi
 ## Completion Gate
 
 - Verify the helper still works from the repo-local wrapper path and the bundled skill-runtime path.
-- Verify each dependent scripted skill still points at the correct helper location.
+- Verify each dependent GH skill still points at the correct helper location.
 
 ## Output Contract
 
 Report only:
 
 - helper behavior changed
-- dependent scripted skills updated
+- dependent GH skills updated
 - unresolved blockers or non-blocking debt
 - anything important not verified

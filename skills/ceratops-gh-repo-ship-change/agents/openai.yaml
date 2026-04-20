@@ -1,4 +1,4 @@
 interface:
-  display_name: "Ceratops GH Ship Change"
-  short_description: "Ship changes through GitHub and registries"
-  default_prompt: "Use $ceratops-gh-repo-ship-change to ship these local changes through GitHub, publish any relevant artifacts, verify them locally, and clean up state."
+  display_name: "Ceratops GH Repo Ship Change"
+  short_description: "Ship repos with live scripted GitHub checks"
+  default_prompt: "Use $ceratops-gh-repo-ship-change to ship these local changes through GitHub with the bundled live checks, publish any relevant artifacts, verify them locally, and clean up state."

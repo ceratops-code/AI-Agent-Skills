@@ -1,4 +1,4 @@
 interface:
-  display_name: "Ceratops GH Dependency Update"
-  short_description: "Process dependency PRs recursively"
-  default_prompt: "Use $ceratops-gh-repo-dependency-update to process dependency update PRs recursively, keep CI green, publish artifacts when required, and verify local install or pull."
+  display_name: "Ceratops GH Repo Dependency Update"
+  short_description: "Process dependency updates with live scripted checks"
+  default_prompt: "Use $ceratops-gh-repo-dependency-update to process dependency PRs with the bundled live checks, merge safe updates, and stop only on real blockers."

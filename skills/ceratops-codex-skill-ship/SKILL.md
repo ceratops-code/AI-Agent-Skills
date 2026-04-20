@@ -24,7 +24,7 @@ Ship changes to the local Codex skill source repo and keep the installed Ceratop
 
 ## Defaults
 
-- Source repo: `%USERPROFILE%\\CodexProjects\\codex-skills`
+- Source repo: `%USERPROFILE%\\CodexProjects\\CeratopsSkills\\codex-skills`
 - Installed Ceratops skill path: `%USERPROFILE%\\.codex\\skills\\<skill-name>`
 - Ceratops-installed skills should resolve through junctions to the source repo unless there is a documented exception.
 
