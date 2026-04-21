@@ -12,8 +12,8 @@ Turn a local project into a real public GitHub repository and the right publishe
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
-- When the task depends on unstable standards, current best practices, or fast-changing external systems, check current official docs and use strong current reference repos when useful.
-- If runtime research reveals a durable missing general rule or durable best-practice improvement, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
+- Check current official docs, `gh` help, or other live official sources only when the GitHub or registry behavior needed for the current task is unclear, likely changed, or conflicts with live scripted state. Do not do broad best-practice refresh or reference-repo comparison as part of routine runs.
+- Routine runs do not update this `SKILL.md` for generalized best-practice maintenance. That review belongs in the scheduled GH-skill maintenance automation. Only change the skill during a normal task run when the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
@@ -57,10 +57,10 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 - Identify whether the project is a library, app, CLI, service, module, template, fork, or internal snapshot that needs cleanup before publishing.
 - If renaming or moving anything, audit and update local consumers before closing.
 
-### 2. Research and decide
+### 2. Research and decide only where the next choice needs it
 
-- Check current official docs for GitHub community health, moderation, Actions, branch protection, code scanning, Dependabot, secret scanning, private vulnerability reporting, releases, and the selected registry or packaging ecosystem.
-- Compare 2-3 strong reference repos only when that will catch relevant missing repo structure, security, release, or packaging expectations for this project type.
+- Check current official docs for GitHub community health, moderation, Actions, branch protection, code scanning, Dependabot, secret scanning, private vulnerability reporting, releases, and the selected registry or packaging ecosystem only where the next publish or hardening decision needs that evidence.
+- Compare 2-3 strong reference repos only for a concrete ambiguous repo-structure, security, release, or packaging question. Do not do broad GH-skill best-practice maintenance during routine publish runs.
 - Select the actual distribution target from the project type instead of forcing Docker everywhere.
 - Do not choose paid features unless they are already available at no extra cost.
 
