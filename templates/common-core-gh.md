@@ -2,8 +2,10 @@
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
-- Check current official docs, `gh` help, or other live official sources only when the GitHub or registry behavior needed for the current task is unclear, likely changed, or conflicts with live scripted state. Do not do broad best-practice refresh or reference-repo comparison as part of routine runs.
-- Routine runs do not update this `SKILL.md` for generalized best-practice maintenance. That review belongs in the scheduled GH-skill maintenance automation. Only change the skill during a normal task run when the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
+- Use local state, `gh`, GitHub API, and `ceratops_gh_runtime` first.
+- Check current official docs or `gh` help only when those sources leave a concrete task-blocking ambiguity or materially conflict.
+- Do not do generalized best-practice refresh, reference-repo comparison, or GH-skill maintenance work during routine runs.
+- Routine runs do not update this `SKILL.md` unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
