@@ -52,10 +52,11 @@ def parse_frontmatter(path: pathlib.Path) -> tuple[dict[str, str], str]:
     return data, body
 
 
-def common_core_template_for_skill(name: str) -> pathlib.Path:
+def common_core_templates_for_skill(name: str) -> list[pathlib.Path]:
+    templates = [DEFAULT_COMMON_CORE_TEMPLATE]
     if name.startswith("ceratops-gh-"):
-        return GH_COMMON_CORE_TEMPLATE
-    return DEFAULT_COMMON_CORE_TEMPLATE
+        templates.append(GH_COMMON_CORE_TEMPLATE)
+    return templates
 
 
 def check_skill(skill_dir: pathlib.Path, readme_text: str) -> list[str]:
@@ -100,8 +101,13 @@ def check_skill(skill_dir: pathlib.Path, readme_text: str) -> list[str]:
     else:
         end += len(CORE_END)
         actual = core_text[start:end]
-        template = common_core_template_for_skill(name)
-        expected = f"{CORE_START}\n{template.read_text(encoding='utf-8').strip(chr(10))}\n{CORE_END}"
+        templates = common_core_templates_for_skill(name)
+        expected_body = "\n".join(
+            template.read_text(encoding="utf-8").strip(chr(10))
+            for template in templates
+            if template.read_text(encoding="utf-8").strip(chr(10))
+        )
+        expected = f"{CORE_START}\n{expected_body}\n{CORE_END}"
         if actual != expected:
             errors.append(f"{name}: common core block is out of sync with template")
 

@@ -12,17 +12,16 @@ Take an existing published repo from local changes to a verified merged result. 
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
-- Use local state, `gh`, GitHub API, and `ceratops_gh_runtime` first.
-- Check current official docs or `gh` help only when those sources leave a concrete task-blocking ambiguity or materially conflict.
-- Do not do generalized best-practice refresh, reference-repo comparison, or GH-skill maintenance work during routine runs.
-- Routine runs do not update this `SKILL.md` unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
+- Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
+- Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
+- Do not update this `SKILL.md` during routine runs unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
-- When a skill touches a public GitHub repo and reports repo, security, maturity, or process health, inspect the live community profile and equivalent no-cost moderation or community-health signals instead of inferring health from files, CI, or alert counts alone.
 - For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
+- For GitHub or registry tasks, use `gh`, GitHub API, and `ceratops_gh_runtime` as part of the first-pass direct evidence before checking current official docs or `gh` help.
 <!-- CERATOPS_COMMON_CORE_END -->
 
 ## Script Bundle
@@ -60,7 +59,7 @@ Infer missing inputs from local files and live repo state before asking.
 
 ### 2. Research only when the next decision needs it
 
-- Check current official docs for GitHub PR, Actions, security, release behavior, and any touched registry or package-manager workflow only when the next task decision is unclear, likely changed, or contradicted by live CLI or script state.
+- Check current official docs for GitHub PR, Actions, security, release behavior, and any touched registry or package-manager workflow only when the next task decision remains concretely ambiguous after local state, `gh`, GitHub API, or script output, or when those sources materially conflict.
 - Compare 2-3 strong reference repos only for a concrete ambiguous docs, security, CI, release, or packaging question. Do not do broad GH-skill best-practice maintenance during routine shipping runs.
 
 ### 3. Prove live GitHub state with scripts
@@ -92,7 +91,6 @@ Infer missing inputs from local files and live repo state before asking.
 - When this skill merges the PR directly, use `gh pr merge --admin` with the allowed merge-method flag and `--delete-branch` when cleanup is intended and allowed.
 - Use `gh pr merge --auto` only when GitHub should wait for remaining requirements instead of closing the PR immediately.
 - Delete the branch when safe, remove any temporary worktree created for the run after its branch is no longer needed, sync the local default branch, prune stale refs, and keep a safety branch only when needed.
-- If the repo is public and the run touches repo settings, release posture, or reports repo or process health, inspect the live community profile including moderation or reported-content health before closing.
 
 ### 7. Publish artifacts when relevant
 

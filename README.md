@@ -90,7 +90,7 @@ python .\scripts\validate-skills.py
 python -m ceratops_gh_runtime --help
 ```
 
-The sync check enforces the shared Ceratops core block for each skill family, including the GH-family variant. The validator checks skill frontmatter, folder/name consistency, Codex metadata, placeholder leftovers, README coverage, and high-confidence secret patterns.
+The sync check enforces the shared Ceratops core block by composing the base core with the GH-family overlay when applicable. The validator checks skill frontmatter, folder/name consistency, Codex metadata, placeholder leftovers, README coverage, and high-confidence secret patterns.
 The GH helper package smoke test confirms the packaged runtime entrypoint is importable. With working GitHub auth, you can also run `python -m ceratops_gh_runtime repo-health --repo ceratops-code/codex-skills`.
 
 ## Releases
