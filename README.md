@@ -11,6 +11,7 @@ Reusable Ceratops skills for Codex and other `SKILL.md`-compatible agents.
 | `ceratops-gh-repo-dependency-update` | Process Dependabot, Renovate, security, and manual dependency update work recursively. |
 | `ceratops-gh-repo-health-audit` | Audit and repair GitHub repo health, security posture, stale state, and publication gaps. |
 | `ceratops-gh-merge-pr` | Safely merge a GitHub PR, verify checks and protection with live scripted readiness checks, clean up branches, and sync local state. |
+| `ceratops-gh-best-practice-update` | Refresh the Ceratops GitHub skill family against current GitHub best practices and live GitHub behavior. |
 | `ceratops-task-execute-in-stages` | Drive substantial tasks stage by stage, preferring the simplest standard fix and asking before complex paths. |
 | `ceratops-consistency-audit` | Audit merged refactors for contradictions, docs drift, stale follow-through, and merged-only edge cases. |
 | `ceratops-thread-resume-manual-stop` | Resume a same-thread task after a manual stop or pause without rebuilding everything from scratch. |
@@ -22,8 +23,6 @@ Reusable Ceratops skills for Codex and other `SKILL.md`-compatible agents.
 ## Layout
 
 ```text
-automation/
-  ceratops-gh-skill-maintenance.md
 skills/
   <skill-name>/
     SKILL.md
@@ -40,7 +39,7 @@ src/
 
 `SKILL.md` is the portable source of truth. `agents/openai.yaml` is Codex UI metadata and may be ignored by other agents.
 `src/ceratops_gh_runtime/` is the local helper package used by the Ceratops GitHub skill family.
-`automation/ceratops-gh-skill-maintenance.md` is the repo-tracked helper contract for the daily GH-skill maintenance automation.
+`skills/ceratops-gh-best-practice-update/` is the source of truth for deliberate GH-family best-practice refresh work and for the recurring automation that invokes it.
 
 ## Install For Codex
 
