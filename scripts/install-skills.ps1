@@ -80,6 +80,21 @@ function Remove-ReparsePoint {
     [System.IO.File]::Delete($Path)
 }
 
+function Remove-GeneratedEggInfo {
+    param([string]$RepoRoot)
+
+    foreach ($searchRoot in @($RepoRoot, (Join-Path $RepoRoot "src"))) {
+        if (-not (Test-Path -LiteralPath $searchRoot)) {
+            continue
+        }
+
+        Get-ChildItem -LiteralPath $searchRoot -Directory -Filter *.egg-info -Force -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                Remove-Item -LiteralPath $_.FullName -Recurse -Force
+            }
+    }
+}
+
 function Ensure-Junction {
     param(
         [string]$Path,
@@ -116,22 +131,27 @@ if (-not (Test-Path -LiteralPath $RuntimeRoot)) {
 }
 
 $python = Resolve-PythonCommand $PythonCommand
-& $python -m pip uninstall --yes ceratops-gh-runtime | Out-Null
-& $python -m pip install --editable $resolvedRepoRoot
-if ($LASTEXITCODE -ne 0) {
-    throw "Editable helper-package install failed."
-}
+try {
+    & $python -m pip uninstall --yes ceratops-gh-runtime | Out-Null
+    & $python -m pip install --editable $resolvedRepoRoot
+    if ($LASTEXITCODE -ne 0) {
+        throw "Editable helper-package install failed."
+    }
 
-$editablePackages = (& $python -m pip list --editable --format=json | ConvertFrom-Json)
-if ($LASTEXITCODE -ne 0) {
-    throw "Could not verify the installed GH helper package mode."
+    $editablePackages = (& $python -m pip list --editable --format=json | ConvertFrom-Json)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not verify the installed GH helper package mode."
+    }
+    $editablePackage = $editablePackages | Where-Object { $_.name -eq "ceratops-gh-runtime" } | Select-Object -First 1
+    if ($null -eq $editablePackage) {
+        throw "Installed GH helper package is not registered as editable."
+    }
+    if ($editablePackage.editable_project_location -ne $resolvedRepoRoot) {
+        throw "Installed GH helper package does not point at the requested checkout."
+    }
 }
-$editablePackage = $editablePackages | Where-Object { $_.name -eq "ceratops-gh-runtime" } | Select-Object -First 1
-if ($null -eq $editablePackage) {
-    throw "Installed GH helper package is not registered as editable."
-}
-if ($editablePackage.editable_project_location -ne $resolvedRepoRoot) {
-    throw "Installed GH helper package does not point at the requested checkout."
+finally {
+    Remove-GeneratedEggInfo -RepoRoot $resolvedRepoRoot
 }
 
 $staleRuntimeSkill = Join-Path $RuntimeRoot "ceratops-gh-runtime"
