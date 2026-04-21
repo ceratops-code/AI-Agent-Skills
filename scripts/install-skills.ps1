@@ -148,9 +148,43 @@ if ($null -ne $staleItem) {
 
 $skillsRoot = Join-Path $resolvedRepoRoot "skills"
 $skills = Get-ChildItem -LiteralPath $skillsRoot -Directory | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "SKILL.md") } | Sort-Object Name
+$expectedSkillNames = @{}
 foreach ($skill in $skills) {
+    $expectedSkillNames[$skill.Name] = $true
     $link = Join-Path $RuntimeRoot $skill.Name
     Ensure-Junction -Path $link -Target $skill.FullName
+}
+
+$installedItems = Get-ChildItem -LiteralPath $RuntimeRoot -Force -ErrorAction SilentlyContinue |
+    Where-Object { $_.PSIsContainer -and $_.Name -like "ceratops-*" }
+foreach ($item in $installedItems) {
+    if ($expectedSkillNames.ContainsKey($item.Name)) {
+        continue
+    }
+
+    $looksLikeBrokenDirectoryLink = $item.PSIsContainer -and $item.Exists -eq $false
+    if (-not (Is-ReparsePoint $item) -and -not $looksLikeBrokenDirectoryLink) {
+        continue
+    }
+
+    $rawTarget = Resolve-LinkTarget $item
+    $repoManagedTarget = $false
+    if (-not [string]::IsNullOrWhiteSpace($rawTarget)) {
+        try {
+            $resolvedTarget = (Resolve-Path -LiteralPath $rawTarget).Path
+            if ($resolvedTarget.StartsWith($skillsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $repoManagedTarget = $true
+            }
+        } catch {
+            if ($rawTarget.StartsWith($skillsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $repoManagedTarget = $true
+            }
+        }
+    }
+
+    if ($repoManagedTarget) {
+        Remove-ReparsePoint -Path $item.FullName
+    }
 }
 
 Write-Host "Installed Ceratops skills and local GH helper package."
