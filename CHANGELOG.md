@@ -7,6 +7,7 @@
 - Renamed `ceratops-gh-repo-push-to-remote` to `ceratops-gh-ship-change` to clarify that it owns the full ship-change workflow, not just remote finalization.
 - Explicitly required `ceratops-gh-ship-change` to remove temporary worktrees and branches during end-of-run cleanup unless intentionally retained.
 - Added a Ceratops SHA-pinning policy for GitHub Actions: publish and workflow-change runs must end on verified full SHAs, audit runs must surface missing enforcement explicitly, and repo-health now reports the live `sha_pinning_required` setting.
+- Added a shared Ceratops skill-core rule to preserve existing text-file line endings unless normalization is intentional.
 
 ## 0.1.2 - 2026-04-19
 
