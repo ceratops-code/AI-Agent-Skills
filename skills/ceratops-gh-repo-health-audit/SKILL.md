@@ -12,8 +12,8 @@ Validate that an existing GitHub repo is clean, current, secure, documented, pub
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
-- When the task depends on unstable standards, current best practices, or fast-changing external systems, check current official docs and use strong current reference repos when useful.
-- If runtime research reveals a durable missing general rule or durable best-practice improvement, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
+- Check current official docs, `gh` help, or other live official sources only when the GitHub or registry behavior needed for the current task is unclear, likely changed, or conflicts with live scripted state. Do not do broad best-practice refresh or reference-repo comparison as part of routine runs.
+- Routine runs do not update this `SKILL.md` for generalized best-practice maintenance. That review belongs in the scheduled GH-skill maintenance automation. Only change the skill during a normal task run when the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
@@ -62,10 +62,10 @@ Infer missing inputs from live repo state and local files before asking.
 - Treat the script output as the source of truth for machine-checkable live settings such as `content_reports_enabled`, default-branch protection, strict status checks, required PR approvals, stale review dismissal, conversation resolution, admin enforcement, force-push or deletion bans, code scanning default setup, secret scanning, push protection, Dependabot security updates, `sha_pinning_required`, delete-branch-on-merge, auto-merge, and private vulnerability reporting state.
 - If the script reports a warning or blind spot, decide whether the gap is acceptable, needs a manual follow-up, or should be fixed now.
 
-### 3. Research current standards
+### 3. Research only when the next decision needs it
 
-- Check current official docs for GitHub community health, moderation, branch protection or rulesets, Actions, code scanning, Dependabot, secret scanning, private vulnerability reporting, releases, and each relevant ecosystem or registry only where the next fix or decision needs that evidence.
-- Compare 2-3 strong current reference repos when that will help identify expected files, metadata, workflows, security controls, or release patterns for this repo type.
+- Check current official docs for GitHub community health, moderation, branch protection or rulesets, Actions, code scanning, Dependabot, secret scanning, private vulnerability reporting, releases, and each relevant ecosystem or registry only where the next fix or decision needs that evidence or where live scripted state and docs appear to disagree.
+- Compare 2-3 strong current reference repos only for a concrete ambiguous files, metadata, workflow, security, or release question. Do not do broad GH-skill best-practice maintenance during routine repo audits.
 - Use prose-only checks or the web UI only for settings that the bundled script or free APIs cannot currently verify.
 
 ### 4. Audit repo health

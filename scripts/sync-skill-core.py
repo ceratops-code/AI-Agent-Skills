@@ -9,14 +9,21 @@ import sys
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-TEMPLATE = ROOT / "templates" / "common-core.md"
+DEFAULT_TEMPLATE = ROOT / "templates" / "common-core.md"
+GH_TEMPLATE = ROOT / "templates" / "common-core-gh.md"
 SKILLS = ROOT / "skills"
 START = "<!-- CERATOPS_COMMON_CORE_START -->"
 END = "<!-- CERATOPS_COMMON_CORE_END -->"
 
 
-def normalized_template() -> str:
-    text = TEMPLATE.read_text(encoding="utf-8").strip("\n")
+def template_for_skill(path: pathlib.Path) -> pathlib.Path:
+    if path.parent.name.startswith("ceratops-gh-"):
+        return GH_TEMPLATE
+    return DEFAULT_TEMPLATE
+
+
+def normalized_template(template: pathlib.Path) -> str:
+    text = template.read_text(encoding="utf-8").strip("\n")
     return f"{START}\n{text}\n{END}"
 
 
@@ -45,11 +52,11 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="Fail if any skill is out of sync")
     args = parser.parse_args()
 
-    expected = normalized_template()
     changed: list[pathlib.Path] = []
 
     for skill_md in sorted(SKILLS.glob("*/SKILL.md")):
         try:
+            expected = normalized_template(template_for_skill(skill_md))
             if sync_file(skill_md, expected, args.check):
                 changed.append(skill_md)
         except ValueError as exc:

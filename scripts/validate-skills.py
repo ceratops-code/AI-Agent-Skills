@@ -11,7 +11,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKILLS_DIR = ROOT / "skills"
 README = ROOT / "README.md"
-COMMON_CORE_TEMPLATE = ROOT / "templates" / "common-core.md"
+DEFAULT_COMMON_CORE_TEMPLATE = ROOT / "templates" / "common-core.md"
+GH_COMMON_CORE_TEMPLATE = ROOT / "templates" / "common-core-gh.md"
 CORE_START = "<!-- CERATOPS_COMMON_CORE_START -->"
 CORE_END = "<!-- CERATOPS_COMMON_CORE_END -->"
 
@@ -49,6 +50,12 @@ def parse_frontmatter(path: pathlib.Path) -> tuple[dict[str, str], str]:
 
     body = "\n".join(lines[end + 1 :])
     return data, body
+
+
+def common_core_template_for_skill(name: str) -> pathlib.Path:
+    if name.startswith("ceratops-gh-"):
+        return GH_COMMON_CORE_TEMPLATE
+    return DEFAULT_COMMON_CORE_TEMPLATE
 
 
 def check_skill(skill_dir: pathlib.Path, readme_text: str) -> list[str]:
@@ -93,7 +100,8 @@ def check_skill(skill_dir: pathlib.Path, readme_text: str) -> list[str]:
     else:
         end += len(CORE_END)
         actual = core_text[start:end]
-        expected = f"{CORE_START}\n{COMMON_CORE_TEMPLATE.read_text(encoding='utf-8').strip(chr(10))}\n{CORE_END}"
+        template = common_core_template_for_skill(name)
+        expected = f"{CORE_START}\n{template.read_text(encoding='utf-8').strip(chr(10))}\n{CORE_END}"
         if actual != expected:
             errors.append(f"{name}: common core block is out of sync with template")
 
@@ -132,8 +140,10 @@ def main() -> int:
         errors.append("missing skills/ directory")
     if not README.is_file():
         errors.append("missing README.md")
-    if not COMMON_CORE_TEMPLATE.is_file():
+    if not DEFAULT_COMMON_CORE_TEMPLATE.is_file():
         errors.append("missing templates/common-core.md")
+    if not GH_COMMON_CORE_TEMPLATE.is_file():
+        errors.append("missing templates/common-core-gh.md")
 
     readme_text = README.read_text(encoding="utf-8") if README.is_file() else ""
     skill_dirs = sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir()) if SKILLS_DIR.is_dir() else []

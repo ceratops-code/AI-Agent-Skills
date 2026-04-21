@@ -22,10 +22,15 @@ Reusable Ceratops skills for Codex and other `SKILL.md`-compatible agents.
 ## Layout
 
 ```text
+automation/
+  ceratops-gh-skill-maintenance.md
 skills/
   <skill-name>/
     SKILL.md
     agents/openai.yaml
+templates/
+  common-core.md
+  common-core-gh.md
 src/
   ceratops_gh_runtime/
     __main__.py
@@ -35,6 +40,7 @@ src/
 
 `SKILL.md` is the portable source of truth. `agents/openai.yaml` is Codex UI metadata and may be ignored by other agents.
 `src/ceratops_gh_runtime/` is the local helper package used by the Ceratops GitHub skill family.
+`automation/ceratops-gh-skill-maintenance.md` is the repo-tracked helper contract for the daily GH-skill maintenance automation.
 
 ## Install For Codex
 
@@ -84,7 +90,7 @@ python .\scripts\validate-skills.py
 python -m ceratops_gh_runtime --help
 ```
 
-The sync check enforces the shared Ceratops core block across all skills. The validator checks skill frontmatter, folder/name consistency, Codex metadata, placeholder leftovers, README coverage, and high-confidence secret patterns.
+The sync check enforces the shared Ceratops core block for each skill family, including the GH-family variant. The validator checks skill frontmatter, folder/name consistency, Codex metadata, placeholder leftovers, README coverage, and high-confidence secret patterns.
 The GH helper package smoke test confirms the packaged runtime entrypoint is importable. With working GitHub auth, you can also run `python -m ceratops_gh_runtime repo-health --repo ceratops-code/codex-skills`.
 
 ## Releases

@@ -12,8 +12,8 @@ Take an existing published repo from local changes to a verified merged result. 
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
-- When the task depends on unstable standards, current best practices, or fast-changing external systems, check current official docs and use strong current reference repos when useful.
-- If runtime research reveals a durable missing general rule or durable best-practice improvement, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
+- Check current official docs, `gh` help, or other live official sources only when the GitHub or registry behavior needed for the current task is unclear, likely changed, or conflicts with live scripted state. Do not do broad best-practice refresh or reference-repo comparison as part of routine runs.
+- Routine runs do not update this `SKILL.md` for generalized best-practice maintenance. That review belongs in the scheduled GH-skill maintenance automation. Only change the skill during a normal task run when the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
@@ -56,10 +56,10 @@ Infer missing inputs from local files and live repo state before asking.
 - Confirm no secrets, private data, machine-local paths, or internal-only references are being introduced.
 - Reuse an existing branch or PR when appropriate instead of creating duplicates.
 
-### 2. Research current standards
+### 2. Research only when the next decision needs it
 
-- Check current official docs for GitHub PR, Actions, security, release behavior, and any touched registry or package-manager workflow.
-- Compare 2-3 strong reference repos only when that will catch expected docs, security, CI, release, or packaging updates for this repo type.
+- Check current official docs for GitHub PR, Actions, security, release behavior, and any touched registry or package-manager workflow only when the next task decision is unclear, likely changed, or contradicted by live CLI or script state.
+- Compare 2-3 strong reference repos only for a concrete ambiguous docs, security, CI, release, or packaging question. Do not do broad GH-skill best-practice maintenance during routine shipping runs.
 
 ### 3. Prove live GitHub state with scripts
 
