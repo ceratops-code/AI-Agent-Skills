@@ -12,6 +12,7 @@
 - Added a Ceratops SHA-pinning policy for GitHub Actions: publish and workflow-change runs must end on verified full SHAs, audit runs must surface missing enforcement explicitly, and repo-health now reports the live `sha_pinning_required` setting.
 - Added a shared Ceratops skill-core rule to preserve existing text-file line endings unless normalization is intentional.
 - Split the synced Ceratops core into a GH-family variant, moved routine GH-skill best-practice maintenance into a dedicated daily-maintenance helper, and narrowed routine GH skill runs to task-specific live evidence checks.
+- Refactored core sync so GH skills inherit the base Ceratops core plus a GH-only overlay, moved generic routine-run rules back into the base core, and limited live community-profile checks to audit and publish workflows.
 
 ## 0.1.2 - 2026-04-19
 

@@ -16,14 +16,19 @@ START = "<!-- CERATOPS_COMMON_CORE_START -->"
 END = "<!-- CERATOPS_COMMON_CORE_END -->"
 
 
-def template_for_skill(path: pathlib.Path) -> pathlib.Path:
+def templates_for_skill(path: pathlib.Path) -> list[pathlib.Path]:
+    templates = [DEFAULT_TEMPLATE]
     if path.parent.name.startswith("ceratops-gh-"):
-        return GH_TEMPLATE
-    return DEFAULT_TEMPLATE
+        templates.append(GH_TEMPLATE)
+    return templates
 
 
-def normalized_template(template: pathlib.Path) -> str:
-    text = template.read_text(encoding="utf-8").strip("\n")
+def normalized_template(templates: list[pathlib.Path]) -> str:
+    text = "\n".join(
+        template.read_text(encoding="utf-8").strip("\n")
+        for template in templates
+        if template.read_text(encoding="utf-8").strip("\n")
+    )
     return f"{START}\n{text}\n{END}"
 
 
@@ -56,7 +61,7 @@ def main() -> int:
 
     for skill_md in sorted(SKILLS.glob("*/SKILL.md")):
         try:
-            expected = normalized_template(template_for_skill(skill_md))
+            expected = normalized_template(templates_for_skill(skill_md))
             if sync_file(skill_md, expected, args.check):
                 changed.append(skill_md)
         except ValueError as exc:
