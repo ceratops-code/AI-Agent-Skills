@@ -12,7 +12,7 @@ Use staged contingent execution for substantial tasks with meaningful side effec
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
-- On every run, check current official docs for unstable standards and current best practices, and use 2-3 strong current reference repos when useful.
+- When the task depends on unstable standards, current best practices, or fast-changing external systems, check current official docs and use strong current reference repos when useful.
 - If runtime research reveals a durable missing general rule or durable best-practice improvement, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
@@ -55,7 +55,8 @@ Choose only the stages the task actually justifies:
 - Use this skill for substantial tasks with multiple justified stages or multiple plausible solution paths.
 - If the task is only same-thread resume after a manual stop, stop and use `$ceratops-thread-resume-manual-stop`.
 - If the task is only same-thread resume after a restart or crash, stop and use `$ceratops-thread-resume-after-restart`.
-- If the task is only moving work to a new thread, stop and use `$ceratops-thread-create-handoff` or `$ceratops-thread-resume-from-handoff` as appropriate.
+- If the task is only moving a whole task to a new thread, stop and use `$ceratops-thread-full-handoff`.
+- If the task is only spinning a sub-issue into a new thread, stop and use `$ceratops-thread-side-task-handoff`.
 
 ## Workflow
 

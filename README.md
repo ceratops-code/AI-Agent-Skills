@@ -15,8 +15,8 @@ Reusable Ceratops skills for Codex and other `SKILL.md`-compatible agents.
 | `ceratops-consistency-audit` | Audit merged refactors for contradictions, docs drift, stale follow-through, and merged-only edge cases. |
 | `ceratops-thread-resume-manual-stop` | Resume a same-thread task after a manual stop or pause without rebuilding everything from scratch. |
 | `ceratops-thread-resume-after-restart` | Reconstruct and resume a same-thread task after Codex restarted, crashed, or was hard-stopped. |
-| `ceratops-thread-create-handoff` | Create a compact handoff bundle for moving work into a new thread without re-auditing the whole task. |
-| `ceratops-thread-resume-from-handoff` | Resume a task in a new thread from a pasted handoff bundle by refreshing only what the next stage depends on. |
+| `ceratops-thread-full-handoff` | Create a copy-paste prompt for moving a whole task into a new thread without re-auditing the whole task. |
+| `ceratops-thread-side-task-handoff` | Create a minimal copy-paste prompt for spinning a newly discovered side task into a new thread. |
 | `ceratops-codex-skill-ship` | Validate, publish, and locally install changed Ceratops skills from the `codex-skills` repo. |
 
 ## Layout

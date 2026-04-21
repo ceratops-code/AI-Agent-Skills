@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Added staged-task, same-thread resume, handoff, and skill-shipping Ceratops skills for recurring Codex workflow management.
+- Added staged-task, same-thread resume, split handoff, and skill-shipping Ceratops skills for recurring Codex workflow management.
+- Split the old handoff flow into `ceratops-thread-full-handoff` and `ceratops-thread-side-task-handoff`, removed `ceratops-thread-resume-from-handoff`, and made both handoff skills emit copy-paste prompts instead of resumable bundles.
+- Narrowed the shared external-research rule so local workflow skills do not spend credits checking current docs unless the task actually depends on unstable external guidance.
 - Switched the Ceratops GitHub merge-capable skills to explicit `gh pr merge --admin` direct-merge guidance.
 - Renamed `ceratops-gh-repo-push-to-remote` to `ceratops-gh-ship-change` to clarify that it owns the full ship-change workflow, not just remote finalization.
 - Explicitly required `ceratops-gh-ship-change` to remove temporary worktrees and branches during end-of-run cleanup unless intentionally retained.
