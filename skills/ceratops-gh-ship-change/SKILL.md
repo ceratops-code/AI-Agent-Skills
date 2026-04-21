@@ -46,7 +46,7 @@ Infer missing inputs from local files and live repo state before asking.
 - Use this skill when the repo already exists and there are actual local changes to complete, merge, and optionally release.
 - If the repo is not yet published or lacks a usable remote, stop and use `$ceratops-gh-repo-create-and-publish`.
 - If the task is only repo validation or stale-state cleanup with no content changes, stop and use `$ceratops-gh-repo-health-audit`.
-- If only PR finalization remains and no content changes are needed, stop and use `$ceratops-gh-merge-pr`.
+- If only PR finalization remains and no content changes are needed, stop this workflow immediately and continue with `$ceratops-gh-merge-pr`, even when this workflow created or updated the PR.
 
 ## Workflow
 
@@ -86,6 +86,7 @@ Infer missing inputs from local files and live repo state before asking.
 
 - Create or update a branch and commit intentionally.
 - Push the branch and create or update a PR with concise change and validation evidence.
+- If the push or PR update leaves no remaining code, docs, CI, packaging, or generated-file edits, stop this workflow and continue with `$ceratops-gh-merge-pr` for review, CI, merge, and cleanup instead of continuing to finalization here.
 - Wait for required CI, code scanning, and branch protection checks, and fix in-scope failures.
 - Use the live script findings plus current GitHub state to decide whether to merge now, enable auto-merge, or stop on a blocker.
 - When this skill merges the PR directly, use `gh pr merge --admin` with the allowed merge-method flag and `--delete-branch` when cleanup is intended and allowed.
