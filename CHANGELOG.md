@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Cleaned up editable-install `egg-info` artifacts automatically during skill installs and ignored stray `*.egg-info/` folders as a backstop.
 - Added staged-task, same-thread resume, split handoff, and skill-shipping Ceratops skills for recurring Codex workflow management.
 - Split the old handoff flow into `ceratops-thread-full-handoff` and `ceratops-thread-side-task-handoff`, removed `ceratops-thread-resume-from-handoff`, and made both handoff skills emit copy-paste prompts instead of resumable bundles.
 - Narrowed the shared external-research rule so local workflow skills do not spend credits checking current docs unless the task actually depends on unstable external guidance.
