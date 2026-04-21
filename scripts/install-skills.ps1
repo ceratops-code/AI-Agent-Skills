@@ -59,6 +59,26 @@ function Resolve-LinkTarget {
     return [string]$target
 }
 
+function Remove-ReparsePoint {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    $item = Get-Item -LiteralPath $Path -Force
+    if (-not (Is-ReparsePoint $item)) {
+        throw "Path '$Path' exists and is not a junction."
+    }
+
+    if ($item.PSIsContainer) {
+        [System.IO.Directory]::Delete($item.FullName)
+        return
+    }
+
+    [System.IO.File]::Delete($item.FullName)
+}
+
 function Ensure-Junction {
     param(
         [string]$Path,
@@ -83,7 +103,7 @@ function Ensure-Junction {
             }
         }
 
-        Remove-Item -LiteralPath $Path -Force
+        Remove-ReparsePoint -Path $Path
     }
 
     New-Item -ItemType Junction -Path $Path -Target $resolvedTarget | Out-Null
@@ -119,7 +139,7 @@ if (Test-Path -LiteralPath $staleRuntimeSkill) {
     if (-not (Is-ReparsePoint $staleItem)) {
         throw "Stale runtime skill path '$staleRuntimeSkill' exists and is not a junction."
     }
-    Remove-Item -LiteralPath $staleRuntimeSkill -Force
+    Remove-ReparsePoint -Path $staleRuntimeSkill
 }
 
 $skillsRoot = Join-Path $resolvedRepoRoot "skills"
