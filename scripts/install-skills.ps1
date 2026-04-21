@@ -147,7 +147,7 @@ if ($null -ne $staleItem) {
 }
 
 $skillsRoot = Join-Path $resolvedRepoRoot "skills"
-$skills = Get-ChildItem -LiteralPath $skillsRoot -Directory | Sort-Object Name
+$skills = Get-ChildItem -LiteralPath $skillsRoot -Directory | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "SKILL.md") } | Sort-Object Name
 foreach ($skill in $skills) {
     $link = Join-Path $RuntimeRoot $skill.Name
     Ensure-Junction -Path $link -Target $skill.FullName
