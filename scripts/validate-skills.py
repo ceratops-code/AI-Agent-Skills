@@ -11,8 +11,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKILLS_DIR = ROOT / "skills"
 README = ROOT / "README.md"
-DEFAULT_COMMON_CORE_TEMPLATE = ROOT / "templates" / "common-core.md"
-GH_COMMON_CORE_TEMPLATE = ROOT / "templates" / "common-core-gh.md"
+COMMON_CORE_TEMPLATE = ROOT / "templates" / "common-core.md"
 CORE_START = "<!-- CERATOPS_COMMON_CORE_START -->"
 CORE_END = "<!-- CERATOPS_COMMON_CORE_END -->"
 
@@ -52,11 +51,9 @@ def parse_frontmatter(path: pathlib.Path) -> tuple[dict[str, str], str]:
     return data, body
 
 
-def common_core_templates_for_skill(name: str) -> list[pathlib.Path]:
-    templates = [DEFAULT_COMMON_CORE_TEMPLATE]
-    if name.startswith("ceratops-gh-"):
-        templates.append(GH_COMMON_CORE_TEMPLATE)
-    return templates
+def expected_common_core() -> str:
+    body = COMMON_CORE_TEMPLATE.read_text(encoding="utf-8").strip("\n")
+    return f"{CORE_START}\n{body}\n{CORE_END}"
 
 
 def check_skill(skill_dir: pathlib.Path, readme_text: str) -> list[str]:
@@ -101,13 +98,7 @@ def check_skill(skill_dir: pathlib.Path, readme_text: str) -> list[str]:
     else:
         end += len(CORE_END)
         actual = core_text[start:end]
-        templates = common_core_templates_for_skill(name)
-        expected_body = "\n".join(
-            template.read_text(encoding="utf-8").strip(chr(10))
-            for template in templates
-            if template.read_text(encoding="utf-8").strip(chr(10))
-        )
-        expected = f"{CORE_START}\n{expected_body}\n{CORE_END}"
+        expected = expected_common_core()
         if actual != expected:
             errors.append(f"{name}: common core block is out of sync with template")
 
@@ -146,10 +137,8 @@ def main() -> int:
         errors.append("missing skills/ directory")
     if not README.is_file():
         errors.append("missing README.md")
-    if not DEFAULT_COMMON_CORE_TEMPLATE.is_file():
+    if not COMMON_CORE_TEMPLATE.is_file():
         errors.append("missing templates/common-core.md")
-    if not GH_COMMON_CORE_TEMPLATE.is_file():
-        errors.append("missing templates/common-core-gh.md")
 
     readme_text = README.read_text(encoding="utf-8") if README.is_file() else ""
     skill_dirs = sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir()) if SKILLS_DIR.is_dir() else []

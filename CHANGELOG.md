@@ -14,6 +14,7 @@
 - Added a shared Ceratops skill-core rule to preserve existing text-file line endings unless normalization is intentional.
 - Split the synced Ceratops core into a GH-family variant, moved routine GH-skill best-practice refresh into the dedicated `ceratops-gh-best-practice-update` skill, and narrowed routine GH task-skill runs to task-specific live evidence checks.
 - Refactored core sync so GH skills inherit the base Ceratops core plus a GH-only overlay, moved generic routine-run rules back into the base core, and limited live community-profile checks to audit and publish workflows.
+- Collapsed the one-line GH overlay back into `templates/common-core.md`, deleted `templates/common-core-gh.md`, and simplified sync and validation to use one shared core template.
 
 ## 0.1.2 - 2026-04-19
 

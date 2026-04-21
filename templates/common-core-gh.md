@@ -1,1 +1,0 @@
-- For GitHub or registry tasks, use `gh`, GitHub API, and `ceratops_gh_runtime` as part of the first-pass direct evidence before checking current official docs or `gh` help.

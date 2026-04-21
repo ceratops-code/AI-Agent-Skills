@@ -1,6 +1,6 @@
 ---
 name: ceratops-gh-best-practice-update
-description: Refresh and update the Ceratops GitHub skill family in the `codex-skills` repo against current GitHub best practices and live GitHub behavior. Use when routine or explicit GH-skill upkeep should review `skills/ceratops-gh-*`, shared GH overlays, helper-runtime claims, and repo docs, apply safe low-risk updates, and ship the resulting skill changes.
+description: Refresh and update the Ceratops GitHub skill family in the `codex-skills` repo against current GitHub best practices and live GitHub behavior. Use when routine or explicit GH-skill upkeep should review `skills/ceratops-gh-*`, shared core rules, helper-runtime claims, and repo docs, apply safe low-risk updates, and ship the resulting skill changes.
 ---
 
 # Ceratops GH Best Practice Update
@@ -16,12 +16,12 @@ Refresh the Ceratops GitHub skill family deliberately instead of letting normal 
 - Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
 - Do not update this `SKILL.md` during routine runs unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
 - Inspect local state and local auth before asking for credentials or making assumptions.
+- For GitHub or registry tasks only, use `gh`, GitHub API, and `ceratops_gh_runtime` as part of the first-pass direct evidence before checking current official docs or `gh` help.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
 - For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
-- For GitHub or registry tasks, use `gh`, GitHub API, and `ceratops_gh_runtime` as part of the first-pass direct evidence before checking current official docs or `gh` help.
 <!-- CERATOPS_COMMON_CORE_END -->
 
 ## Script Bundle
@@ -34,7 +34,7 @@ Refresh the Ceratops GitHub skill family deliberately instead of letting normal 
 ## Inputs To Capture
 
 - Whether the run is routine automation upkeep or an explicit user-requested GH-skill refresh.
-- Current target scope inside `codex-skills`: `skills/ceratops-gh-*`, `templates/common-core-gh.md`, `scripts/sync-skill-core.py`, `scripts/validate-skills.py`, `src/ceratops_gh_runtime/`, and repo docs.
+- Current target scope inside `codex-skills`: `skills/ceratops-gh-*`, `templates/common-core.md`, `scripts/sync-skill-core.py`, `scripts/validate-skills.py`, `src/ceratops_gh_runtime/`, and repo docs.
 - Whether current findings stay inside safe minor updates or cross the approval boundary.
 - Whether shipping and local install sync should run now or remain blocked on approval-required recommendations.
 
@@ -51,7 +51,7 @@ Infer missing inputs from local repo state, installed skill state, live GitHub e
 
 ### 1. Inspect local and installed state
 
-- Inspect current repo branch, worktree state, existing `ceratops-gh-*` skill folders, shared GH overlay files, GH helper runtime files, repo docs, installed Ceratops skill junctions, and the installed automation prompt when this run came from automation.
+- Inspect current repo branch, worktree state, existing `ceratops-gh-*` skill folders, shared core template files, GH helper runtime files, repo docs, installed Ceratops skill junctions, and the installed automation prompt when this run came from automation.
 - Check GitHub auth, local git auth, and installed tooling before asking for credentials.
 - Classify current differences as stale local dirt, safe in-scope change, approval-bound change, or not applicable.
 
@@ -63,15 +63,15 @@ Infer missing inputs from local repo state, installed skill state, live GitHub e
 
 ### 3. Audit the GH skill family
 
-- Review `skills/ceratops-gh-*`, `templates/common-core-gh.md`, `scripts/sync-skill-core.py`, `scripts/validate-skills.py`, and `src/ceratops_gh_runtime/` only where a GH-skill claim depends on them.
-- Look for duplicate guidance, contradictory defaults, stale GitHub setting names, stale file assumptions, stale user-local absolute paths in repo-tracked public files, partial follow-through, or logic that belongs in the shared GH core instead of a single skill.
+- Review `skills/ceratops-gh-*`, `templates/common-core.md`, `scripts/sync-skill-core.py`, `scripts/validate-skills.py`, and `src/ceratops_gh_runtime/` only where a GH-skill claim depends on them.
+- Look for duplicate guidance, contradictory defaults, stale GitHub setting names, stale file assumptions, stale user-local absolute paths in repo-tracked public files, partial follow-through, or logic that belongs in the shared core instead of a single skill.
 - Keep repo docs aligned when stale: `README.md`, `CONTRIBUTING.md`, and `CHANGELOG.md`.
 
 ### 4. Apply safe updates only
 
 - Apply minor wording updates that align behavior with current GitHub terms or surfaces.
 - Apply safe file-reference updates when standard repo files or GitHub settings were added, removed, or renamed.
-- Apply low-risk deduplication or refactoring inside the GH skill family that preserves behavior and clarifies ownership between the shared GH core and individual skills.
+- Apply low-risk deduplication or refactoring inside the GH skill family that preserves behavior and clarifies ownership between the shared core and individual skills.
 - Do not edit the runtime checkout directly. For repo changes, work in a dedicated worktree under the owning project folder.
 - Do not apply new or stricter default GitHub policy, changed merge or review posture, changed security posture, new mandatory paid features, widened scope beyond `ceratops-gh-*`, or GH helper-runtime changes that materially alter live-check behavior without explicit approval.
 
