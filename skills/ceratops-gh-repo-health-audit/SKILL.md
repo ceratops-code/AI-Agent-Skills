@@ -12,8 +12,8 @@ Validate that an existing GitHub repo is clean, current, secure, documented, pub
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
-- On every run, check current official docs for unstable standards and use 2-3 strong current reference repos when useful.
-- If runtime research reveals a durable missing general rule, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
+- On every run, check current official docs for unstable standards and current best practices, and use 2-3 strong current reference repos when useful.
+- If runtime research reveals a durable missing general rule or durable best-practice improvement, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
@@ -25,8 +25,8 @@ Validate that an existing GitHub repo is clean, current, secure, documented, pub
 
 ## Script Bundle
 
-- Shared helper path relative to this skill: `..\ceratops-gh-runtime\scripts\gh_live_checks.py`
-- Repo settings and moderation check: `python <resolved-helper-path> repo-health --repo OWNER/REPO`
+- Shared helper package: `ceratops_gh_runtime`
+- Repo settings and moderation check: `python -m ceratops_gh_runtime repo-health --repo OWNER/REPO`
 - Add `--json` when another step needs structured findings.
 
 ## Inputs To Capture
@@ -109,7 +109,7 @@ Do not ask for credentials if a working local auth path exists.
 
 ## Completion Gate
 
-- Verify the final answer is backed by a fresh run of `python <resolved-helper-path> repo-health`.
+- Verify the final answer is backed by a fresh run of `python -m ceratops_gh_runtime repo-health`.
 - Verify any Actions hardening claim is backed by a fresh local workflow scan when the repo files were available in the run.
 - Verify live state for every touched repo setting, security control, branch protection rule, PR, branch, tag, release, workflow, code scanning result, registry artifact, and docs endpoint.
 - Verify local state for every touched repo, worktree, generated file, artifact, temp path, cache, credential change, local consumer path, shortcut, scheduled task, service, shell profile, and cleanup side effect.

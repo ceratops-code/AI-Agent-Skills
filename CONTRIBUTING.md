@@ -17,8 +17,10 @@ Contributions should keep skills practical, current, and safe.
 Run before opening a pull request:
 
 ```powershell
+python -m pip install .
 python .\scripts\sync-skill-core.py
 python .\scripts\validate-skills.py
+python -m ceratops_gh_runtime --help
 ```
 
 If the change affects workflow behavior, include a short test note in the PR explaining how the skill was exercised or reviewed.

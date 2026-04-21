@@ -12,8 +12,8 @@ Handle dependency updates as an end-to-end maintenance loop. Prefer safe automat
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
-- On every run, check current official docs for unstable standards and use 2-3 strong current reference repos when useful.
-- If runtime research reveals a durable missing general rule, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
+- On every run, check current official docs for unstable standards and current best practices, and use 2-3 strong current reference repos when useful.
+- If runtime research reveals a durable missing general rule or durable best-practice improvement, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
@@ -25,9 +25,9 @@ Handle dependency updates as an end-to-end maintenance loop. Prefer safe automat
 
 ## Script Bundle
 
-- Shared helper path relative to this skill: `..\ceratops-gh-runtime\scripts\gh_live_checks.py`
-- Repo settings check: `python <resolved-helper-path> repo-health --repo OWNER/REPO`
-- PR readiness check: `python <resolved-helper-path> pr-readiness --pr NUMBER_OR_URL`
+- Shared helper package: `ceratops_gh_runtime`
+- Repo settings check: `python -m ceratops_gh_runtime repo-health --repo OWNER/REPO`
+- PR readiness check: `python -m ceratops_gh_runtime pr-readiness --pr NUMBER_OR_URL`
 
 ## Inputs To Capture
 
@@ -104,8 +104,8 @@ Do not ask for credentials if a working local auth path exists.
 
 ## Completion Gate
 
-- Verify every dependency PR decision is backed by a fresh `python <resolved-helper-path> pr-readiness` run.
-- Verify live repo settings with `python <resolved-helper-path> repo-health` when repo posture was part of the run.
+- Verify every dependency PR decision is backed by a fresh `python -m ceratops_gh_runtime pr-readiness` run.
+- Verify live repo settings with `python -m ceratops_gh_runtime repo-health` when repo posture was part of the run.
 - Verify live GitHub state for every dependency PR, alert, merge, check, branch, release, code scanning result, and branch protection gate touched.
 - Verify live registry state and local install, pull, or consumption for every artifact published.
 - Verify local state: default branch, worktree, remotes, refs, lockfiles, generated files, temp paths, caches, credentials, and retained branches.
