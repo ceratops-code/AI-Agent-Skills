@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops Automation Run"
+  short_description: "Run recurring automations with Ceratops policy"
+  default_prompt: "Use $ceratops-automation-run before applying this automation's task-specific prompt and helper contracts."

@@ -12,6 +12,7 @@ Reusable Ceratops skills for Codex and other `SKILL.md`-compatible agents.
 | `ceratops-gh-repo-health-audit` | Audit and repair GitHub repo health, security posture, stale state, and publication gaps. |
 | `ceratops-gh-merge-pr` | Safely merge a GitHub PR, verify checks and protection with live scripted readiness checks, clean up branches, and sync local state. |
 | `ceratops-gh-best-practice-update` | Refresh the Ceratops GitHub skill family against current GitHub best practices and live GitHub behavior. |
+| `ceratops-automation-run` | Run recurring automations with shared Ceratops alert, memory, and completion policy. |
 | `ceratops-task-execute-in-stages` | Drive substantial tasks stage by stage, preferring the simplest standard fix and asking before complex paths. |
 | `ceratops-consistency-audit` | Audit merged refactors for contradictions, docs drift, stale follow-through, and merged-only edge cases. |
 | `ceratops-thread-resume-manual-stop` | Resume a same-thread task after a manual stop or pause without rebuilding everything from scratch. |
