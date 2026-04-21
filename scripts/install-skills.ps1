@@ -62,21 +62,22 @@ function Resolve-LinkTarget {
 function Remove-ReparsePoint {
     param([string]$Path)
 
-    if (-not (Test-Path -LiteralPath $Path)) {
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) {
         return
     }
 
-    $item = Get-Item -LiteralPath $Path -Force
-    if (-not (Is-ReparsePoint $item)) {
+    $looksLikeBrokenDirectoryLink = $item.PSIsContainer -and $item.Exists -eq $false
+    if (-not (Is-ReparsePoint $item) -and -not $looksLikeBrokenDirectoryLink) {
         throw "Path '$Path' exists and is not a junction."
     }
 
     if ($item.PSIsContainer) {
-        [System.IO.Directory]::Delete($item.FullName)
+        [System.IO.Directory]::Delete($Path)
         return
     }
 
-    [System.IO.File]::Delete($item.FullName)
+    [System.IO.File]::Delete($Path)
 }
 
 function Ensure-Junction {
@@ -86,8 +87,8 @@ function Ensure-Junction {
     )
 
     $resolvedTarget = (Resolve-Path -LiteralPath $Target).Path
-    if (Test-Path -LiteralPath $Path) {
-        $item = Get-Item -LiteralPath $Path -Force
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if ($null -ne $item) {
         if (-not (Is-ReparsePoint $item)) {
             throw "Install path '$Path' already exists and is not a junction."
         }
@@ -134,10 +135,13 @@ if ($editablePackage.editable_project_location -ne $resolvedRepoRoot) {
 }
 
 $staleRuntimeSkill = Join-Path $RuntimeRoot "ceratops-gh-runtime"
-if (Test-Path -LiteralPath $staleRuntimeSkill) {
-    $staleItem = Get-Item -LiteralPath $staleRuntimeSkill -Force
+$staleItem = Get-Item -LiteralPath $staleRuntimeSkill -Force -ErrorAction SilentlyContinue
+if ($null -ne $staleItem) {
+    $looksLikeBrokenDirectoryLink = $staleItem.PSIsContainer -and $staleItem.Exists -eq $false
     if (-not (Is-ReparsePoint $staleItem)) {
-        throw "Stale runtime skill path '$staleRuntimeSkill' exists and is not a junction."
+        if (-not $looksLikeBrokenDirectoryLink) {
+            throw "Stale runtime skill path '$staleRuntimeSkill' exists and is not a junction."
+        }
     }
     Remove-ReparsePoint -Path $staleRuntimeSkill
 }
