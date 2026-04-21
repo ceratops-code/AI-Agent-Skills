@@ -12,8 +12,8 @@ Turn a local project into a real public GitHub repository and the right publishe
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
-- On every run, check current official docs for unstable standards and use 2-3 strong current reference repos when useful.
-- If runtime research reveals a durable missing general rule, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
+- On every run, check current official docs for unstable standards and current best practices, and use 2-3 strong current reference repos when useful.
+- If runtime research reveals a durable missing general rule or durable best-practice improvement, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
@@ -25,8 +25,8 @@ Turn a local project into a real public GitHub repository and the right publishe
 
 ## Script Bundle
 
-- Shared helper path relative to this skill: `..\ceratops-gh-runtime\scripts\gh_live_checks.py`
-- Repo settings check: `python <resolved-helper-path> repo-health --repo OWNER/REPO`
+- Shared helper package: `ceratops_gh_runtime`
+- Repo settings check: `python -m ceratops_gh_runtime repo-health --repo OWNER/REPO`
 
 ## Inputs To Capture
 
@@ -113,7 +113,7 @@ Do not ask for credentials if a working local auth path exists. Do not prefer co
 
 ## Completion Gate
 
-- Verify the final GitHub setting claims are backed by a fresh `python <resolved-helper-path> repo-health` run.
+- Verify the final GitHub setting claims are backed by a fresh `python -m ceratops_gh_runtime repo-health` run.
 - Verify live review protection still shows `required_approving_review_count: 1` and the intended maintainer bypass actor unless the user explicitly chose a different merge policy.
 - Verify the maintainer bypass is implemented through a live pull-request-only ruleset when the platform supports it.
 - Verify live Actions permissions still show `sha_pinning_required: true` whenever the repo uses external actions and the user did not explicitly choose a weaker policy.

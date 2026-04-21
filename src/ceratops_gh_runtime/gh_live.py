@@ -10,7 +10,7 @@ import subprocess
 from dataclasses import dataclass
 
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path.cwd()
 API_VERSION = "2026-03-10"
 REMOTE_RE = re.compile(
     r"""

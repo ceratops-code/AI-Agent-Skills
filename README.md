@@ -11,7 +11,6 @@ Reusable Ceratops skills for Codex and other `SKILL.md`-compatible agents.
 | `ceratops-gh-repo-dependency-update` | Process Dependabot, Renovate, security, and manual dependency update work recursively. |
 | `ceratops-gh-repo-health-audit` | Audit and repair GitHub repo health, security posture, stale state, and publication gaps. |
 | `ceratops-gh-merge-pr` | Safely merge a GitHub PR, verify checks and protection with live scripted readiness checks, clean up branches, and sync local state. |
-| `ceratops-gh-runtime` | Shared helper bundle installed alongside the GH skills so their live-check scripts resolve outside the source repo. |
 | `ceratops-task-execute-in-stages` | Drive substantial tasks stage by stage, preferring the simplest standard fix and asking before complex paths. |
 | `ceratops-consistency-audit` | Audit merged refactors for contradictions, docs drift, stale follow-through, and merged-only edge cases. |
 | `ceratops-thread-resume-manual-stop` | Resume a same-thread task after a manual stop or pause without rebuilding everything from scratch. |
@@ -27,9 +26,15 @@ skills/
   <skill-name>/
     SKILL.md
     agents/openai.yaml
+src/
+  ceratops_gh_runtime/
+    __main__.py
+    gh_live.py
+    gh_live_checks.py
 ```
 
 `SKILL.md` is the portable source of truth. `agents/openai.yaml` is Codex UI metadata and may be ignored by other agents.
+`src/ceratops_gh_runtime/` is the local helper package used by the Ceratops GitHub skill family.
 
 ## Install For Codex
 
@@ -39,19 +44,16 @@ Codex discovers personal skills from:
 C:\Users\<you>\.codex\skills\<skill-name>\SKILL.md
 ```
 
-Recommended local development setup on Windows is to keep this repo as the source of truth and junction each skill folder into the Codex runtime folder:
+Run one explicit bootstrap step from the repo root:
 
 ```powershell
-$repo = "$env:USERPROFILE\CodexProjects\CeratopsSkills\codex-skills"
-$runtime = "$env:USERPROFILE\.codex\skills"
-
-foreach ($skill in Get-ChildItem "$repo\skills" -Directory) {
-  $link = Join-Path $runtime $skill.Name
-  if (-not (Test-Path -LiteralPath $link)) {
-    New-Item -ItemType Junction -Path $link -Target $skill.FullName | Out-Null
-  }
-}
+powershell -ExecutionPolicy Bypass -File .\scripts\install-skills.ps1
 ```
+
+That bootstrap does two things explicitly:
+
+- installs the local GH helper package from this checkout with `python -m pip install --editable .`
+- junctions each skill folder into `C:\Users\<you>\.codex\skills\`
 
 Restart Codex after adding new skill folders if the app does not pick them up automatically.
 
@@ -63,6 +65,12 @@ Claude Code uses the same core `SKILL.md` folder format. Copy or link a skill fo
 ~/.claude/skills/<skill-name>/SKILL.md
 ```
 
+If you plan to use the Ceratops GitHub skill family outside Codex, also install the local GH helper package from the repo checkout:
+
+```powershell
+python -m pip install --editable .
+```
+
 Invoke skills directly with `/skill-name` in Claude Code. In Codex, invoke them with `$skill-name`.
 
 ## Validate
@@ -70,13 +78,14 @@ Invoke skills directly with `/skill-name` in Claude Code. In Codex, invoke them 
 Run:
 
 ```powershell
+python -m pip install .
 python .\scripts\sync-skill-core.py --check
 python .\scripts\validate-skills.py
-python .\scripts\gh_live_checks.py repo-health --repo ceratops-code/codex-skills
+python -m ceratops_gh_runtime --help
 ```
 
 The sync check enforces the shared Ceratops core block across all skills. The validator checks skill frontmatter, folder/name consistency, Codex metadata, placeholder leftovers, README coverage, and high-confidence secret patterns.
-`gh_live_checks.py` is the repo-local helper entrypoint for the Ceratops GitHub skill family. The installed GH skills resolve the same helper logic through the sibling `ceratops-gh-runtime` skill bundle.
+The GH helper package smoke test confirms the packaged runtime entrypoint is importable. With working GitHub auth, you can also run `python -m ceratops_gh_runtime repo-health --repo ceratops-code/codex-skills`.
 
 ## Releases
 
@@ -84,4 +93,4 @@ Releases use `vMAJOR.MINOR.PATCH` tags. See `CHANGELOG.md` for release notes.
 
 ## Artifact Publishing
 
-This repository publishes skill source files only. It does not publish Docker images, PyPI packages, npm packages, or other runtime artifacts.
+This repository publishes skill source files only. It does not publish Docker images, the local GH helper package to PyPI, npm packages, or other runtime artifacts.

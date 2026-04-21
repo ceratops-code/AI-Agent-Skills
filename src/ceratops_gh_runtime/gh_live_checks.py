@@ -9,7 +9,7 @@ import pathlib
 import sys
 from dataclasses import asdict, dataclass
 
-from gh_live import CommandError, ROOT, current_branch, detect_repo, gh_api, gh_pr_view
+from .gh_live import CommandError, current_branch, detect_repo, gh_api, gh_pr_view
 
 
 @dataclass(frozen=True)
@@ -264,7 +264,14 @@ def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object],
         if actual is expectation:
             add(findings, "PASS", check_name, f"{check_name} is enabled.", actual=actual)
         else:
-            add(findings, "WARN", check_name, f"{check_name} is not enabled in live repo settings.", actual=actual, expected=expectation)
+            add(
+                findings,
+                "WARN",
+                check_name,
+                f"{check_name} is not enabled in live repo settings.",
+                actual=actual,
+                expected=expectation,
+            )
 
     reporting_result = gh_api(f"repos/{repo}/private-vulnerability-reporting", cwd=cwd)
     if is_public and not is_archived:
@@ -363,9 +370,23 @@ def pr_readiness(selector: str | None, cwd: pathlib.Path | None) -> tuple[dict[s
     if review_decision in {"APPROVED", None, ""}:
         add(findings, "PASS", "review_decision", "No blocking review decision is present.", actual=review_decision)
     elif review_decision == "REVIEW_REQUIRED":
-        add(findings, "FAIL", "review_decision", "PR still requires review before merge.", actual=review_decision, expected="APPROVED")
+        add(
+            findings,
+            "FAIL",
+            "review_decision",
+            "PR still requires review before merge.",
+            actual=review_decision,
+            expected="APPROVED",
+        )
     else:
-        add(findings, "FAIL", "review_decision", "PR has a blocking review decision.", actual=review_decision, expected="APPROVED")
+        add(
+            findings,
+            "FAIL",
+            "review_decision",
+            "PR has a blocking review decision.",
+            actual=review_decision,
+            expected="APPROVED",
+        )
 
     status_rollup_findings(pr_data, findings)
 

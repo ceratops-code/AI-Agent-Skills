@@ -12,8 +12,8 @@ Merge one GitHub PR only after proving the repo will remain healthy. This is the
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
-- On every run, check current official docs for unstable standards and use 2-3 strong current reference repos when useful.
-- If runtime research reveals a durable missing general rule, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
+- On every run, check current official docs for unstable standards and current best practices, and use 2-3 strong current reference repos when useful.
+- If runtime research reveals a durable missing general rule or durable best-practice improvement, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
@@ -25,9 +25,9 @@ Merge one GitHub PR only after proving the repo will remain healthy. This is the
 
 ## Script Bundle
 
-- Shared helper path relative to this skill: `..\ceratops-gh-runtime\scripts\gh_live_checks.py`
-- PR readiness check: `python <resolved-helper-path> pr-readiness --pr NUMBER_OR_URL`
-- Repo settings check when repo health is part of the merge closeout: `python <resolved-helper-path> repo-health --repo OWNER/REPO`
+- Shared helper package: `ceratops_gh_runtime`
+- PR readiness check: `python -m ceratops_gh_runtime pr-readiness --pr NUMBER_OR_URL`
+- Repo settings check when repo health is part of the merge closeout: `python -m ceratops_gh_runtime repo-health --repo OWNER/REPO`
 - Direct merge command: `gh pr merge --admin NUMBER_OR_URL_OR_BRANCH [--merge|--squash|--rebase] [--delete-branch]`
 
 ## Inputs To Capture
@@ -62,7 +62,7 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 
 ### 3. Run the live PR check first
 
-- Run `python <resolved-helper-path> pr-readiness` before merge or auto-merge decisions.
+- Run `python -m ceratops_gh_runtime pr-readiness` before merge or auto-merge decisions.
 - Treat the script output as the first source of truth for draft state, mergeability, blocking review decisions, visible status-check failures, and pending status checks.
 - Re-run the script after any action that could change readiness, such as rebasing, updating the branch, dismissing a blocker, or waiting for CI.
 
@@ -107,7 +107,7 @@ Do not ask for credentials if a working local auth path exists.
 
 ## Completion Gate
 
-- Verify the final merge decision was backed by a fresh pre-merge `python <resolved-helper-path> pr-readiness` run, then verify the post-merge PR state separately from the live PR endpoint.
+- Verify the final merge decision was backed by a fresh pre-merge `python -m ceratops_gh_runtime pr-readiness` run, then verify the post-merge PR state separately from the live PR endpoint.
 - Verify live PR state, merge commit or queue state, checks, reviews, conversations, branch protection result, branch deletion, and default branch state.
 - Verify local repo state, branch, remotes, refs, worktree cleanliness, and retained safety branches.
 

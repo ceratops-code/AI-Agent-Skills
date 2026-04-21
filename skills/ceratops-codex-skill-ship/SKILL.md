@@ -12,8 +12,8 @@ Ship changes to the local Codex skill source repo and keep the installed Ceratop
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
-- On every run, check current official docs for unstable standards and use 2-3 strong current reference repos when useful.
-- If runtime research reveals a durable missing general rule, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
+- On every run, check current official docs for unstable standards and current best practices, and use 2-3 strong current reference repos when useful.
+- If runtime research reveals a durable missing general rule or durable best-practice improvement, update this `SKILL.md`, validate the skill, and report the maintenance. Do not update for one-off preferences, speculative trends, paid-only practices, or project-specific conventions.
 - Inspect local state and local auth before asking for credentials or making assumptions.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
@@ -27,13 +27,14 @@ Ship changes to the local Codex skill source repo and keep the installed Ceratop
 
 - Source repo: `%USERPROFILE%\\CodexProjects\\CeratopsSkills\\codex-skills`
 - Installed Ceratops skill path: `%USERPROFILE%\\.codex\\skills\\<skill-name>`
+- Local GH helper package install command: `python -m pip install --editable .`
 - Ceratops-installed skills should resolve through junctions to the source repo unless there is a documented exception.
 
 ## Skill-Specific Rules
 
 - Validate every changed skill folder before shipping.
 - Ensure `SKILL.md`, `agents/openai.yaml`, and any bundled resources stay aligned.
-- Prefer updating or creating the local installed junctions as part of the same run when the skill should be locally discoverable.
+- Prefer running the repo installer when GH skills, the GH helper package, or install metadata changed; otherwise repair the local installed junctions directly when needed.
 - Reuse the general GitHub ship flow rather than inventing a parallel release process.
 - Remove low-risk stale installed copies, stale junctions, or stale generated skill artifacts when safe.
 
@@ -61,12 +62,14 @@ Ship changes to the local Codex skill source repo and keep the installed Ceratop
 - Run the skill validator for every changed skill.
 - Check that `agents/openai.yaml` still matches the intended user-facing name, short description, and default prompt.
 - Verify any referenced bundled resources exist and are actually needed.
+- When the GH helper package or installer changed, prove the packaged runtime still imports with `python -m ceratops_gh_runtime --help`.
 
 ### 3. Sync installed skill state
 
-- Create or repair the installed junction for each Ceratops skill that should be locally discoverable.
+- Run `scripts/install-skills.ps1` when the GH helper package, install flow, or broad skill set changed. For narrow skill-only changes, create or repair the installed junction for each Ceratops skill that should be locally discoverable.
 - Confirm the installed path resolves to the intended source folder.
-- Remove low-risk stale installed duplicates or wrong-path junctions.
+- Confirm the GH helper package resolves from the intended checkout when the GH skill family was touched.
+- Remove low-risk stale installed duplicates, wrong-path junctions, or stale installed GH runtime skill links.
 
 ### 4. Ship the repo change
 
@@ -95,6 +98,7 @@ Do not ask for credentials if a working local auth path exists.
 - Verify every changed skill validates locally.
 - Verify the repo change is merged or correctly blocked.
 - Verify each expected installed junction resolves to the intended source folder.
+- Verify the GH helper package resolves from the intended checkout when the GH skill family was part of the run.
 
 ## Output Contract
 
