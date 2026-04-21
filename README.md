@@ -30,7 +30,6 @@ skills/
     agents/openai.yaml
 templates/
   common-core.md
-  common-core-gh.md
 src/
   ceratops_gh_runtime/
     __main__.py
@@ -90,7 +89,7 @@ python .\scripts\validate-skills.py
 python -m ceratops_gh_runtime --help
 ```
 
-The sync check enforces the shared Ceratops core block by composing the base core with the GH-family overlay when applicable. The validator checks skill frontmatter, folder/name consistency, Codex metadata, placeholder leftovers, README coverage, and high-confidence secret patterns.
+The sync check enforces one shared Ceratops core block across every skill. The common core includes an explicit GitHub-only evidence rule that applies only when a task is actually about GitHub or a registry. The validator checks skill frontmatter, folder/name consistency, Codex metadata, placeholder leftovers, README coverage, and high-confidence secret patterns.
 The GH helper package smoke test confirms the packaged runtime entrypoint is importable. With working GitHub auth, you can also run `python -m ceratops_gh_runtime repo-health --repo ceratops-code/codex-skills`.
 
 ## Releases

@@ -9,26 +9,13 @@ import sys
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-DEFAULT_TEMPLATE = ROOT / "templates" / "common-core.md"
-GH_TEMPLATE = ROOT / "templates" / "common-core-gh.md"
+COMMON_CORE_TEMPLATE = ROOT / "templates" / "common-core.md"
 SKILLS = ROOT / "skills"
 START = "<!-- CERATOPS_COMMON_CORE_START -->"
 END = "<!-- CERATOPS_COMMON_CORE_END -->"
 
-
-def templates_for_skill(path: pathlib.Path) -> list[pathlib.Path]:
-    templates = [DEFAULT_TEMPLATE]
-    if path.parent.name.startswith("ceratops-gh-"):
-        templates.append(GH_TEMPLATE)
-    return templates
-
-
-def normalized_template(templates: list[pathlib.Path]) -> str:
-    text = "\n".join(
-        template.read_text(encoding="utf-8").strip("\n")
-        for template in templates
-        if template.read_text(encoding="utf-8").strip("\n")
-    )
+def normalized_template(template: pathlib.Path) -> str:
+    text = template.read_text(encoding="utf-8").strip("\n")
     return f"{START}\n{text}\n{END}"
 
 
@@ -61,7 +48,7 @@ def main() -> int:
 
     for skill_md in sorted(SKILLS.glob("*/SKILL.md")):
         try:
-            expected = normalized_template(templates_for_skill(skill_md))
+            expected = normalized_template(COMMON_CORE_TEMPLATE)
             if sync_file(skill_md, expected, args.check):
                 changed.append(skill_md)
         except ValueError as exc:
