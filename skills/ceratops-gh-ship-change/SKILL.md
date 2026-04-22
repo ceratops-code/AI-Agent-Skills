@@ -53,6 +53,7 @@ Infer missing inputs from local files and live repo state before asking.
 ### 1. Inspect state and scope
 
 - Inspect git status, diff, untracked files, remotes, current branch, upstream, open PRs, tags, releases, CI config, manifests, lockfiles, docs, generated files, and registry metadata.
+- Refresh remote refs with `git fetch --prune origin` before relying on remote-tracking branch presence, cleanup status, or branch-reuse decisions.
 - Identify whether the change is code, docs, config, dependency, release, packaging, security, CI, or generated-artifact work.
 - Confirm no secrets, private data, machine-local paths, or internal-only references are being introduced.
 - Reuse an existing branch or PR when appropriate instead of creating duplicates.

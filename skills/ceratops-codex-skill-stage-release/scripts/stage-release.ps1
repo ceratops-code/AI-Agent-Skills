@@ -40,6 +40,11 @@ if (-not [string]::IsNullOrWhiteSpace($status)) {
     throw "Runtime checkout '$resolvedRuntimeRepoRoot' has uncommitted changes. Clean or commit them before staging a release branch."
 }
 
+& git -C $resolvedRuntimeRepoRoot remote get-url origin *> $null
+if ($LASTEXITCODE -eq 0) {
+    Invoke-Git @("fetch", "--prune", "origin")
+}
+
 Invoke-Git @("rev-parse", "--verify", $MainBranch)
 
 & git -C $resolvedRuntimeRepoRoot show-ref --verify --quiet "refs/heads/$ReleaseBranch"
