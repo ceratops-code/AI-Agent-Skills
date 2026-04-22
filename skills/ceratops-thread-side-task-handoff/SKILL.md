@@ -34,6 +34,9 @@ Produce one minimal copy-paste prompt for starting a side task in a new thread.
 - Prefer the discovered conclusion and current objective over chronology.
 - Include what stays in the current thread only when it matters for scope control.
 - Keep refs exact but minimal.
+- Treat `source-of-truth refs` as the minimum exact entities the new thread is likely to open immediately because they directly govern, define, or evidence the side task itself.
+- Do not list general process instructions, generic runtime constraints, or merely helpful background artifacts as `source-of-truth refs` unless the side task is specifically about them or the first next step depends on opening them.
+- Put active instructions or process constraints under constraints, not under `source-of-truth refs`, unless those instruction files are themselves part of the side task.
 - If the user says `include the following questions`, `including the questions`, or equivalent wording, carry those questions into the prompt as next-thread asks instead of answering them here.
 
 ## Inputs To Capture
@@ -43,6 +46,7 @@ Produce one minimal copy-paste prompt for starting a side task in a new thread.
 - The side task's current objective.
 - What stays in the current thread, if that matters.
 - The exact repos, files, PRs, tags, releases, images, paths, or automations the side task is likely to open immediately.
+- Optional evidence or background artifacts only when the first next step is likely to inspect them immediately.
 - Any active constraints or instructions that materially affect the side task.
 
 Infer missing inputs from the current thread and local state before asking.
@@ -91,6 +95,7 @@ Infer missing inputs from the current thread and local state before asking.
 
 - Verify the prompt includes the required content and enough exact refs to start correctly.
 - Verify the prompt excludes irrelevant branches of the original task unless they materially constrain the side task.
+- Verify each listed `source-of-truth ref` is first-step-relevant and authoritative for the side task itself, not just a generic constraint or a maybe-useful artifact.
 - Verify the prompt does not pretend a fresh re-check happened when it did not.
 
 ## Output Contract
