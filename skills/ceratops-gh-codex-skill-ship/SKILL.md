@@ -36,6 +36,7 @@ Ship a staged Ceratops skill batch through GitHub, then restore the runtime chec
 
 - Ship from the runtime checkout's active `release/*` branch, not directly from a task worktree.
 - If the runtime checkout is not on the intended release branch or the staged batch is not yet integrated there, stop and use `$ceratops-codex-skill-stage-release`.
+- Reuse the same `release/*` branch name locally and remotely by default. Do not push the staged local release branch to a differently named remote branch unless the user explicitly asked for that tradeoff.
 - Validate every changed skill folder before shipping.
 - Ensure `SKILL.md`, `agents/openai.yaml`, and any bundled resources stay aligned.
 - Prefer running the repo installer when GH skills, the GH helper package, or install metadata changed; otherwise repair the local installed junctions directly when needed.
@@ -79,6 +80,7 @@ Ship a staged Ceratops skill batch through GitHub, then restore the runtime chec
 ### 3. Ship the staged repo change
 
 - Use `$ceratops-gh-ship-change` from the runtime checkout when the staged release branch needs to be committed, pushed, PR'd, merged, and cleaned up.
+- If GitHub deleted the remote `release/*` branch after a prior merge, recreate the same-named remote branch from the current local `release/*` branch instead of inventing a different remote branch name.
 - Reuse an existing branch or PR when the staged release branch already has one.
 - If the work is only validation or stale-state cleanup with no content changes, use `$ceratops-gh-repo-health-audit` instead.
 
