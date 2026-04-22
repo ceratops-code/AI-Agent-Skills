@@ -1,11 +1,11 @@
 ---
 name: ceratops-thread-resume-manual-stop
-description: Resume an interrupted task in the current thread after execution was manually stopped or paused. Use when Codex should inspect current local state, assume no external changes unless stated otherwise, continue from the next justified stage, and avoid rebuilding the whole task from scratch.
+description: Resume an interrupted task in the current thread from current local state after a manual stop, restart, or crash. Use when Codex should inspect current local state, assume no external changes unless stated otherwise, continue from the next justified stage, and avoid rebuilding the whole task from scratch.
 ---
 
 # Ceratops Thread Resume Manual Stop
 
-Resume a same-thread task after a manual pause, cancellation, or deliberate stop.
+Resume a same-thread task from current local state after a manual pause, cancellation, restart, or crash.
 
 <!-- CERATOPS_COMMON_CORE_START -->
 ## Core Rules
@@ -26,7 +26,7 @@ Resume a same-thread task after a manual pause, cancellation, or deliberate stop
 
 ## Skill-Specific Rules
 
-- Treat recent thread context plus current local state as the primary sources of truth.
+- Treat recent thread context plus current local state as the primary sources of truth, even after a restart, unless local evidence forces a broader rebuild.
 - Assume nothing external changed unless the user says it did or local evidence suggests otherwise.
 - Do not restart the whole task from zero if the next justified stage can be identified cheaply.
 - Re-check only entities that were touched, plausibly affected, or needed for the next stage or final verification.
@@ -43,8 +43,7 @@ Infer missing inputs from the recent thread and local state before asking.
 
 ## Boundaries
 
-- Use this skill only when the work stays in the current thread and execution was manually stopped or paused.
-- If Codex restarted, crashed, or lost execution state, stop and use `$ceratops-thread-resume-after-restart`.
+- Use this skill only when the work stays in the current thread and Codex should resume from current local state after a manual stop, pause, restart, or crash.
 - If the user wants to move a whole task into a new thread, stop and use `$ceratops-thread-full-handoff`.
 - If the user wants to spin off a sub-issue into a new thread, stop and use `$ceratops-thread-side-task-handoff`.
 
@@ -94,4 +93,4 @@ Report only:
 
 ## Example Invocation
 
-`Use $ceratops-thread-resume-manual-stop to resume this paused task in the current thread from current local state. Nothing changed externally.`
+`Use $ceratops-thread-resume-manual-stop to resume this interrupted task in the current thread from current local state after a stop, restart, or crash. Nothing changed externally.`

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Replaced direct runtime-preview work with a local `release/*` runtime branch flow, added `ceratops-codex-skill-stage-release`, and rewrote `ceratops-gh-codex-skill-ship` around staging batches into the runtime checkout and restoring clean `main` after shipping.
+- Renamed `ceratops-gh-best-practice-update` to `ceratops-gh-standards-update`, `ceratops-consistency-audit` to `ceratops-code-consistency-audit`, and `ceratops-codex-skill-ship` to `ceratops-gh-codex-skill-ship`.
+- Removed `ceratops-thread-resume-after-restart` and folded same-thread restart or crash recovery into `ceratops-thread-resume-manual-stop`.
 - Added `ceratops-automation-run` so recurring automations can share one reusable policy layer for prompt or helper re-open checks, clean-run silence, no-memory defaults, and explicit conflict reporting.
 - Cleaned up editable-install `egg-info` artifacts automatically during skill installs and ignored stray `*.egg-info/` folders as a backstop.
 - Added staged-task, same-thread resume, split handoff, and skill-shipping Ceratops skills for recurring Codex workflow management.
