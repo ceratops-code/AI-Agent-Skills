@@ -46,11 +46,19 @@ if ($DropReleaseBranch) {
     & git -C $resolvedRuntimeRepoRoot show-ref --verify --quiet "refs/heads/$ReleaseBranch"
     if ($LASTEXITCODE -eq 0) {
         & git -C $resolvedRuntimeRepoRoot merge-base --is-ancestor $ReleaseBranch $MainBranch
-        if ($LASTEXITCODE -eq 0) {
+        $branchIsMerged = ($LASTEXITCODE -eq 0)
+        $treesMatch = $false
+
+        if (-not $branchIsMerged) {
+            & git -C $resolvedRuntimeRepoRoot diff --quiet $MainBranch $ReleaseBranch
+            $treesMatch = ($LASTEXITCODE -eq 0)
+        }
+
+        if ($branchIsMerged -or $treesMatch) {
             Invoke-Git @("branch", "-D", $ReleaseBranch)
         }
         else {
-            throw "Release branch '$ReleaseBranch' is not merged into '$MainBranch'."
+            throw "Release branch '$ReleaseBranch' is neither merged into '$MainBranch' nor tree-identical to it."
         }
     }
 }
