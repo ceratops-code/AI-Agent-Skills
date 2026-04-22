@@ -84,7 +84,7 @@ Ship a staged Ceratops skill batch through GitHub, then restore the runtime chec
 
 ### 4. Restore runtime `main`
 
-- Run `scripts/restore-runtime-main.ps1` to switch the runtime checkout back to `main`, fast-forward from `origin/main`, optionally drop the merged release branch, and rerun the installer.
+- Run `scripts/restore-runtime-main.ps1` to switch the runtime checkout back to `main`, fast-forward from `origin/main`, optionally drop the release branch when it is merged or tree-identical after a squash merge, and rerun the installer.
 - Confirm the installed skill path resolves to the runtime checkout on `main`.
 - Confirm the GH helper package resolves from the runtime checkout when the GH skill family was touched.
 
