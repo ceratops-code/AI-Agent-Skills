@@ -54,8 +54,7 @@ Choose only the stages the task actually justifies:
 ## Boundaries
 
 - Use this skill for substantial tasks with multiple justified stages or multiple plausible solution paths.
-- If the task is only same-thread resume after a manual stop, stop and use `$ceratops-thread-resume-manual-stop`.
-- If the task is only same-thread resume after a restart or crash, stop and use `$ceratops-thread-resume-after-restart`.
+- If the task is only same-thread resume after a manual stop, restart, or crash, stop and use `$ceratops-thread-resume-manual-stop`.
 - If the task is only moving a whole task to a new thread, stop and use `$ceratops-thread-full-handoff`.
 - If the task is only spinning a sub-issue into a new thread, stop and use `$ceratops-thread-side-task-handoff`.
 

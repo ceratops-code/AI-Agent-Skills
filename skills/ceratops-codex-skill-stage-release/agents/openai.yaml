@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops Codex Skill Stage Release"
+  short_description: "Stage local skill batches onto runtime release"
+  default_prompt: "Use $ceratops-codex-skill-stage-release to merge ready skill branches into the local runtime release branch, switch the runtime checkout to that branch, and validate the staged batch."

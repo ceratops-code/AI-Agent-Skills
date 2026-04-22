@@ -60,8 +60,7 @@ Infer missing inputs from the current thread and local state before asking.
 ## Boundaries
 
 - Use this skill only when the user wants to move the whole task into a different thread.
-- If the task should continue in the same thread after a manual stop, stop and use `$ceratops-thread-resume-manual-stop`.
-- If the task should continue in the same thread after a restart or crash, stop and use `$ceratops-thread-resume-after-restart`.
+- If the task should continue in the same thread after a manual stop, restart, or crash, stop and use `$ceratops-thread-resume-manual-stop`.
 - If only a newly discovered sub-issue should move to a new thread, stop and use `$ceratops-thread-side-task-handoff`.
 
 ## Workflow

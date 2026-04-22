@@ -11,15 +11,15 @@ Reusable Ceratops skills for Codex and other `SKILL.md`-compatible agents.
 | `ceratops-gh-repo-dependency-update` | Process Dependabot, Renovate, security, and manual dependency update work recursively. |
 | `ceratops-gh-repo-health-audit` | Audit and repair GitHub repo health, security posture, stale state, and publication gaps. |
 | `ceratops-gh-merge-pr` | Safely merge a GitHub PR, verify checks and protection with live scripted readiness checks, clean up branches, and sync local state. |
-| `ceratops-gh-best-practice-update` | Refresh the Ceratops GitHub skill family against current GitHub best practices and live GitHub behavior. |
+| `ceratops-gh-standards-update` | Refresh the Ceratops GitHub skill family against current GitHub standards and live GitHub behavior. |
 | `ceratops-automation-run` | Run recurring automations with shared Ceratops alert, memory, and completion policy. |
 | `ceratops-task-execute-in-stages` | Drive substantial tasks stage by stage, preferring the simplest standard fix and asking before complex paths. |
-| `ceratops-consistency-audit` | Audit merged refactors for contradictions, docs drift, stale follow-through, and merged-only edge cases. |
-| `ceratops-thread-resume-manual-stop` | Resume a same-thread task after a manual stop or pause without rebuilding everything from scratch. |
-| `ceratops-thread-resume-after-restart` | Reconstruct and resume a same-thread task after Codex restarted, crashed, or was hard-stopped. |
+| `ceratops-code-consistency-audit` | Audit merged refactors for contradictions, docs drift, stale follow-through, and merged-only edge cases. |
+| `ceratops-thread-resume-manual-stop` | Resume a same-thread task from current local state after a stop, restart, or crash without rebuilding everything from scratch. |
 | `ceratops-thread-full-handoff` | Create a copy-paste prompt for moving a whole task into a new thread without re-auditing the whole task. |
 | `ceratops-thread-side-task-handoff` | Create a minimal copy-paste prompt for spinning a newly discovered side task into a new thread. |
-| `ceratops-codex-skill-ship` | Validate, publish, and locally install changed Ceratops skills from the `codex-skills` repo. |
+| `ceratops-codex-skill-stage-release` | Merge ready skill branches into the runtime `release/*` branch, switch the runtime checkout there, and validate the staged batch locally. |
+| `ceratops-gh-codex-skill-ship` | Ship a staged runtime skill batch through GitHub, then restore the runtime checkout and installed skills to clean `main`. |
 
 ## Layout
 
@@ -39,7 +39,7 @@ src/
 
 `SKILL.md` is the portable source of truth. `agents/openai.yaml` is Codex UI metadata and may be ignored by other agents.
 `src/ceratops_gh_runtime/` is the local helper package used by the Ceratops GitHub skill family.
-`skills/ceratops-gh-best-practice-update/` is the source of truth for deliberate GH-family best-practice refresh work and for the recurring automation that invokes it.
+`skills/ceratops-gh-standards-update/` is the source of truth for deliberate GH-family standards refresh work and for the recurring automation that invokes it.
 
 ## Install For Codex
 
@@ -59,6 +59,8 @@ That bootstrap does two things explicitly:
 
 - installs the local GH helper package from this checkout with `python -m pip install --editable .`
 - junctions each skill folder into `C:\Users\<you>\.codex\skills\`
+
+Installed Ceratops skills should keep pointing at the runtime checkout path. That checkout may sit on local `main` tracking `origin/main` or on a local `release/*` branch for an active unpublished batch. After the runtime checkout changes branches, rerun `scripts/install-skills.ps1` so new, renamed, or deleted skill junctions and the editable helper package match the active repo snapshot.
 
 Restart Codex after adding new skill folders if the app does not pick them up automatically.
 
