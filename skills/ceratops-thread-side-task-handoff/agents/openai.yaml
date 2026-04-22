@@ -1,4 +1,4 @@
 interface:
   display_name: "Ceratops Thread Side-Task Handoff"
   short_description: "Create a side-task handoff prompt"
-  default_prompt: "Use $ceratops-thread-side-task-handoff to create a copy-paste prompt for spinning this side task into a new thread. Keep the original task to the minimum needed for context, reuse fresh state from this thread, and carry any included questions into the prompt instead of answering them here."
+  default_prompt: "Use $ceratops-thread-side-task-handoff to create a copy-paste prompt for spinning this side task into a new thread. Keep the original task to the minimum needed for context, keep source-of-truth refs to the first-step entities the new thread is likely to open, keep general constraints separate from those refs, reuse fresh state from this thread, and carry any included questions into the prompt instead of answering them here."
