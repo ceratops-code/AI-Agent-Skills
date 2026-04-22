@@ -54,6 +54,7 @@ Infer missing inputs from local files and live repo state before asking.
 
 - Inspect git status, diff, untracked files, remotes, current branch, upstream, open PRs, tags, releases, CI config, manifests, lockfiles, docs, generated files, and registry metadata.
 - Refresh remote refs with `git fetch --prune origin` before relying on remote-tracking branch presence, cleanup status, or branch-reuse decisions.
+- Prefer the same local and remote branch name by default. Do not use `local:remote` branch-name remapping unless there is a concrete benefit and the user explicitly wants that tradeoff.
 - Identify whether the change is code, docs, config, dependency, release, packaging, security, CI, or generated-artifact work.
 - Confirm no secrets, private data, machine-local paths, or internal-only references are being introduced.
 - Reuse an existing branch or PR when appropriate instead of creating duplicates.

@@ -36,6 +36,7 @@ Stage committed skill branches into the runtime checkout's local release branch 
 - Stage only committed task-worktree branches. Do not use this skill as a substitute for intentional commits on the source branches.
 - Keep installed Ceratops skill junctions and the editable GH helper package pointed at the runtime checkout path, not at task worktrees.
 - Treat the runtime checkout's active `release/*` branch as the single local preview source of truth for the whole repo snapshot.
+- Reuse the same `release/*` branch name locally and remotely by default. Do not remap the local release branch to a differently named remote branch unless the user explicitly asks for that tradeoff.
 - Refresh remote refs with `git fetch --prune origin` before deciding whether a runtime `release/*` branch already exists remotely, should be reused, or was already cleaned up.
 - After a squash-merged ship, recreate or rebase long-lived task branches from updated `main` before staging more work. Do not re-merge a branch whose earlier contents already landed on `main` via squash.
 - Use `--reset` staging when rebuilding the release branch from `main` is cheaper or safer than untangling partial staged state.
@@ -68,6 +69,7 @@ Infer missing inputs from local repo state before asking.
 - Inspect the source worktree branches, runtime checkout branch, installed junction state, and any duplicated installed copies.
 - Confirm each branch to stage is intentionally committed and available to the shared repo.
 - Refresh remote refs with `git fetch --prune origin` before judging whether `origin/release/*` still exists or whether a prior staged branch or PR was already cleaned up.
+- Assume the next ship will reuse the same `release/*` branch name remotely unless the user explicitly chose a different branch-naming scheme.
 - If a branch already shipped through a squash merge, recreate or rebase it on current `main` before staging new work from it.
 - Decide whether the release branch should be reused or rebuilt from `main`.
 

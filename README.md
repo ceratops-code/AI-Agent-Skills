@@ -61,6 +61,7 @@ That bootstrap does two things explicitly:
 - junctions each skill folder into `$CODEX_HOME/skills/`
 
 Installed Ceratops skills should keep pointing at the runtime checkout path. That checkout may sit on local `main` tracking `origin/main` or on a local `release/*` branch for an active unpublished batch. After the runtime checkout changes branches, rerun `scripts/install-skills.ps1` so new, renamed, or deleted skill junctions and the editable helper package match the active repo snapshot.
+When shipping a staged batch, reuse the same `release/local` branch name locally and remotely by default. GitHub may delete the remote `release/local` after merge; the next batch simply recreates that same remote branch from the current local `release/local`.
 
 Restart Codex after adding new skill folders if the app does not pick them up automatically.
 
