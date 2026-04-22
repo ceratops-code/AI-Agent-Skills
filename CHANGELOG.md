@@ -15,7 +15,7 @@
 - Explicitly required `ceratops-gh-ship-change` to remove temporary worktrees and branches during end-of-run cleanup unless intentionally retained.
 - Added a Ceratops SHA-pinning policy for GitHub Actions: publish and workflow-change runs must end on verified full SHAs, audit runs must surface missing enforcement explicitly, and repo-health now reports the live `sha_pinning_required` setting.
 - Added a shared Ceratops skill-core rule to preserve existing text-file line endings unless normalization is intentional.
-- Split the synced Ceratops core into a GH-family variant, moved routine GH-skill best-practice refresh into the dedicated `ceratops-gh-best-practice-update` skill, and narrowed routine GH task-skill runs to task-specific live evidence checks.
+- Split the synced Ceratops core into a GH-family variant, moved routine GH-skill standards refresh into the dedicated `ceratops-gh-standards-update` skill, and narrowed routine GH task-skill runs to task-specific live evidence checks.
 - Refactored core sync so GH skills inherit the base Ceratops core plus a GH-only overlay, moved generic routine-run rules back into the base core, and limited live community-profile checks to audit and publish workflows.
 - Collapsed the one-line GH overlay back into `templates/common-core.md`, deleted `templates/common-core-gh.md`, and simplified sync and validation to use one shared core template.
 

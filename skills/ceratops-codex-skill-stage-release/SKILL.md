@@ -26,8 +26,8 @@ Stage committed skill branches into the runtime checkout's local release branch 
 
 ## Defaults
 
-- Source repo: `%USERPROFILE%\\CodexProjects\\CeratopsSkills\\codex-skills`
-- Installed Ceratops skill path: `%USERPROFILE%\\.codex\\skills\\<skill-name>`
+- Source repo: `$HOME/CodexProjects/CeratopsSkills/codex-skills`
+- Installed Ceratops skill path: `$CODEX_HOME/skills/<skill-name>`
 - Default release branch: `release/local`
 - Runtime installer: `powershell -ExecutionPolicy Bypass -File .\\scripts\\install-skills.ps1`
 

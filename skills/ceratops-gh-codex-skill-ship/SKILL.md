@@ -26,8 +26,8 @@ Ship a staged Ceratops skill batch through GitHub, then restore the runtime chec
 
 ## Defaults
 
-- Source repo: `%USERPROFILE%\\CodexProjects\\CeratopsSkills\\codex-skills`
-- Installed Ceratops skill path: `%USERPROFILE%\\.codex\\skills\\<skill-name>`
+- Source repo: `$HOME/CodexProjects/CeratopsSkills/codex-skills`
+- Installed Ceratops skill path: `$CODEX_HOME/skills/<skill-name>`
 - Default release branch: `release/local`
 - Local GH helper package install command: `python -m pip install --editable .`
 - Ceratops-installed skills should resolve through junctions to the source repo unless there is a documented exception.
