@@ -11,18 +11,22 @@ Merge one GitHub PR only after proving the repo will remain healthy. This is the
 ## Core Rules
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
-- Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
+- Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
 - Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
 - Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
 - Do not update this `SKILL.md` during routine runs unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
 - Inspect local state and local auth before asking for credentials or making assumptions.
-- For GitHub or registry tasks only, use `gh`, GitHub API, and `ceratops_gh_runtime` as part of the first-pass direct evidence before checking current official docs or `gh` help.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
-- For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 <!-- CERATOPS_COMMON_CORE_END -->
+
+## Skill-Specific Rules
+
+- Use `gh`, GitHub API, and `ceratops_gh_runtime` as the first-pass evidence for merge readiness and repo-policy gates.
+- Run the readiness script before widening to extra live PR fields or official docs.
+- Inspect labels, assignees, deployments, merge queue detail, code-scanning findings, or broader repo-health surfaces only when the readiness check, branch protection, or the user's request makes them relevant to the merge decision.
 
 ## Script Bundle
 
@@ -50,24 +54,28 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 
 ## Workflow
 
-### 1. Inspect local and remote state
+### 1. Inspect local state and auth
 
 - Inspect local git status, current branch, remotes, upstream, default branch, and whether the local branch maps to a PR.
 - Check GitHub auth through `gh`, git credentials, env vars, and connected GitHub tooling before asking for login.
-- Inspect the live PR base, head, mergeability, draft state, labels, assignees, reviews, unresolved conversations, requested changes, checks, code scanning state, deployments, merge queue state, and branch protection.
 
-### 2. Research current rules when needed
-
-- Check current official GitHub docs or `gh` help only when merge queue, auto-merge, branch protection, required status checks, review behavior, or cleanup semantics remain concretely ambiguous after local state, `gh`, GitHub API, or script output, or when those sources materially conflict.
-- Prefer live GitHub API or CLI state over memory.
-
-### 3. Run the live PR check first
+### 2. Run the live PR check first
 
 - Run `python -m ceratops_gh_runtime pr-readiness` before merge or auto-merge decisions.
 - Treat the script output as the first source of truth for draft state, mergeability, blocking review decisions, visible status-check failures, and pending status checks.
 - Re-run the script after any action that could change readiness, such as rebasing, updating the branch, dismissing a blocker, or waiting for CI.
 
-### 4. Prepare the PR
+### 3. Inspect only merge-decision exceptions
+
+- Inspect live PR base, head, conversation-resolution state, branch protection result, merge queue state, and workflow-ref changes only when the readiness check, current repo policy, or the user's request makes them relevant.
+- Ignore labels, assignees, deployments, broader repo-health surfaces, or detailed code-scanning follow-up unless they materially gate the merge or the user explicitly asked for them.
+
+### 4. Research current rules when needed
+
+- Check current official GitHub docs or `gh` help only when merge queue, auto-merge, branch protection, required status checks, review behavior, or cleanup semantics remain concretely ambiguous after the readiness check and targeted live state, or when those sources materially conflict.
+- Prefer live GitHub API or CLI state over memory.
+
+### 5. Prepare the PR
 
 - Confirm the PR is not draft unless the user explicitly wants to keep it draft.
 - Confirm required checks are green or pending in a state suitable for auto-merge.
@@ -76,7 +84,7 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 - Confirm the PR is up to date when strict status checks require it.
 - If the PR changes workflow refs or GitHub Actions permissions, confirm it does not introduce mutable external action refs that violate the repo's SHA-pinning policy. If it does, stop and use `$ceratops-gh-ship-change`.
 
-### 5. Merge or enable auto-merge
+### 6. Merge or enable auto-merge
 
 - Use `gh pr merge --admin` for every direct merge this skill performs. Add the PR selector, the repo's allowed merge-method flag, and `--delete-branch` when cleanup is intended and allowed.
 - Use `gh pr merge --auto` only when the user explicitly wants GitHub to defer the final merge until remaining requirements finish; otherwise close the PR now with `gh pr merge --admin`.
@@ -85,7 +93,7 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 - Use the repo's allowed and preferred merge method.
 - Verify the merge or queued auto-merge from the live PR endpoint instead of trusting only the command exit code.
 
-### 6. Clean up and verify
+### 7. Clean up and verify
 
 - Delete the remote head branch only when the PR is merged, deletion is allowed, and the branch is not a reusable release or integration branch.
 - After the merge, verify the live PR endpoint shows the PR as merged instead of reusing the pre-merge readiness script on a now-closed PR.

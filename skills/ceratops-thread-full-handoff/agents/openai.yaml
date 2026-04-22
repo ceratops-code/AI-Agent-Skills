@@ -1,4 +1,4 @@
 interface:
   display_name: "Ceratops Thread Full Handoff"
   short_description: "Create a whole-task handoff prompt"
-  default_prompt: "Use $ceratops-thread-full-handoff to create a copy-paste prompt for moving this whole task into a new thread. Reuse fresh state from this thread, refresh only what the first step depends on, and carry any included questions into the prompt instead of answering them here."
+  default_prompt: "Use $ceratops-thread-full-handoff to create a copy-paste prompt for moving this whole task into a new thread. Reuse fresh state, refresh only first-step-critical facts, and carry any included questions into the prompt."

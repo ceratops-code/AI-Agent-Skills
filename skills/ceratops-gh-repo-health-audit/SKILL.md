@@ -11,18 +11,22 @@ Validate that an existing GitHub repo is clean, current, secure, documented, pub
 ## Core Rules
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
-- Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
+- Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
 - Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
 - Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
 - Do not update this `SKILL.md` during routine runs unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
 - Inspect local state and local auth before asking for credentials or making assumptions.
-- For GitHub or registry tasks only, use `gh`, GitHub API, and `ceratops_gh_runtime` as part of the first-pass direct evidence before checking current official docs or `gh` help.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
-- For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 <!-- CERATOPS_COMMON_CORE_END -->
+
+## Skill-Specific Rules
+
+- Use `gh`, GitHub API, and `ceratops_gh_runtime` as the first-pass evidence for live repo settings.
+- Start with a fast path: local repo files plus the bundled repo-health check and only the live surfaces needed to interpret it. Widen to docs, reference repos, or registry endpoints only when the first pass leaves a concrete gap, failure, or user-requested exhaustive audit.
+- For live repo-health, security, moderation, code-scanning, or process alerts actually inspected in this run, decide whether each one is safe, fix low-risk items directly, and for every inspected alert left open report its name or id, blocking status, why it remains open, and the concrete work needed to clear it.
 
 ## Script Bundle
 
@@ -52,10 +56,9 @@ Infer missing inputs from live repo state and local files before asking.
 ### 1. Inspect local and live state
 
 - Inspect git status, remotes, branches, refs, tags, releases, generated files, artifacts, temp paths, package outputs, and local consumer references.
-- Inspect live GitHub repo metadata, topics, description, default branch, open PRs, branches, tags, releases, Actions runs, code scanning, Dependabot, security settings, branch protection, rulesets, and community profile.
+- Capture only the live GitHub metadata needed to run and interpret the bundled repo-health check: default branch, visibility, security settings, branch protection or rulesets, and community profile when relevant.
 - Inspect local workflow files when they are available so mutable external action refs are classified instead of inferred from repo settings alone.
-- For public repos, inspect live community-profile moderation signals such as reported-content health and `content_reports_enabled`, not just file completeness and security alerts.
-- Inspect published packages or images relevant to the repo.
+- Expand to open PRs, releases, tags, branches, Actions runs, moderation detail, or published artifacts only when the script output, repo type, touched files, or the user's request makes them relevant.
 
 ### 2. Run live repo checks first
 
@@ -66,7 +69,7 @@ Infer missing inputs from live repo state and local files before asking.
 ### 3. Research only when the next decision needs it
 
 - Check current official docs for GitHub community health, moderation, branch protection or rulesets, Actions, code scanning, Dependabot, secret scanning, private vulnerability reporting, releases, and each relevant ecosystem or registry only where the next fix or decision needs that evidence or where live scripted state and docs appear to disagree.
-- Compare 2-3 strong current reference repos only for a concrete ambiguous files, metadata, workflow, security, or release question. Do not do broad GH-skill best-practice maintenance during routine repo audits.
+- Compare at most 1-2 strong current reference repos only for a concrete ambiguous files, metadata, workflow, security, or release question. Do not do broad GH-skill best-practice maintenance during routine repo audits.
 - Use prose-only checks or the web UI only for settings that the bundled script or free APIs cannot currently verify.
 
 ### 4. Audit repo health
@@ -85,7 +88,7 @@ Infer missing inputs from live repo state and local files before asking.
 
 ### 5. Repair safe gaps
 
-- Apply low-risk fixes directly, re-run the script after each live GitHub change, and keep the final result grounded in fresh script output rather than stale notes.
+- Apply low-risk fixes directly, re-run the script after each live GitHub change that could affect a reported repo-health check, and keep the final result grounded in fresh script output rather than stale notes.
 - When the repo is available locally, pin safe external action refs to verified upstream SHAs with same-line release comments before enabling the repo-level SHA-pinning setting.
 - Open or update a PR for repo changes when branch protection or repo policy requires it.
 - Do not delete tags, releases, packages, protected branches, backup branches, or external artifacts unless the stale classification is proven and the action is safe or explicitly approved.

@@ -11,18 +11,22 @@ Turn a local project into a real public GitHub repository and the right publishe
 ## Core Rules
 
 - Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
-- Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
+- Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
 - Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
 - Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
 - Do not update this `SKILL.md` during routine runs unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
 - Inspect local state and local auth before asking for credentials or making assumptions.
-- For GitHub or registry tasks only, use `gh`, GitHub API, and `ceratops_gh_runtime` as part of the first-pass direct evidence before checking current official docs or `gh` help.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
-- For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 <!-- CERATOPS_COMMON_CORE_END -->
+
+## Skill-Specific Rules
+
+- Use `gh`, GitHub API, and `ceratops_gh_runtime` as the first-pass evidence for live GitHub settings and publish-hardening choices.
+- Start with a fast path: local project state, the actual project type, and only the registry or GitHub surfaces needed for the current publish decision. Widen to broader docs or reference repos only when the first pass leaves a concrete unresolved choice.
+- For live publish-hardening, security, moderation, or code-scanning alerts actually inspected in this run, classify only those alerts and report retained blockers precisely.
 
 ## Script Bundle
 
@@ -60,8 +64,9 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 
 ### 2. Research and decide only where the next choice needs it
 
+- Default to the narrowest evidence that answers the next publish or hardening decision: local project files first, then the selected registry or GitHub docs for the actual project type.
 - Check current official docs for GitHub community health, moderation, Actions, branch protection, code scanning, Dependabot, secret scanning, private vulnerability reporting, releases, and the selected registry or packaging ecosystem only where the next publish or hardening decision needs that evidence.
-- Compare 2-3 strong reference repos only for a concrete ambiguous repo-structure, security, release, or packaging question. Do not do broad GH-skill best-practice maintenance during routine publish runs.
+- Compare at most 1-2 strong reference repos only for a concrete ambiguous repo-structure, security, release, or packaging question. Do not do broad GH-skill best-practice maintenance during routine publish runs.
 - Select the actual distribution target from the project type instead of forcing Docker everywhere.
 - Do not choose paid features unless they are already available at no extra cost.
 
@@ -83,7 +88,7 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 - When the host supports repository rulesets, implement the maintainer exception as a pull-request-only ruleset bypass for the authenticated maintainer role or account instead of relying only on classic branch-protection bypass allowances.
 - Enable `sha_pinning_required` once the repo workflows are compliant. Treat an unpinned external action as a blocking publish hardening gap unless the user explicitly accepts the weaker tradeoff.
 - Enable auto-merge and delete-branch-on-merge when compatible with the workflow.
-- Run the bundled repo-health script after GitHub settings changes and before closing publish work.
+- Run the bundled repo-health script after GitHub settings changes that could affect a reported check and before closing publish work.
 - Treat the script findings as the first source of truth for settings such as `content_reports_enabled`, branch protection, strict checks, required approvals, stale review dismissal, code scanning default setup, secret scanning, push protection, Dependabot security updates, `sha_pinning_required`, delete-branch-on-merge, and auto-merge.
 - Verify branch protection, security controls, community health, moderation or reported-content health, and alert state from live endpoints. Do not assume repo-creation defaults already produced the intended moderation settings.
 - For first-time public publish, also check the live community profile and do not close while the remaining gap is a safe standard-file addition you can still make directly.
