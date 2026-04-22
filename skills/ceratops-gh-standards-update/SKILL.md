@@ -1,9 +1,9 @@
 ---
-name: ceratops-gh-best-practice-update
-description: Refresh and update the Ceratops GitHub skill family in the `codex-skills` repo against current GitHub best practices and live GitHub behavior. Use when routine or explicit GH-skill upkeep should review `skills/ceratops-gh-*`, shared core rules, helper-runtime claims, and repo docs, apply safe low-risk updates, and ship the resulting skill changes.
+name: ceratops-gh-standards-update
+description: Refresh and update the Ceratops GitHub skill family in the `codex-skills` repo against current GitHub standards and live GitHub behavior. Use when routine or explicit GH-skill upkeep should review `skills/ceratops-gh-*`, shared core rules, helper-runtime claims, and repo docs, apply safe low-risk updates, and ship the resulting skill changes.
 ---
 
-# Ceratops GH Best Practice Update
+# Ceratops GH Standards Update
 
 Refresh the Ceratops GitHub skill family deliberately instead of letting normal GH task skills drift into generalized upkeep. Ground decisions in local repo state, live GitHub behavior, current official GitHub docs when needed, and targeted strong reference repos only for concrete ambiguities.
 
@@ -44,7 +44,7 @@ Infer missing inputs from local repo state, installed skill state, live GitHub e
 
 - Use this skill when the work is to refresh the Ceratops GitHub skill family against current GitHub guidance, live GitHub behavior, or concrete reference-repo patterns.
 - If the task is normal repo shipping, PR handling, dependency updates, or repo-health work rather than GH skill-family upkeep, stop and use the matching `ceratops-gh-*` task skill.
-- If the work is only shipping already-prepared skill changes with no further upkeep analysis, stop and use `$ceratops-codex-skill-ship`.
+- If the work is only shipping already-prepared skill changes with no further upkeep analysis, stop and use `$ceratops-gh-codex-skill-ship`.
 - If the requested change would widen scope beyond `ceratops-gh-*`, change default GitHub policy, change merge or review posture, change security posture, add mandatory paid features, or materially alter the GH helper runtime, stop before applying it and report the recommendation.
 
 ## Workflow
@@ -83,7 +83,7 @@ Infer missing inputs from local repo state, installed skill state, live GitHub e
 
 ### 6. Ship and sync local runtime
 
-- If safe minor updates were applied, use `$ceratops-codex-skill-ship` to ship the repo change, update the runtime checkout from `origin/main`, run `powershell -ExecutionPolicy Bypass -File ./scripts/install-skills.ps1` from the runtime checkout, and verify installed `ceratops-gh-*` skills resolve to the runtime checkout.
+- If safe minor updates were applied, use `$ceratops-codex-skill-stage-release` to merge the ready worktree branch into the runtime `release/*` branch, then use `$ceratops-gh-codex-skill-ship` to ship the repo change, restore the runtime checkout to `main`, rerun the installer from the runtime checkout, and verify installed `ceratops-gh-*` skills resolve there.
 - If approval-required changes were found, report them without applying them.
 - For routine automation runs with no repo change and no recommendation, complete without opening an inbox item.
 
@@ -119,4 +119,4 @@ For routine automation runs with no repo change and no recommendation, do not op
 
 ## Example Invocation
 
-`Use $ceratops-gh-best-practice-update to review the Ceratops GitHub skill family against current GitHub best practices, apply safe updates, and ship the resulting skill changes.`
+`Use $ceratops-gh-standards-update to review the Ceratops GitHub skill family against current GitHub standards, apply safe updates, and ship the resulting skill changes.`

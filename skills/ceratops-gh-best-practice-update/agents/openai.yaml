@@ -1,4 +1,0 @@
-interface:
-  display_name: "Ceratops GH Best Practice Update"
-  short_description: "Refresh GH skills against current best practices"
-  default_prompt: "Use $ceratops-gh-best-practice-update to review the Ceratops GitHub skill family against current GitHub best practices, apply safe updates, and ship the resulting skill changes."

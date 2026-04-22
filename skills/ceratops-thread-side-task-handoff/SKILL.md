@@ -65,8 +65,7 @@ Infer missing inputs from the current thread and local state before asking.
 
 - Use this skill only when the user wants to spin off a newly discovered sub-issue into a different thread.
 - If the whole task should move to a new thread, stop and use `$ceratops-thread-full-handoff`.
-- If the task should continue in the same thread after a manual stop, stop and use `$ceratops-thread-resume-manual-stop`.
-- If the task should continue in the same thread after a restart or crash, stop and use `$ceratops-thread-resume-after-restart`.
+- If the task should continue in the same thread after a manual stop, restart, or crash, stop and use `$ceratops-thread-resume-manual-stop`.
 
 ## Workflow
 

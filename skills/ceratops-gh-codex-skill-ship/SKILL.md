@@ -1,11 +1,11 @@
 ---
-name: ceratops-codex-skill-ship
-description: Ship Ceratops or other local Codex skill changes from the codex-skills source repo to GitHub and the installed local skill set. Use when Codex should validate changed skill folders, ensure installed junctions under .codex/skills are correct, publish the repo change through GitHub, and verify the installed skills resolve to the intended source.
+name: ceratops-gh-codex-skill-ship
+description: Ship Ceratops or other local Codex skill changes from the runtime checkout's staged `release/*` branch through GitHub and back to the installed runtime on `main`. Use when Codex should validate staged skill changes, confirm the runtime checkout is on the intended release branch, publish the batch through GitHub, then restore the runtime checkout and installed skills to synced `main`.
 ---
 
-# Ceratops Codex Skill Ship
+# Ceratops GH Codex Skill Ship
 
-Ship changes to the local Codex skill source repo and keep the installed Ceratops skill junctions in sync.
+Ship a staged Ceratops skill batch through GitHub, then restore the runtime checkout and installed skill state to clean `main`.
 
 <!-- CERATOPS_COMMON_CORE_START -->
 ## Core Rules
@@ -28,58 +28,69 @@ Ship changes to the local Codex skill source repo and keep the installed Ceratop
 
 - Source repo: `%USERPROFILE%\\CodexProjects\\CeratopsSkills\\codex-skills`
 - Installed Ceratops skill path: `%USERPROFILE%\\.codex\\skills\\<skill-name>`
+- Default release branch: `release/local`
 - Local GH helper package install command: `python -m pip install --editable .`
 - Ceratops-installed skills should resolve through junctions to the source repo unless there is a documented exception.
 
 ## Skill-Specific Rules
 
+- Ship from the runtime checkout's active `release/*` branch, not directly from a task worktree.
+- If the runtime checkout is not on the intended release branch or the staged batch is not yet integrated there, stop and use `$ceratops-codex-skill-stage-release`.
 - Validate every changed skill folder before shipping.
 - Ensure `SKILL.md`, `agents/openai.yaml`, and any bundled resources stay aligned.
 - Prefer running the repo installer when GH skills, the GH helper package, or install metadata changed; otherwise repair the local installed junctions directly when needed.
 - Reuse the general GitHub ship flow rather than inventing a parallel release process.
-- Remove low-risk stale installed copies, stale junctions, or stale generated skill artifacts when safe.
+- Restore the runtime checkout to synced `main` and rerun the installer after merge.
+- Remove low-risk stale installed copies, stale junctions, stale release branches, or stale generated skill artifacts when safe.
+
+## Script Bundle
+
+- Runtime restore helper: `scripts/restore-runtime-main.ps1`
 
 ## Inputs To Capture
 
 - Changed skill folders and whether each one is new, updated, metadata-only, or cleanup.
-- Repo branch, PR, merge, and validation expectations.
+- Runtime checkout branch, staged release branch, PR or merge expectations, and validation expectations.
 - Installed junction expectations and any known exceptions.
 
 ## Boundaries
 
-- Use this skill when working in the `codex-skills` source repo or another skill source repo with the same local-install pattern.
-- If the task is only creating or editing the skill contents and not shipping them, stop and use the system `$skill-creator` guidance plus the relevant task skill.
+- Use this skill when working in the `codex-skills` runtime checkout or another skill source repo with the same local runtime-install pattern.
+- If the task is only creating or editing the skill contents and not staging or shipping them, stop and use the system `$skill-creator` guidance plus the relevant task skill.
+- If the runtime checkout is not yet staged on the intended `release/*` branch, stop and use `$ceratops-codex-skill-stage-release`.
 - If the task is general repo shipping not focused on Codex skills and local skill installation, stop and use `$ceratops-gh-ship-change`.
 
 ## Workflow
 
-### 1. Inspect changed skill scope
+### 1. Inspect staged skill scope
 
-- Inspect changed skill folders, repo state, installed junction state, and any duplicated installed copies.
-- Identify whether the work is a new skill, a skill update, metadata-only work, or cleanup.
+- Inspect the runtime checkout state, staged release branch, changed skill folders, installed junction state, and any duplicated installed copies.
+- Identify whether the work is a new skill, a skill update, a rename, a removal, metadata-only work, or cleanup.
 
-### 2. Validate skills locally
+### 2. Validate the staged release batch
 
+- Confirm the runtime checkout is on the intended `release/*` branch and clean aside from deliberate staged commits.
+- Run `python scripts/sync-skill-core.py --check`.
 - Run the skill validator for every changed skill.
 - Check that `agents/openai.yaml` still matches the intended user-facing name, short description, and default prompt.
 - Verify any referenced bundled resources exist and are actually needed.
 - When the GH helper package or installer changed, prove the packaged runtime still imports with `python -m ceratops_gh_runtime --help`.
 
-### 3. Sync installed skill state
+### 3. Ship the staged repo change
 
-- Run `scripts/install-skills.ps1` when the GH helper package, install flow, or broad skill set changed. For narrow skill-only changes, create or repair the installed junction for each Ceratops skill that should be locally discoverable.
-- Confirm the installed path resolves to the intended source folder.
-- Confirm the GH helper package resolves from the intended checkout when the GH skill family was touched.
-- Remove low-risk stale installed duplicates, wrong-path junctions, or stale installed GH runtime skill links.
-
-### 4. Ship the repo change
-
-- Use `$ceratops-gh-ship-change` when repo changes need to be committed, pushed, PR'd, merged, and cleaned up.
+- Use `$ceratops-gh-ship-change` from the runtime checkout when the staged release branch needs to be committed, pushed, PR'd, merged, and cleaned up.
+- Reuse an existing branch or PR when the staged release branch already has one.
 - If the work is only validation or stale-state cleanup with no content changes, use `$ceratops-gh-repo-health-audit` instead.
+
+### 4. Restore runtime `main`
+
+- Run `scripts/restore-runtime-main.ps1` to switch the runtime checkout back to `main`, fast-forward from `origin/main`, optionally drop the merged release branch, and rerun the installer.
+- Confirm the installed skill path resolves to the runtime checkout on `main`.
+- Confirm the GH helper package resolves from the runtime checkout when the GH skill family was touched.
 
 ### 5. Verify final installed state
 
-- After merge, verify the source repo is synced clean and the installed skill path still resolves correctly.
+- After merge, verify the runtime checkout is synced clean and the installed skill path still resolves correctly.
 - Report any intentionally retained installed exceptions or repo leftovers.
 
 ## Credential Handling
@@ -98,8 +109,9 @@ Do not ask for credentials if a working local auth path exists.
 
 - Verify every changed skill validates locally.
 - Verify the repo change is merged or correctly blocked.
-- Verify each expected installed junction resolves to the intended source folder.
-- Verify the GH helper package resolves from the intended checkout when the GH skill family was part of the run.
+- Verify the runtime checkout ends on local `main` tracking `origin/main`, unless intentionally retained on a release branch.
+- Verify each expected installed junction resolves to the runtime checkout.
+- Verify the GH helper package resolves from the runtime checkout when the GH skill family was part of the run.
 
 ## Output Contract
 
@@ -112,4 +124,4 @@ Report only:
 
 ## Example Invocation
 
-`Use $ceratops-codex-skill-ship to ship the changed Ceratops skills to GitHub, update the installed junctions, and verify the installed skills resolve to the source repo.`
+`Use $ceratops-gh-codex-skill-ship to ship the staged Ceratops skill batch through GitHub, restore the runtime checkout to main, and verify the installed skills resolve there.`
