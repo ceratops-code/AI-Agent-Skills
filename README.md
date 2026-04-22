@@ -46,7 +46,7 @@ src/
 Codex discovers personal skills from:
 
 ```text
-C:\Users\<you>\.codex\skills\<skill-name>\SKILL.md
+$CODEX_HOME/skills/<skill-name>/SKILL.md
 ```
 
 Run one explicit bootstrap step from the repo root:
@@ -58,7 +58,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-skills.ps1
 That bootstrap does two things explicitly:
 
 - installs the local GH helper package from this checkout with `python -m pip install --editable .`
-- junctions each skill folder into `C:\Users\<you>\.codex\skills\`
+- junctions each skill folder into `$CODEX_HOME/skills/`
 
 Installed Ceratops skills should keep pointing at the runtime checkout path. That checkout may sit on local `main` tracking `origin/main` or on a local `release/*` branch for an active unpublished batch. After the runtime checkout changes branches, rerun `scripts/install-skills.ps1` so new, renamed, or deleted skill junctions and the editable helper package match the active repo snapshot.
 
@@ -69,7 +69,7 @@ Restart Codex after adding new skill folders if the app does not pick them up au
 Claude Code uses the same core `SKILL.md` folder format. Copy or link a skill folder into:
 
 ```text
-~/.claude/skills/<skill-name>/SKILL.md
+$HOME/.claude/skills/<skill-name>/SKILL.md
 ```
 
 If you plan to use the Ceratops GitHub skill family outside Codex, also install the local GH helper package from the repo checkout:
