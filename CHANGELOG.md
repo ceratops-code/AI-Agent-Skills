@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Split the synced shared skill core into six build-time fragments with an explicit per-skill manifest, and made generated `SKILL.md` blocks show source comments for each shared section.
-- Renamed the GH helper surface from `gh_live*` to `gh_current_state*`, kept compatibility aliases for the old names, and updated docs and packaging to point at the current-state names.
+- Renamed the GH helper surface from `gh_live*` to `gh_current_state*`, removed the old compatibility aliases, and updated docs and packaging to point only at the current-state names.
 - Widened `ceratops-gh-standards-update` artifact coverage from Docker or PyPI examples to the full artifact scope used by the Ceratops publish and ship skills.
 - Reframed `ceratops-gh-standards-update` around a bounded best-practice audit: routine runs now start from current GitHub repo, settings, workflow, and relevant artifact guidance before deciding whether the Ceratops GH skill family needs updates.
 - Replaced direct runtime-preview work with a local `release/*` runtime branch flow, added `ceratops-codex-skill-stage-release`, and rewrote `ceratops-gh-codex-skill-ship` around staging batches into the runtime checkout and restoring clean `main` after shipping.
