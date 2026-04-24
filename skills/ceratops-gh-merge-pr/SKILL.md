@@ -35,26 +35,20 @@ Merge one GitHub PR only after proving the repo will remain healthy. This is the
 - Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
 - Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
 
-<!-- SOURCE: templates/fragments/core-gh-credentials.md -->
+<!-- SOURCE: templates/fragments/core-credentials.md -->
 
-## GH Credential Handling
+## Credential Handling
 
-If credentials are truly required after local checks, report only:
+- Apply this section unless a skill-specific credential rule narrows it further.
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
 
-1. which GitHub or registry credential or login is missing
+1. which credential or login is missing
 2. why it is needed
 3. where it will be stored
 4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, or connector
-
-Do not ask for credentials if a working local auth path exists.
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
 <!-- CERATOPS_COMMON_CORE_END -->
-
-## Skill-Specific Rules
-
-- Use `gh`, GitHub API, and `ceratops_gh_runtime` as the first-pass evidence for merge readiness and repo-policy gates.
-- Run the readiness script before widening to extra live PR fields or official docs.
-- Inspect labels, assignees, deployments, merge queue detail, code-scanning findings, or broader repo-health surfaces only when the readiness check, branch protection, or the user's request makes them relevant to the merge decision.
 
 ## Script Bundle
 
@@ -129,18 +123,6 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 - Prune stale refs safely.
 - Keep a clearly named safety branch only when needed to preserve reachable work after a squash or rebase merge.
 - Run the repo-health script if repo-health claims are part of the closeout.
-
-## Credential Handling
-
-If credentials are truly required after local checks, report only:
-
-1. which GitHub credential or login is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, or connector
-
-Do not ask for credentials if a working local auth path exists.
 
 ## Completion Gate
 

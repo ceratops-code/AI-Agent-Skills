@@ -23,6 +23,20 @@ Handle dependency updates as an end-to-end maintenance loop. Prefer safe automat
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 
+<!-- SOURCE: templates/fragments/core-credentials.md -->
+
+## Credential Handling
+
+- Apply this section unless a skill-specific credential rule narrows it further.
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
+
+1. which credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
+
 <!-- SOURCE: templates/fragments/core-gh-current-state.md -->
 
 ## GH Current State
@@ -44,26 +58,7 @@ Handle dependency updates as an end-to-end maintenance loop. Prefer safe automat
 - For each inspected finding, decide whether it is safe, fix low-risk items directly when in scope, and for every finding left open report its name or id, whether it is blocking, why it remains open, and the concrete work needed to clear it.
 - Do not collapse retained findings into a generic healthy result.
 - Re-check findings whose status may have changed because of actions taken in this run.
-
-<!-- SOURCE: templates/fragments/core-gh-credentials.md -->
-
-## GH Credential Handling
-
-If credentials are truly required after local checks, report only:
-
-1. which GitHub or registry credential or login is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, or connector
-
-Do not ask for credentials if a working local auth path exists.
 <!-- CERATOPS_COMMON_CORE_END -->
-
-## Skill-Specific Rules
-
-- Use `gh`, GitHub API, and `ceratops_gh_runtime` as the first-pass evidence for dependency PR and repo-policy state.
-- For dependency or security alerts and PRs actually processed in this run, classify each one precisely and report any retained blocker with the concrete next step. Do not expand alert reporting to untouched queue items unless they become the next actionable work.
 
 ## Script Bundle
 
@@ -131,18 +126,6 @@ Infer missing inputs from local files and live GitHub state before asking.
 
 - Close or classify stale, superseded, duplicate, or blocked dependency PRs only when the reason is proven.
 - Delete merged branches when safe and allowed, sync the local default branch, and prune stale refs.
-
-## Credential Handling
-
-If credentials are truly required after local checks, report only:
-
-1. which GitHub or registry credential is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, or connector
-
-Do not ask for credentials if a working local auth path exists.
 
 ## Completion Gate
 

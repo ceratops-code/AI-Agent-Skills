@@ -22,6 +22,20 @@ Use staged contingent execution for substantial tasks with meaningful side effec
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
+
+<!-- SOURCE: templates/fragments/core-credentials.md -->
+
+## Credential Handling
+
+- Apply this section unless a skill-specific credential rule narrows it further.
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
+
+1. which credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
 <!-- CERATOPS_COMMON_CORE_END -->
 
 ## Skill-Specific Rules
@@ -33,6 +47,7 @@ Use staged contingent execution for substantial tasks with meaningful side effec
 - Before taking a complex, invasive, nonstandard, or high-maintenance path, first rule out simpler options or explain why they are inadequate, then ask before implementing it.
 - Minimize routine progress commentary. Interrupt only for blockers, credentials, risky or destructive decisions, material scope changes, or complex-path approval.
 - Reuse unchanged state and batch related inspection instead of repeating exploratory probes.
+- Do not ask for credentials unless the current justified stage actually requires them.
 
 ## Inputs To Capture
 
@@ -80,11 +95,6 @@ Choose only the stages the task actually justifies:
 
 - Choose the narrowest justified closure scope based on side effects and stale-state surface.
 - Report only unresolved blockers, unresolved non-blocking debt, intentionally retained items, and anything important not verified.
-
-## Credential Handling
-
-- Do not ask for credentials unless the current justified stage actually requires them.
-- If credentials are required, ask only for the missing credential, why it is needed now, where it will be stored, and the exact command or setting the user must use.
 
 ## Completion Gate
 

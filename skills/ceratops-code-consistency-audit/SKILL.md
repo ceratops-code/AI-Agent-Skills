@@ -26,6 +26,20 @@ Use these references when helpful:
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
+
+<!-- SOURCE: templates/fragments/core-credentials.md -->
+
+## Credential Handling
+
+- Apply this section unless a skill-specific credential rule narrows it further.
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
+
+1. which credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
 <!-- CERATOPS_COMMON_CORE_END -->
 
 ## Skill-Specific Rules
@@ -35,6 +49,8 @@ Use these references when helpful:
 - Treat conflicts between two declared sources of truth as findings even when the code still happens to work.
 - Prefer concrete contradictions, stale follow-through, and merged-only interaction bugs over speculative architecture advice.
 - When git history or recent merge context is available, judge the current merged result against the latest target-branch state, not each branch in isolation.
+- Do not ask for credentials for normal local repo audits.
+- If external systems are genuinely needed, first exhaust local repo state, local git history, and no-auth metadata.
 
 ## Inputs To Capture
 
@@ -95,12 +111,6 @@ Check as many of these as the repo justifies:
 
 - Classify important checked surfaces as consistent, conflicting, blocked, or not verified.
 - If no findings remain, say so explicitly and note the residual coverage limits instead of implying exhaustive certainty.
-
-## Credential Handling
-
-- Do not ask for credentials for normal local repo audits.
-- If external systems are genuinely needed, first exhaust local repo state, local git history, and no-auth metadata.
-- If credentials are still required, ask only for the missing credential, why it is needed now, where it will be stored, and the exact command or setting required.
 
 ## Completion Gate
 

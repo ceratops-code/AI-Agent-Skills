@@ -23,19 +23,19 @@ Stage committed skill branches into the runtime checkout's local release branch 
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 
-<!-- SOURCE: templates/fragments/core-gh-credentials.md -->
+<!-- SOURCE: templates/fragments/core-credentials.md -->
 
-## GH Credential Handling
+## Credential Handling
 
-If credentials are truly required after local checks, report only:
+- Apply this section unless a skill-specific credential rule narrows it further.
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
 
-1. which GitHub or registry credential or login is missing
+1. which credential or login is missing
 2. why it is needed
 3. where it will be stored
 4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, or connector
-
-Do not ask for credentials if a working local auth path exists.
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
 
 <!-- SOURCE: templates/fragments/core-release-branch-runtime.md -->
 
@@ -59,13 +59,8 @@ Do not ask for credentials if a working local auth path exists.
 ## Skill-Specific Rules
 
 - Stage only committed task-worktree branches. Do not use this skill as a substitute for intentional commits on the source branches.
-- Keep installed Ceratops skill junctions and the editable GH helper package pointed at the runtime checkout path, not at task worktrees.
-- Treat the runtime checkout's active `release/*` branch as the single local preview source of truth for the whole repo snapshot.
-- Reuse the same `release/*` branch name locally and remotely by default. Do not remap the local release branch to a differently named remote branch unless the user explicitly asks for that tradeoff.
-- Refresh remote refs with `git fetch --prune origin` before deciding whether a runtime `release/*` branch already exists remotely, should be reused, or was already cleaned up.
 - After a squash-merged ship, recreate or rebase long-lived task branches from updated `main` before staging more work. Do not re-merge a branch whose earlier contents already landed on `main` via squash.
 - Use `--reset` staging when rebuilding the release branch from `main` is cheaper or safer than untangling partial staged state.
-- Rerun the runtime installer after switching the runtime checkout to the release branch so new, renamed, or deleted skill junctions and the editable helper package match the active repo snapshot.
 
 ## Script Bundle
 
@@ -119,18 +114,6 @@ Infer missing inputs from local repo state before asking.
 
 - Report the active local `release/*` branch, the staged task branches, and any blockers that still prevent shipping.
 - Leave the runtime checkout on the staged release branch only when the batch is intentionally active.
-
-## Credential Handling
-
-If credentials are truly required after local checks, report only:
-
-1. which GitHub credential is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, or connector
-
-Do not ask for credentials if a working local auth path exists.
 
 ## Completion Gate
 
