@@ -1,4 +1,4 @@
 interface:
   display_name: "Ceratops GH Standards Update"
-  short_description: "Refresh GH skills against current standards"
-  default_prompt: "Use $ceratops-gh-standards-update to review the Ceratops GitHub skill family against current GitHub standards, apply safe updates, and ship the resulting skill changes."
+  short_description: "Audit GH skills against current repo and artifact best practices"
+  default_prompt: "Use $ceratops-gh-standards-update to build a current best-practice baseline for GitHub repository contents, settings, workflows, and relevant Docker or PyPI publishing, then update the Ceratops GitHub skill family where safe."

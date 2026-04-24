@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Reframed `ceratops-gh-standards-update` around a bounded best-practice audit: routine runs now start from current GitHub repo, settings, workflow, and relevant Docker or PyPI guidance before deciding whether the Ceratops GH skill family needs updates.
 - Replaced direct runtime-preview work with a local `release/*` runtime branch flow, added `ceratops-codex-skill-stage-release`, and rewrote `ceratops-gh-codex-skill-ship` around staging batches into the runtime checkout and restoring clean `main` after shipping.
 - Renamed `ceratops-gh-best-practice-update` to `ceratops-gh-standards-update`, `ceratops-consistency-audit` to `ceratops-code-consistency-audit`, and `ceratops-codex-skill-ship` to `ceratops-gh-codex-skill-ship`.
 - Removed `ceratops-thread-resume-after-restart` and folded same-thread restart or crash recovery into `ceratops-thread-resume-manual-stop`.
