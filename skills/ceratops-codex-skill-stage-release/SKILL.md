@@ -8,9 +8,11 @@ description: Stage committed Ceratops skill changes into the runtime checkout's 
 Stage committed skill branches into the runtime checkout's local release branch so Codex can use one coherent unpublished repo snapshot.
 
 <!-- CERATOPS_COMMON_CORE_START -->
+<!-- SOURCE: templates/fragments/core-minimal.md -->
+
 ## Core Rules
 
-- Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
+- Everything in this section is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
 - Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
 - Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
@@ -20,6 +22,31 @@ Stage committed skill branches into the runtime checkout's local release branch 
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
+
+<!-- SOURCE: templates/fragments/core-gh-credentials.md -->
+
+## GH Credential Handling
+
+If credentials are truly required after local checks, report only:
+
+1. which GitHub or registry credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, or connector
+
+Do not ask for credentials if a working local auth path exists.
+
+<!-- SOURCE: templates/fragments/core-release-branch-runtime.md -->
+
+## Release Branch Runtime
+
+- Apply this section only to skills that stage or ship Ceratops skill batches through a runtime `release/*` branch.
+- Treat the runtime checkout's active `release/*` branch as the single local preview source of truth for the staged repo snapshot.
+- Keep installed Ceratops skill junctions and the editable GH helper package pointed at the runtime checkout path, not at task worktrees.
+- Reuse the same `release/*` branch name locally and remotely by default. Do not rename or remap it unless the user explicitly chooses that tradeoff.
+- Refresh remote refs with `git fetch --prune origin` before judging whether a runtime `release/*` branch already exists remotely, should be reused, or was already cleaned up.
+- Rerun the runtime installer after switching the runtime checkout branch so installed skill junctions and the editable GH helper package match the active repo snapshot.
 <!-- CERATOPS_COMMON_CORE_END -->
 
 ## Defaults

@@ -29,12 +29,19 @@ skills/
     SKILL.md
     agents/openai.yaml
 templates/
-  common-core.md
+  skill-fragments.json
+  fragments/
+    core-minimal.md
+    core-gh-current-state.md
+    core-gh-findings.md
+    core-gh-credentials.md
+    core-release-branch-runtime.md
+    core-thread-first-step.md
 src/
   ceratops_gh_runtime/
     __main__.py
-    gh_live.py
-    gh_live_checks.py
+    gh_current_state.py
+    gh_current_state_checks.py
 ```
 
 `SKILL.md` is the portable source of truth. `agents/openai.yaml` is Codex UI metadata and may be ignored by other agents.
@@ -92,7 +99,7 @@ python .\scripts\validate-skills.py
 python -m ceratops_gh_runtime --help
 ```
 
-The sync check enforces one shared Ceratops core block across every skill. The common core includes an explicit GitHub-only evidence rule that applies only when a task is actually about GitHub or a registry. The validator checks skill frontmatter, folder/name consistency, Codex metadata, placeholder leftovers, README coverage, and high-confidence secret patterns.
+The sync check composes each skill's shared block from `templates/skill-fragments.json` and `templates/fragments/`, and each generated `SKILL.md` block includes source comments so the origin of every shared section stays visible in the skill file itself. The validator checks skill frontmatter, folder/name consistency, fragment assignments, generated-block drift, Codex metadata, placeholder leftovers, README coverage, and high-confidence secret patterns.
 The GH helper package smoke test confirms the packaged runtime entrypoint is importable. With working GitHub auth, you can also run `python -m ceratops_gh_runtime repo-health --repo ceratops-code/codex-skills`.
 
 ## Releases

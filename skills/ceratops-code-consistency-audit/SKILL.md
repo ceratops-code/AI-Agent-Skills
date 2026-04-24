@@ -12,9 +12,11 @@ Use these references when helpful:
 - Reusable prompt templates: `references/prompt-template.md`
 
 <!-- CERATOPS_COMMON_CORE_START -->
+<!-- SOURCE: templates/fragments/core-minimal.md -->
+
 ## Core Rules
 
-- Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
+- Everything in this section is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
 - Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
 - Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.

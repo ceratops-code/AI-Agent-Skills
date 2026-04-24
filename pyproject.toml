@@ -10,7 +10,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 
 [project.scripts]
-ceratops-gh-live-checks = "ceratops_gh_runtime.gh_live_checks:main"
+ceratops-gh-current-state-checks = "ceratops_gh_runtime.gh_current_state_checks:main"
+ceratops-gh-live-checks = "ceratops_gh_runtime.gh_current_state_checks:main"
+
 
 [tool.setuptools]
 package-dir = {"" = "src"}

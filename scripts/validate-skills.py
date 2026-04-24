@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Validate Ceratops skill folders without external dependencies."""
+"""Validate Ceratops skill folders and generated shared fragments."""
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import sys
@@ -11,7 +12,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKILLS_DIR = ROOT / "skills"
 README = ROOT / "README.md"
-COMMON_CORE_TEMPLATE = ROOT / "templates" / "common-core.md"
+FRAGMENT_MANIFEST = ROOT / "templates" / "skill-fragments.json"
 CORE_START = "<!-- CERATOPS_COMMON_CORE_START -->"
 CORE_END = "<!-- CERATOPS_COMMON_CORE_END -->"
 
@@ -51,12 +52,25 @@ def parse_frontmatter(path: pathlib.Path) -> tuple[dict[str, str], str]:
     return data, body
 
 
-def expected_common_core() -> str:
-    body = COMMON_CORE_TEMPLATE.read_text(encoding="utf-8").strip("\n")
-    return f"{CORE_START}\n{body}\n{CORE_END}"
+def load_fragment_manifest() -> dict[str, object]:
+    return json.loads(FRAGMENT_MANIFEST.read_text(encoding="utf-8"))
 
 
-def check_skill(skill_dir: pathlib.Path, readme_text: str) -> list[str]:
+def expected_common_core(skill_name: str, manifest: dict[str, object]) -> str:
+    fragments = manifest["fragments"]
+    assignments = manifest["skills"]
+    fragment_names = assignments[skill_name]
+    rendered: list[str] = []
+    for fragment_name in fragment_names:
+        rel_path = fragments[fragment_name]
+        body = (ROOT / rel_path).read_text(encoding="utf-8").strip("\n")
+        rendered.append(f"<!-- SOURCE: {rel_path} -->")
+        rendered.append(body)
+    joined = "\n\n".join(rendered)
+    return f"{CORE_START}\n{joined}\n{CORE_END}"
+
+
+def check_skill(skill_dir: pathlib.Path, readme_text: str, manifest: dict[str, object]) -> list[str]:
     errors: list[str] = []
     name = skill_dir.name
     skill_md = skill_dir / "SKILL.md"
@@ -98,9 +112,9 @@ def check_skill(skill_dir: pathlib.Path, readme_text: str) -> list[str]:
     else:
         end += len(CORE_END)
         actual = core_text[start:end]
-        expected = expected_common_core()
+        expected = expected_common_core(name, manifest)
         if actual != expected:
-            errors.append(f"{name}: common core block is out of sync with template")
+            errors.append(f"{name}: generated shared fragment block is out of sync with manifest")
 
     if not openai_yaml.is_file():
         errors.append(f"{name}: missing agents/openai.yaml")
@@ -137,16 +151,41 @@ def main() -> int:
         errors.append("missing skills/ directory")
     if not README.is_file():
         errors.append("missing README.md")
-    if not COMMON_CORE_TEMPLATE.is_file():
-        errors.append("missing templates/common-core.md")
+    if not FRAGMENT_MANIFEST.is_file():
+        errors.append("missing templates/skill-fragments.json")
+
+    manifest = load_fragment_manifest() if FRAGMENT_MANIFEST.is_file() else {"fragments": {}, "skills": {}}
+    fragments = manifest.get("fragments", {})
+    assignments = manifest.get("skills", {})
+    if "core-minimal" not in fragments:
+        errors.append("fragment manifest must define core-minimal")
+    for fragment_name, rel_path in fragments.items():
+        if not (ROOT / rel_path).is_file():
+            errors.append(f"missing fragment file for {fragment_name}: {rel_path}")
+    for skill_name, fragment_names in assignments.items():
+        if "core-minimal" not in fragment_names:
+            errors.append(f"{skill_name}: fragment assignment must include core-minimal")
+        for fragment_name in fragment_names:
+            if fragment_name not in fragments:
+                errors.append(f"{skill_name}: unknown fragment assignment {fragment_name}")
+        if "core-gh-findings" in fragment_names and "core-gh-current-state" not in fragment_names:
+            errors.append(f"{skill_name}: core-gh-findings requires core-gh-current-state")
 
     readme_text = README.read_text(encoding="utf-8") if README.is_file() else ""
     skill_dirs = sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir()) if SKILLS_DIR.is_dir() else []
     if not skill_dirs:
         errors.append("no skill directories found")
 
+    skill_names = {skill_dir.name for skill_dir in skill_dirs}
+    for skill_name in assignments:
+        if skill_name not in skill_names:
+            errors.append(f"{skill_name}: fragment assignment points to a missing skill directory")
+
     for skill_dir in skill_dirs:
-        errors.extend(check_skill(skill_dir, readme_text))
+        if skill_dir.name not in assignments:
+            errors.append(f"{skill_dir.name}: missing fragment assignment in manifest")
+            continue
+        errors.extend(check_skill(skill_dir, readme_text, manifest))
     errors.extend(check_secrets())
 
     if errors:
