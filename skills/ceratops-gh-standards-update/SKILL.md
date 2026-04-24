@@ -1,6 +1,6 @@
 ---
 name: ceratops-gh-standards-update
-description: Audit the Ceratops GitHub skill family in the `codex-skills` repo against current GitHub repository, settings, workflow, and relevant artifact-publishing best practices, including Docker and PyPI when those surfaces are in scope, then apply safe low-risk updates. Use when routine or explicit GH-skill upkeep should first build a current best-practice baseline and then see whether `skills/ceratops-gh-*`, shared core rules, helper-runtime claims, or repo docs need updates.
+description: Audit the Ceratops GitHub skill family in the `codex-skills` repo against current GitHub repository, settings, workflow, and relevant artifact-publishing best practices for the artifact types covered by the Ceratops publish and ship skills, including Docker, PyPI, and other supported registries or public artifacts when those surfaces are in scope, then apply safe low-risk updates. Use when routine or explicit GH-skill upkeep should first build a current best-practice baseline and then see whether `skills/ceratops-gh-*`, shared core rules, helper-runtime claims, or repo docs need updates.
 ---
 
 # Ceratops GH Standards Update
@@ -37,7 +37,7 @@ Audit the Ceratops GitHub skill family deliberately instead of letting normal GH
 
 - For this skill, the shared-core ban on generalized best-practice refresh during routine runs is inapplicable. Routine runs must perform a bounded best-practice refresh across GitHub repo contents, repo settings, workflow hardening, and the artifact-publishing surfaces that the Ceratops GH skill family actually claims to cover.
 - Build the baseline from current official docs and live product behavior first. Use `gh`, GitHub API, `ceratops_gh_runtime`, package metadata, and registry endpoints as supporting evidence, and use public reference repos only for unresolved ambiguities.
-- Treat Docker, PyPI, and other artifact surfaces as in scope only when the GH skill family, repo docs, or helper claims actually touch them.
+- Treat artifact surfaces as in scope only when the GH skill family, repo docs, or helper claims actually touch them, using the artifact boundary defined by `ceratops-gh-repo-create-and-publish` and `ceratops-gh-ship-change`.
 - Separate the baseline from the Ceratops delta: first decide what current best practice says, then inspect whether `skills/ceratops-gh-*`, shared-core wording, helper-runtime claims, and repo docs are stale.
 - Keep detailed audit checklists in `references/` rather than bloating `SKILL.md`.
 - Apply safe wording, file-reference, checklist, and repo-doc updates directly. Report approval-bound policy, security, review, merge, cost, or helper-runtime changes instead of silently tightening defaults.
@@ -46,7 +46,7 @@ Audit the Ceratops GitHub skill family deliberately instead of letting normal GH
 
 - Whether the run is routine automation upkeep or an explicit user-requested GH-skill refresh.
 - Current target scope inside `codex-skills`: `skills/ceratops-gh-*`, `templates/common-core.md`, `scripts/sync-skill-core.py`, `scripts/validate-skills.py`, `src/ceratops_gh_runtime/`, and repo docs.
-- Which best-practice surfaces are actually in scope: GitHub repo contents, repo settings, workflow hardening, release posture, Docker or OCI publishing, PyPI publishing, or a documented no-artifact posture.
+- Which best-practice surfaces are actually in scope: GitHub repo contents, repo settings, workflow hardening, release posture, artifact types supported by `ceratops-gh-repo-create-and-publish` or `ceratops-gh-ship-change`, or a documented no-artifact posture.
 - Whether current findings stay inside safe minor updates or cross the approval boundary.
 - Whether the current task should only stage updates into the active local `release/*` batch or also ship them through GitHub now.
 
@@ -78,7 +78,7 @@ Infer missing inputs from local repo state, installed skill state, live GitHub e
 ### 3. Audit the GH skill family
 
 - Review `skills/ceratops-gh-*`, `templates/common-core.md`, `scripts/sync-skill-core.py`, `scripts/validate-skills.py`, and `src/ceratops_gh_runtime/` only where a GH-skill claim depends on them.
-- Look for duplicate guidance, contradictory defaults, stale GitHub setting names, stale required-file assumptions, stale repository-health expectations, stale workflow hardening guidance, stale Docker or PyPI guidance, partial follow-through, or logic that belongs in the shared core instead of a single skill.
+- Look for duplicate guidance, contradictory defaults, stale GitHub setting names, stale required-file assumptions, stale repository-health expectations, stale workflow hardening guidance, stale artifact-publishing guidance, partial follow-through, or logic that belongs in the shared core instead of a single skill.
 - Keep repo docs aligned when stale: `README.md`, `CONTRIBUTING.md`, and `CHANGELOG.md`.
 
 ### 4. Apply safe updates only
@@ -135,4 +135,4 @@ For routine automation runs with no repo change and no recommendation, do not op
 
 ## Example Invocation
 
-`Use $ceratops-gh-standards-update to build a current best-practice baseline for GitHub repo contents, settings, workflows, and relevant Docker or PyPI publishing, then update the Ceratops GitHub skill family where safe.`
+`Use $ceratops-gh-standards-update to build a current best-practice baseline for GitHub repo contents, settings, workflows, and any relevant artifact publishing covered by the Ceratops publish and ship skills, then update the Ceratops GitHub skill family where safe.`

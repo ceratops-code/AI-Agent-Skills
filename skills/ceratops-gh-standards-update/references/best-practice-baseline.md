@@ -25,6 +25,7 @@ Use this file as the bounded audit map for `ceratops-gh-standards-update`. It is
 ## 4. Artifact Surfaces
 
 - Audit only the artifact surfaces that the GH skill family, repo docs, or helper claims actually touch.
+- Use `ceratops-gh-repo-create-and-publish` and `ceratops-gh-ship-change` as the scope boundary for artifact types. That boundary includes packages, images, modules, binaries, and other public artifacts, including Docker or OCI registries, PyPI, npm, Maven, NuGet, crates.io, RubyGems, PowerShell Gallery, GitHub Packages, and another relevant registry when the publish or ship skills would treat it as a real deliverable.
 - If the repo explicitly publishes no artifacts, verify that the docs and skill wording stay consistent with that no-artifact posture.
 
 ### Docker Or OCI Images
@@ -38,6 +39,12 @@ Use this file as the bounded audit map for `ceratops-gh-standards-update`. It is
 - Verify whether the repo publishes to PyPI at all, and which package metadata files own that contract.
 - When PyPI publishing is in scope, verify `pyproject.toml` metadata, README or long-description expectations, license metadata, `requires-python`, build backend, sdist and wheel expectations, trusted publishing when supported, version verification, and smoke-install guidance.
 - Use current official PyPI and Python packaging docs for publish and verification expectations. Do not preserve stale `setup.py`, twine-only, or manual-token guidance when the current official path has moved.
+
+### Other Registries Or Public Artifacts
+
+- When another registry or public artifact type is in scope, use the exact artifact contract from the repo and the corresponding publish or ship workflow instead of forcing Docker or PyPI assumptions onto it.
+- Verify the ecosystem-standard manifest, metadata, build, release, publish, and smoke-check expectations for the real deliverable, such as npm packages, Maven artifacts, NuGet packages, crates.io crates, RubyGems gems, PowerShell Gallery modules, GitHub Packages outputs, standalone binaries, or another supported public artifact.
+- Prefer current official ecosystem docs and live registry behavior for the touched artifact type. Keep the standards audit anchored to artifact types the Ceratops publish or ship skills actually support.
 
 ## 5. Ceratops Delta Check
 
