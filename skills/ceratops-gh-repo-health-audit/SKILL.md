@@ -8,9 +8,11 @@ description: Audit and repair GitHub repository health with Ceratops defaults, u
 Validate that an existing GitHub repo is clean, current, secure, documented, published, and not carrying leftover workflow debris. Apply low-risk safe fixes directly and report risky, ambiguous, destructive, paid, or credential-bound fixes precisely. Treat the bundled GitHub helper scripts as the first source of truth for machine-checkable live settings.
 
 <!-- CERATOPS_COMMON_CORE_START -->
+<!-- SOURCE: templates/fragments/core-minimal.md -->
+
 ## Core Rules
 
-- Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
+- Everything in this section is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
 - Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
 - Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
@@ -20,6 +22,42 @@ Validate that an existing GitHub repo is clean, current, secure, documented, pub
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
+
+<!-- SOURCE: templates/fragments/core-gh-current-state.md -->
+
+## GH Current State
+
+- Apply this section only to skills that make GitHub-state decisions.
+- Use `gh`, GitHub API, and `ceratops_gh_runtime` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
+- Prefer current GitHub state over memory, prose summaries, or stale screenshots.
+- Start with the narrowest live check that answers the next decision: bundled helper script, targeted `gh` query, or focused API call.
+- Check current official GitHub docs or `gh` help only when the next decision remains concretely ambiguous after targeted live GitHub evidence, or when those sources materially conflict.
+- Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
+- Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
+
+<!-- SOURCE: templates/fragments/core-gh-findings.md -->
+
+## GH Findings
+
+- Apply this section only to skills that inspect GitHub security, code-scanning, dependency, moderation, or process findings.
+- Classify only findings actually inspected in this run. Do not expand reporting to untouched queues unless they become the next actionable work or the user explicitly asked for full coverage.
+- For each inspected finding, decide whether it is safe, fix low-risk items directly when in scope, and for every finding left open report its name or id, whether it is blocking, why it remains open, and the concrete work needed to clear it.
+- Do not collapse retained findings into a generic healthy result.
+- Re-check findings whose status may have changed because of actions taken in this run.
+
+<!-- SOURCE: templates/fragments/core-gh-credentials.md -->
+
+## GH Credential Handling
+
+If credentials are truly required after local checks, report only:
+
+1. which GitHub or registry credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, or connector
+
+Do not ask for credentials if a working local auth path exists.
 <!-- CERATOPS_COMMON_CORE_END -->
 
 ## Skill-Specific Rules

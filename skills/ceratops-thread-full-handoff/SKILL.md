@@ -8,9 +8,11 @@ description: Create a copy-paste prompt for moving a whole task into a new threa
 Produce one copy-paste prompt for continuing the whole task in a new thread.
 
 <!-- CERATOPS_COMMON_CORE_START -->
+<!-- SOURCE: templates/fragments/core-minimal.md -->
+
 ## Core Rules
 
-- Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
+- Everything in this section is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
 - Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
 - Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
@@ -20,6 +22,15 @@ Produce one copy-paste prompt for continuing the whole task in a new thread.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
+
+<!-- SOURCE: templates/fragments/core-thread-first-step.md -->
+
+## First-Step State Refresh
+
+- Apply this section only to thread-handoff skills.
+- Reuse fresh state already established in the current thread by default.
+- Refresh only facts whose staleness would change or misdirect the first step in the new thread.
+- Keep refs exact but limited to the entities the next thread is likely to open first.
 <!-- CERATOPS_COMMON_CORE_END -->
 
 ## Skill-Specific Rules
