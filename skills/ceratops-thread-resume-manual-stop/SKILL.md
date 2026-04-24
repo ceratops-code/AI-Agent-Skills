@@ -22,6 +22,20 @@ Resume a same-thread task from current local state after a manual pause, cancell
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
+
+<!-- SOURCE: templates/fragments/core-credentials.md -->
+
+## Credential Handling
+
+- Apply this section unless a skill-specific credential rule narrows it further.
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
+
+1. which credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
 <!-- CERATOPS_COMMON_CORE_END -->
 
 ## Skill-Specific Rules
@@ -31,6 +45,7 @@ Resume a same-thread task from current local state after a manual pause, cancell
 - Do not restart the whole task from zero if the next justified stage can be identified cheaply.
 - Re-check only entities that were touched, plausibly affected, or needed for the next stage or final verification.
 - If the next viable option is complex, invasive, nonstandard, or high-maintenance, stop and ask before taking it.
+- Do not ask for credentials unless the resumed task actually requires them.
 
 ## Inputs To Capture
 
@@ -70,11 +85,6 @@ Infer missing inputs from the recent thread and local state before asking.
 - Before completion, run the narrowest justified closure pass for the task.
 - Remove low-risk stale items that are no longer needed.
 - Report only unresolved blockers, unresolved non-blocking debt, intentionally retained items, and anything important not verified.
-
-## Credential Handling
-
-- Do not ask for credentials unless the resumed task actually requires them.
-- If credentials are required, ask only for the missing credential, why it is needed now, where it will be stored, and the exact command or setting the user must use.
 
 ## Completion Gate
 

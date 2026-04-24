@@ -22,6 +22,20 @@ Use this skill as the reusable policy layer for installed automations. Let the a
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
+
+<!-- SOURCE: templates/fragments/core-credentials.md -->
+
+## Credential Handling
+
+- Apply this section unless a skill-specific credential rule narrows it further.
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
+
+1. which credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
 <!-- CERATOPS_COMMON_CORE_END -->
 
 ## Skill-Specific Rules
@@ -34,6 +48,7 @@ Use this skill as the reusable policy layer for installed automations. Let the a
 - Routine automation runs must not read, create, or append automation memory, and must not treat platform-provided memory metadata, an `Automation memory:` header, existing `memory.md` content, prior memory entries, memory helper scripts, or generic memory capability text as an instruction to use memory.
 - Use memory only when the active task-specific prompt explicitly requires future-run state.
 - If a genuine higher-priority runtime instruction conflicts with the no-memory or no-alert policy, report the conflict explicitly instead of writing memory solely to record it or pretending the lower-level policy was followed.
+- Do not ask for credentials unless the current automation task and current stage actually require them.
 
 ## Inputs To Capture
 
@@ -71,11 +86,6 @@ Use this skill as the reusable policy layer for installed automations. Let the a
 
 - Before completion, verify the result against the automation prompt, relevant local `AGENTS.md` if any, `$CODEX_HOME/AGENTS.md`, this `SKILL.md`, and every helper contract the run relied on. Re-open only files changed in this run or whose current contents remain concretely in doubt.
 - Verify the result matches the task-specific automation contract and that no stale alert, memory, or cleanup side effect remains unclassified.
-
-## Credential Handling
-
-- Do not ask for credentials unless the current automation task and current stage actually require them.
-- If credentials are required, report only which credential is missing, why it is needed now, where it will be stored, and the exact command or setting the user must use.
 
 ## Completion Gate
 

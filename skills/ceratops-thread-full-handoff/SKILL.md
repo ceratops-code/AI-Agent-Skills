@@ -23,6 +23,20 @@ Produce one copy-paste prompt for continuing the whole task in a new thread.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 
+<!-- SOURCE: templates/fragments/core-credentials.md -->
+
+## Credential Handling
+
+- Apply this section unless a skill-specific credential rule narrows it further.
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
+
+1. which credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
+
 <!-- SOURCE: templates/fragments/core-thread-first-step.md -->
 
 ## First-Step State Refresh
@@ -38,12 +52,11 @@ Produce one copy-paste prompt for continuing the whole task in a new thread.
 - Treat this as moving the whole task, not spinning off a side issue.
 - Produce a prompt, not a bundle and not instructions to use a follow-up handoff skill.
 - Do not broaden work just to make the prompt feel complete.
-- Reuse fresh state already established in the current thread.
-- Refresh only facts whose staleness would misdirect the first step in the new thread.
 - Prefer current state, current objective, and next step over chronology.
 - Exclude solved branches unless they materially constrain the next step.
 - Include only the refs the new thread is likely to need immediately.
 - If the user says `include the following questions`, `including the questions`, or equivalent wording, carry those questions into the prompt as next-thread asks instead of answering them here.
+- Do not ask for credentials unless verifying the handoff requires protected state that cannot be inferred locally.
 
 ## Inputs To Capture
 
@@ -90,11 +103,6 @@ Infer missing inputs from the current thread and local state before asking.
 - Produce a prompt that can be pasted directly into a new thread.
 - Make the objective now and the next justified step explicit.
 - Write the prompt as direct instruction to the new thread, not as commentary about a handoff artifact.
-
-## Credential Handling
-
-- Do not ask for credentials unless verifying the handoff requires protected state that cannot be inferred locally.
-- If credentials are required, ask only for the missing credential, why it is needed now, where it will be stored, and the exact command or setting the user must use.
 
 ## Completion Gate
 

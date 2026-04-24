@@ -23,6 +23,20 @@ Turn a local project into a real public GitHub repository and the right publishe
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 
+<!-- SOURCE: templates/fragments/core-credentials.md -->
+
+## Credential Handling
+
+- Apply this section unless a skill-specific credential rule narrows it further.
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
+
+1. which credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
+
 <!-- SOURCE: templates/fragments/core-gh-current-state.md -->
 
 ## GH Current State
@@ -44,27 +58,11 @@ Turn a local project into a real public GitHub repository and the right publishe
 - For each inspected finding, decide whether it is safe, fix low-risk items directly when in scope, and for every finding left open report its name or id, whether it is blocking, why it remains open, and the concrete work needed to clear it.
 - Do not collapse retained findings into a generic healthy result.
 - Re-check findings whose status may have changed because of actions taken in this run.
-
-<!-- SOURCE: templates/fragments/core-gh-credentials.md -->
-
-## GH Credential Handling
-
-If credentials are truly required after local checks, report only:
-
-1. which GitHub or registry credential or login is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, or connector
-
-Do not ask for credentials if a working local auth path exists.
 <!-- CERATOPS_COMMON_CORE_END -->
 
 ## Skill-Specific Rules
 
-- Use `gh`, GitHub API, and `ceratops_gh_runtime` as the first-pass evidence for live GitHub settings and publish-hardening choices.
-- Start with a fast path: local project state, the actual project type, and only the registry or GitHub surfaces needed for the current publish decision. Widen to broader docs or reference repos only when the first pass leaves a concrete unresolved choice.
-- For live publish-hardening, security, moderation, or code-scanning alerts actually inspected in this run, classify only those alerts and report retained blockers precisely.
+- Do not prefer connector storage over normal local credential stores.
 
 ## Script Bundle
 
@@ -142,18 +140,6 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 - Create and push a release tag only when the repo is publishable and the version source is clear.
 - Prefer existing version metadata from manifests, release config, changelog, or tag series.
 - Skip tagging when version semantics are unclear without invention, and report the skip precisely.
-
-## Credential Handling
-
-If credentials are truly required after local checks, report only:
-
-1. which credential or login is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, or connector
-
-Do not ask for credentials if a working local auth path exists. Do not prefer connector storage over normal local credential stores.
 
 ## Completion Gate
 

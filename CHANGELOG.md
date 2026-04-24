@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Moved credential handling into one shared fragment across the skill family, removed duplicated per-skill credential sections, and trimmed GH skill sections that only restated shared rules or workflow steps.
 - Split the synced shared skill core into six build-time fragments with an explicit per-skill manifest, and made generated `SKILL.md` blocks show source comments for each shared section.
 - Renamed the GH helper surface from `gh_live*` to `gh_current_state*`, removed the old compatibility aliases, and updated docs and packaging to point only at the current-state names.
 - Widened `ceratops-gh-standards-update` artifact coverage from Docker or PyPI examples to the full artifact scope used by the Ceratops publish and ship skills.

@@ -32,9 +32,9 @@ templates/
   skill-fragments.json
   fragments/
     core-minimal.md
+    core-credentials.md
     core-gh-current-state.md
     core-gh-findings.md
-    core-gh-credentials.md
     core-release-branch-runtime.md
     core-thread-first-step.md
 src/

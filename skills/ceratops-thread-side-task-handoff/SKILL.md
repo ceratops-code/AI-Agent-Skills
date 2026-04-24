@@ -23,6 +23,20 @@ Produce one minimal copy-paste prompt for starting a side task in a new thread.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 
+<!-- SOURCE: templates/fragments/core-credentials.md -->
+
+## Credential Handling
+
+- Apply this section unless a skill-specific credential rule narrows it further.
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
+
+1. which credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
+
 <!-- SOURCE: templates/fragments/core-thread-first-step.md -->
 
 ## First-Step State Refresh
@@ -38,8 +52,6 @@ Produce one minimal copy-paste prompt for starting a side task in a new thread.
 - Treat the original task as background. Include it in one short line only when needed.
 - Optimize for the side task only. Ignore most of the original task unless it directly constrains the new thread.
 - Produce a prompt, not a bundle and not instructions to use a follow-up handoff skill.
-- Reuse fresh state already established in the current thread.
-- Refresh only facts whose staleness would change the first step in the new thread.
 - Prefer the discovered conclusion and current objective over chronology.
 - Include what stays in the current thread only when it matters for scope control.
 - Keep refs exact but minimal.
@@ -47,6 +59,7 @@ Produce one minimal copy-paste prompt for starting a side task in a new thread.
 - Do not list general process instructions, generic runtime constraints, or merely helpful background artifacts as `source-of-truth refs` unless the side task is specifically about them or the first next step depends on opening them.
 - Put active instructions or process constraints under constraints, not under `source-of-truth refs`, unless those instruction files are themselves part of the side task.
 - If the user says `include the following questions`, `including the questions`, or equivalent wording, carry those questions into the prompt as next-thread asks instead of answering them here.
+- Do not ask for credentials unless verifying the handoff requires protected state that cannot be inferred locally.
 
 ## Inputs To Capture
 
@@ -93,11 +106,6 @@ Infer missing inputs from the current thread and local state before asking.
 - Produce a prompt that can be pasted directly into a new thread.
 - Make the current objective and first next step explicit.
 - Write the prompt as direct instruction to the new thread, not as commentary about a handoff artifact.
-
-## Credential Handling
-
-- Do not ask for credentials unless verifying the handoff requires protected state that cannot be inferred locally.
-- If credentials are required, ask only for the missing credential, why it is needed now, where it will be stored, and the exact command or setting the user must use.
 
 ## Completion Gate
 

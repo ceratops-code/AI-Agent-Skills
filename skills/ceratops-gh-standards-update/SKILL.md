@@ -35,19 +35,19 @@ Audit the Ceratops GitHub skill family deliberately instead of letting normal GH
 - Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
 - Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
 
-<!-- SOURCE: templates/fragments/core-gh-credentials.md -->
+<!-- SOURCE: templates/fragments/core-credentials.md -->
 
-## GH Credential Handling
+## Credential Handling
 
-If credentials are truly required after local checks, report only:
+- Apply this section unless a skill-specific credential rule narrows it further.
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
 
-1. which GitHub or registry credential or login is missing
+1. which credential or login is missing
 2. why it is needed
 3. where it will be stored
 4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, or connector
-
-Do not ask for credentials if a working local auth path exists.
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
 <!-- CERATOPS_COMMON_CORE_END -->
 
 ## Script Bundle
@@ -130,18 +130,6 @@ Infer missing inputs from local repo state, installed skill state, live GitHub e
 - Use `$ceratops-gh-codex-skill-ship` only when the current task explicitly expects GitHub publication after the standards refresh.
 - If approval-required changes were found, report them without applying them.
 - For routine automation runs with no repo change and no recommendation, complete without opening an inbox item.
-
-## Credential Handling
-
-If credentials are truly required after local checks, report only:
-
-1. which GitHub credential or login is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, or connector
-
-Do not ask for credentials if a working local auth path exists.
 
 ## Completion Gate
 
