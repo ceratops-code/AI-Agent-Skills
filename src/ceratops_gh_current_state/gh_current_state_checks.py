@@ -11,6 +11,12 @@ from dataclasses import asdict, dataclass
 
 from .gh_current_state import CommandError, current_branch, detect_repo, gh_api, gh_pr_view
 
+PLAN_LIMITED_MARKERS = (
+    "upgrade to github pro",
+    "make this repository public",
+    "enable this feature",
+)
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -31,6 +37,25 @@ def add(
     expected: object | None = None,
 ) -> None:
     findings.append(Finding(level=level, check=check, message=message, actual=actual, expected=expected))
+
+
+def is_plan_limited(result_stderr: str, status: int | None) -> bool:
+    if status != 403:
+        return False
+    normalized = result_stderr.lower()
+    return all(marker in normalized for marker in PLAN_LIMITED_MARKERS)
+
+
+def active_branch_rulesets(rulesets: object) -> list[dict[str, object]]:
+    if not isinstance(rulesets, list):
+        return []
+    active: list[dict[str, object]] = []
+    for ruleset in rulesets:
+        if not isinstance(ruleset, dict):
+            continue
+        if ruleset.get("target") == "branch" and ruleset.get("enforcement") == "active":
+            active.append(ruleset)
+    return active
 
 
 def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object], list[Finding]]:
@@ -108,14 +133,46 @@ def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object],
     if is_archived:
         add(findings, "SKIP", "branch_protection", "Archived repos do not require active branch protection.")
     elif not protection_result.ok or not isinstance(protection_result.data, dict):
-        add(
-            findings,
-            "FAIL",
-            "branch_protection",
-            "The default branch is missing readable protection settings.",
-            actual=protection_result.stderr or protection_result.status,
-            expected=f"live protection on {default_branch}",
-        )
+        rulesets_result = gh_api(f"repos/{repo}/rulesets", cwd=cwd)
+        rulesets = active_branch_rulesets(rulesets_result.data) if rulesets_result.ok else []
+        if rulesets:
+            add(
+                findings,
+                "WARN",
+                "branch_protection",
+                "Active branch rulesets are readable, but this helper does not yet verify default-branch coverage or constraints.",
+                actual=[ruleset.get("name") for ruleset in rulesets],
+                expected=f"branch protection or verified active ruleset coverage for {default_branch}",
+            )
+        elif (
+            bool(repo_info.get("private"))
+            and is_plan_limited(protection_result.stderr, protection_result.status)
+            and (not rulesets_result.ok)
+            and is_plan_limited(rulesets_result.stderr, rulesets_result.status)
+        ):
+            add(
+                findings,
+                "INFO",
+                "branch_protection",
+                "Private-repo branch protection and rulesets are unavailable on the current GitHub plan; report this as a paid requirement, not as missing protection.",
+                actual={
+                    "branch_protection": protection_result.stderr or protection_result.status,
+                    "rulesets": rulesets_result.stderr or rulesets_result.status,
+                },
+                expected="eligible paid plan or public visibility for enforced default-branch protection",
+            )
+        else:
+            add(
+                findings,
+                "FAIL",
+                "branch_protection",
+                "The default branch is missing readable protection settings.",
+                actual={
+                    "branch_protection": protection_result.stderr or protection_result.status,
+                    "rulesets": rulesets_result.stderr or rulesets_result.status,
+                },
+                expected=f"live protection or active branch ruleset on {default_branch}",
+            )
     else:
         protection = protection_result.data
         add(findings, "PASS", "branch_protection", "Default-branch protection is present.", actual=default_branch)
@@ -406,7 +463,7 @@ def pr_readiness(selector: str | None, cwd: pathlib.Path | None) -> tuple[dict[s
 
 
 def emit(summary: dict[str, object], findings: list[Finding], *, as_json: bool) -> int:
-    counts = {"FAIL": 0, "WARN": 0, "PASS": 0, "SKIP": 0}
+    counts = {"FAIL": 0, "WARN": 0, "INFO": 0, "PASS": 0, "SKIP": 0}
     for finding in findings:
         counts[finding.level] = counts.get(finding.level, 0) + 1
 
