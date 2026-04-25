@@ -157,15 +157,16 @@ try {
         throw "Editable helper-package install failed."
     }
 
-    $editablePackages = (& $python -m pip list --editable --format=json | ConvertFrom-Json)
+    $editablePackageShow = & $python -m pip show ceratops-gh-current-state 2>$null
     if ($LASTEXITCODE -ne 0) {
-        throw "Could not verify the installed GH helper package mode."
+        throw "Could not inspect the installed GH helper package."
     }
-    $editablePackage = $editablePackages | Where-Object { $_.name -eq "ceratops-gh-current-state" } | Select-Object -First 1
-    if ($null -eq $editablePackage) {
+    $editableProjectLocationLine = $editablePackageShow | Where-Object { $_ -like "Editable project location:*" } | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($editableProjectLocationLine)) {
         throw "Installed GH helper package is not registered as editable."
     }
-    if ($editablePackage.editable_project_location -ne $resolvedRepoRoot) {
+    $editableProjectLocation = $editableProjectLocationLine.Substring("Editable project location:".Length).Trim()
+    if ($editableProjectLocation -ne $resolvedRepoRoot) {
         throw "Installed GH helper package does not point at the requested checkout."
     }
 }
