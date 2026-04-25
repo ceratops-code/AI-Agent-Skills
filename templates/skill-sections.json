@@ -3,6 +3,8 @@
     "minimal": "templates/sections/minimal.md",
     "credentials": "templates/sections/credentials.md",
     "gh-current-state": "templates/sections/gh-current-state.md",
+    "gh-repo-health-contract": "templates/sections/gh-repo-health-contract.md",
+    "gh-artifact-contract": "templates/sections/gh-artifact-contract.md",
     "gh-findings": "templates/sections/gh-findings.md",
     "release-branch-runtime": "templates/sections/release-branch-runtime.md",
     "thread-first-step": "templates/sections/thread-first-step.md"
@@ -58,24 +60,30 @@
       "minimal",
       "credentials",
       "gh-current-state",
+      "gh-repo-health-contract",
+      "gh-artifact-contract",
       "gh-findings"
     ],
     "ceratops-gh-repo-dependency-update": [
       "minimal",
       "credentials",
       "gh-current-state",
+      "gh-artifact-contract",
       "gh-findings"
     ],
     "ceratops-gh-repo-health-audit": [
       "minimal",
       "credentials",
       "gh-current-state",
+      "gh-repo-health-contract",
+      "gh-artifact-contract",
       "gh-findings"
     ],
     "ceratops-gh-ship-change": [
       "minimal",
       "credentials",
       "gh-current-state",
+      "gh-artifact-contract",
       "gh-findings"
     ],
     "ceratops-gh-standards-update": [

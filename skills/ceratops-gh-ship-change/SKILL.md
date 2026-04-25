@@ -48,6 +48,22 @@ Take an existing published repo from local changes to a verified merged result. 
 - Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
 - Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
 
+<!-- SECTION SOURCE: templates/sections/gh-artifact-contract.md -->
+
+## GH Artifact Contract
+
+- Apply this contract only when the repo has an external artifact, the current change affects a releasable artifact, or the final answer makes an artifact or no-artifact claim.
+- Identify the real deliverable from the project instead of forcing Docker, PyPI, or any other registry by default.
+- Capture or verify the artifact identity, registry target, version source, release policy, tag style, changelog or release-note source, and post-publish consumer check.
+- In audit-only flows, verify and classify artifact state; do not publish or mutate registry artifacts unless the workflow explicitly moves into a ship or publish skill.
+- Build, package, install, pull, run, or consume local artifacts enough to catch packaging and runtime failures before publishing or before making a local artifact-health claim.
+- Publish external artifacts only when repo policy and the merged change require a release, tag, package, image, module, binary, or other public artifact.
+- Derive versions from trustworthy project metadata and tag history instead of inventing semantics.
+- Verify live release and registry endpoints after publishing or when auditing artifact state, including tags, digests, package pages, release pages, and published artifacts.
+- For PyPI publishes, prefer Trusted Publishing or another short-lived identity path over repository-stored long-lived tokens when supported, build the intended sdist and wheel, publish the intended version, verify the live PyPI version, install that exact version from PyPI locally, and run the smoke or documented consumer check against the published artifact instead of an editable checkout.
+- For PyPI publishes that emit attestations or provenance, verify the metadata through PyPI or the selected verifier instead of relying only on upload success.
+- For Docker or OCI image publishes, build locally, run a smoke test, publish the intended tags or digests, verify the live registry state, and pull or consume the published image when relevant.
+
 <!-- SECTION SOURCE: templates/sections/gh-findings.md -->
 
 ## GH Findings
@@ -66,9 +82,7 @@ Take an existing published repo from local changes to a verified merged result. 
 ## Inputs To Capture
 
 - Intended change scope, issue or PR reference, target branch, repo owner and name, and merge preference.
-- Version bump, tag, release-note, changelog, and artifact-publish expectations.
-- Affected ecosystems and registries, if any.
-- For Python package publishes, the PyPI project name, target version, and the exact post-publish install or smoke-check command.
+- Any missing inputs required by the GH artifact contract.
 - Required local checks, CI checks, security gates, branch protection, release workflow, and package verification commands.
 - Whether the run touches GitHub Actions workflows or repo Actions permissions, and whether the repo already enforces SHA pinning.
 - Topics, CODEOWNERS, SECURITY instructions, README examples, and local consumer paths affected by the change.
@@ -80,7 +94,7 @@ Infer missing inputs from local files and live repo state before asking.
 - Use this skill when the repo already exists and there are actual local changes to complete, merge, and optionally release.
 - If the repo is not yet published or lacks a usable remote, stop and use `$ceratops-gh-repo-create-and-publish`.
 - If the task is only repo validation or stale-state cleanup with no content changes, stop and use `$ceratops-gh-repo-health-audit`.
-- If only PR finalization remains and no content changes are needed, stop this workflow immediately and continue with `$ceratops-gh-merge-pr`, even when this workflow created or updated the PR.
+- If only PR finalization remains, no content changes are needed, and no release or artifact publish is required after merge, stop this workflow immediately and continue with `$ceratops-gh-merge-pr`, even when this workflow created or updated the PR.
 
 ## Workflow
 
@@ -111,13 +125,12 @@ Infer missing inputs from local files and live repo state before asking.
 - Finish in-scope code, docs, tests, generated files, and packaging metadata.
 - If the run touches workflow files or GitHub Actions settings, pin every non-local action in the changed workflows to a verified full SHA with a same-line version comment and do not introduce new mutable refs.
 - Add regression tests or regression checks for meaningful behavior fixes or behavior changes.
-- Update README, examples, install or run commands, SECURITY, CONTRIBUTING, changelog, release notes, package metadata, topics, CODEOWNERS, and CI only when the change makes them stale.
+- Update README, examples, install or run commands, SECURITY, CONTRIBUTING, changelog, release notes, package metadata, topics, CODEOWNERS, CI, and artifact metadata only when the change makes them stale.
 
 ### 5. Validate locally
 
 - Run the relevant local checks: format, lint, tests, smoke tests, build, packaging, generated-file checks, container build, or security checks.
-- For packages, build local artifacts and install or consume them locally before publishing.
-- For images, build locally and run a smoke test before publishing.
+- Execute the local-verification parts of the GH artifact contract when artifact publishing might be required.
 - Fix in-scope failures instead of stopping at the first error.
 
 ### 6. PR, CI, and merge
@@ -133,20 +146,13 @@ Infer missing inputs from local files and live repo state before asking.
 
 ### 7. Publish artifacts when relevant
 
-- Determine whether the merged change requires a release, tag, package, image, or other registry publish.
-- Use the current official release flow for the relevant ecosystem.
-- Derive versions from trustworthy project metadata and tag history instead of inventing semantics.
-- Publish external artifacts only when the merged change affects a releasable artifact.
-- For Python packages published to PyPI, build the intended sdist and wheel, publish the intended version, verify the live PyPI version, install that exact version from PyPI locally, and run at least a smoke import or documented consumer check against the installed artifact rather than the local checkout.
-- Verify live registry endpoints, tags, digests, package pages, release pages, and artifacts when a publish actually happens.
+- Execute the publish and live-verification parts of the GH artifact contract.
 - Re-run the repo-health script after any live GitHub setting change and the PR-readiness script immediately before the final merge action.
 
 ## Completion Gate
 
 - Verify the merge decision is backed by a fresh `python -m ceratops_gh_current_state pr-readiness` run.
 - Verify live GitHub state for the repo with `python -m ceratops_gh_current_state repo-health` when repo settings or process health were part of the run.
-- Verify live registry state for every published artifact and verify local install, pull, or consumption when relevant.
-- For PyPI publishes, verify the exact published version can be installed from PyPI locally and that the local smoke check uses the published artifact instead of an editable checkout.
 - Verify changed workflow files still use the intended full-SHA action refs when the run touched GitHub Actions workflows or settings.
 - Verify local state: default branch, worktree, remotes, refs, generated files, artifacts, temp paths, caches, credential changes, and local consumer paths.
 - Verify any temporary branch or worktree created for the run was removed unless intentionally retained.

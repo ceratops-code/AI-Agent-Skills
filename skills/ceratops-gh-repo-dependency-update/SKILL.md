@@ -48,6 +48,22 @@ Handle dependency updates as an end-to-end maintenance loop. Prefer safe automat
 - Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
 - Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
 
+<!-- SECTION SOURCE: templates/sections/gh-artifact-contract.md -->
+
+## GH Artifact Contract
+
+- Apply this contract only when the repo has an external artifact, the current change affects a releasable artifact, or the final answer makes an artifact or no-artifact claim.
+- Identify the real deliverable from the project instead of forcing Docker, PyPI, or any other registry by default.
+- Capture or verify the artifact identity, registry target, version source, release policy, tag style, changelog or release-note source, and post-publish consumer check.
+- In audit-only flows, verify and classify artifact state; do not publish or mutate registry artifacts unless the workflow explicitly moves into a ship or publish skill.
+- Build, package, install, pull, run, or consume local artifacts enough to catch packaging and runtime failures before publishing or before making a local artifact-health claim.
+- Publish external artifacts only when repo policy and the merged change require a release, tag, package, image, module, binary, or other public artifact.
+- Derive versions from trustworthy project metadata and tag history instead of inventing semantics.
+- Verify live release and registry endpoints after publishing or when auditing artifact state, including tags, digests, package pages, release pages, and published artifacts.
+- For PyPI publishes, prefer Trusted Publishing or another short-lived identity path over repository-stored long-lived tokens when supported, build the intended sdist and wheel, publish the intended version, verify the live PyPI version, install that exact version from PyPI locally, and run the smoke or documented consumer check against the published artifact instead of an editable checkout.
+- For PyPI publishes that emit attestations or provenance, verify the metadata through PyPI or the selected verifier instead of relying only on upload success.
+- For Docker or OCI image publishes, build locally, run a smoke test, publish the intended tags or digests, verify the live registry state, and pull or consume the published image when relevant.
+
 <!-- SECTION SOURCE: templates/sections/gh-findings.md -->
 
 ## GH Findings
@@ -66,8 +82,7 @@ Handle dependency updates as an end-to-end maintenance loop. Prefer safe automat
 ## Inputs To Capture
 
 - Target repo, branch, dependency PRs, package-manager ecosystems, and whether security updates are priority-only.
-- Release policy, artifact-publish policy, versioning rules, changelog expectations, and local verification commands.
-- Registry targets, if any.
+- Release policy, changelog expectations, local verification commands, and any missing inputs required by the GH artifact contract.
 - Branch protection, required checks, code scanning, vulnerability alerts, auto-merge policy, and delete-branch policy.
 - Whether `github-actions` updates are in scope and whether the repo enforces SHA pinning.
 
@@ -117,9 +132,7 @@ Infer missing inputs from local files and live GitHub state before asking.
 
 ### 5. Publish and verify when required
 
-- Determine whether merged dependency updates require a release or artifact publish under the repo's policy.
-- Publish artifacts only when the merged dependency change requires it under the repo's release policy.
-- Verify live registry or release endpoints and install, pull, or consume the published artifact locally enough to catch packaging or runtime failures.
+- Execute the GH artifact contract when merged dependency updates require a release or artifact publish under the repo's policy.
 
 ### 6. Cleanup
 
@@ -131,7 +144,6 @@ Infer missing inputs from local files and live GitHub state before asking.
 - Verify every dependency PR decision is backed by a fresh `python -m ceratops_gh_current_state pr-readiness` run.
 - Verify live repo settings with `python -m ceratops_gh_current_state repo-health` when repo posture was part of the run.
 - Verify live GitHub state for every dependency PR, alert, merge, check, branch, release, code scanning result, and branch protection gate touched.
-- Verify live registry state and local install, pull, or consumption for every artifact published.
 - Verify local state: default branch, worktree, remotes, refs, lockfiles, generated files, temp paths, caches, credentials, and retained branches.
 
 ## Output Contract
