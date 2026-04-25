@@ -2,8 +2,10 @@
 
 ## Unreleased
 
-- Moved credential handling into one shared fragment across the skill family, removed duplicated per-skill credential sections, and trimmed GH skill sections that only restated shared rules or workflow steps.
-- Split the synced shared skill core into six build-time fragments with an explicit per-skill manifest, and made generated `SKILL.md` blocks show source comments for each shared section.
+- Renamed the shared build-time layer from `fragments` to `sections`, dropped the `core-` prefixes, and updated the sync or validation tooling plus generated skill markers and source comments to match.
+- Split Ceratops skill authoring into `ceratops-skill-create` and `ceratops-skill-update`, added manifest-driven maintenance workflow hints, and made new-skill creation stage into the local runtime preview flow by default.
+- Moved credential handling into one shared section across the skill family, removed duplicated per-skill credential sections, and trimmed GH skill sections that only restated shared rules or workflow steps.
+- Split the synced shared skill core into six build-time sections with an explicit per-skill manifest, and made generated `SKILL.md` blocks show source comments for each shared section.
 - Renamed the GH helper surface from `gh_live*` to `gh_current_state*`, removed the old compatibility aliases, and updated docs and packaging to point only at the current-state names.
 - Widened `ceratops-gh-standards-update` artifact coverage from Docker or PyPI examples to the full artifact scope used by the Ceratops publish and ship skills.
 - Reframed `ceratops-gh-standards-update` around a bounded best-practice audit: routine runs now start from current GitHub repo, settings, workflow, and relevant artifact guidance before deciding whether the Ceratops GH skill family needs updates.
@@ -22,7 +24,7 @@
 - Added a shared Ceratops skill-core rule to preserve existing text-file line endings unless normalization is intentional.
 - Split the synced Ceratops core into a GH-family variant, moved routine GH-skill standards refresh into the dedicated `ceratops-gh-standards-update` skill, and narrowed routine GH task-skill runs to task-specific live evidence checks.
 - Refactored core sync so GH skills inherit the base Ceratops core plus a GH-only overlay, moved generic routine-run rules back into the base core, and limited live community-profile checks to audit and publish workflows.
-- Collapsed the one-line GH overlay back into `templates/common-core.md`, deleted `templates/common-core-gh.md`, and simplified sync and validation to use one shared core template. This was later replaced by the fragment manifest and `templates/fragments/`.
+- Collapsed the one-line GH overlay back into `templates/common-core.md`, deleted `templates/common-core-gh.md`, and simplified sync and validation to use one shared core template. This was later replaced by the sections manifest and `templates/sections/`.
 
 ## 0.1.2 - 2026-04-19
 

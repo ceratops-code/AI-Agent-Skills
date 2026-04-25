@@ -48,6 +48,6 @@ Use this file as the bounded audit map for `ceratops-gh-standards-update`. It is
 
 ## 5. Ceratops Delta Check
 
-- After the baseline is current, inspect `skills/ceratops-gh-*`, shared core references, helper-runtime claims, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, and the installed automation prompt.
+- After the baseline is current, inspect `skills/ceratops-gh-*`, shared section references, helper-runtime claims, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, and the installed automation prompt.
 - Update safe low-risk wording, file references, and helper claims directly.
 - Report approval-bound changes separately when the baseline implies stricter default merge, review, security, paid-feature, or recurring-cost posture than Ceratops currently assumes.

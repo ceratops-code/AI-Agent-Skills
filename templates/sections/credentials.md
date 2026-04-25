@@ -1,6 +1,7 @@
+<!-- INTERNAL: include in every skill -->
+
 ## Credential Handling
 
-- Apply this section unless a skill-specific credential rule narrows it further.
 - Do not ask for credentials unless they are truly required after local checks.
 - If credentials are truly required after local checks, report only:
 

@@ -23,11 +23,11 @@ jobs:
       - name: Install local helper package
         run: python -m pip install .
 
-      - name: Check common skill core sync
-        run: python scripts/sync-skill-core.py --check
+      - name: Sync shared skill sections
+        run: python scripts/sync-skill-sections.py
 
       - name: Validate skills
         run: python scripts/validate-skills.py
 
       - name: Smoke-test GH helper package
-        run: python -m ceratops_gh_runtime --help
+        run: python -m ceratops_gh_current_state --help

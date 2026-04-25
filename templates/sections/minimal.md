@@ -1,3 +1,5 @@
+<!-- INTERNAL: include in every skill -->
+
 ## Core Rules
 
 - Everything in this section is mandatory unless explicitly marked optional or inapplicable.
