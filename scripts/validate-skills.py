@@ -20,6 +20,31 @@ NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 SKILL_REF_RE = re.compile(r"\$([a-z0-9][a-z0-9-]*)")
 README_SKILL_ROW_RE = re.compile(r"^\|\s*`(?P<name>ceratops-[a-z0-9-]+)`\s*\|", re.MULTILINE)
 ALLOWED_EXTERNAL_SKILL_REFS = {"skill-creator"}
+INTERFACE_FIELD_RE = re.compile(r"^\s*(display_name|short_description|default_prompt):\s*(.+?)\s*$", re.MULTILINE)
+SHORT_DESC_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "as",
+    "at",
+    "before",
+    "by",
+    "for",
+    "from",
+    "in",
+    "into",
+    "it",
+    "of",
+    "on",
+    "or",
+    "the",
+    "through",
+    "to",
+    "up",
+    "use",
+    "when",
+    "with",
+}
 STALE_ACTIVE_PATTERNS: list[tuple[re.Pattern[str], str, set[pathlib.Path]]] = [
     (
         re.compile(r"templates/fragments/"),
@@ -103,6 +128,48 @@ def parse_frontmatter(path: pathlib.Path) -> tuple[dict[str, str], str]:
 
 def load_section_manifest() -> dict[str, object]:
     return json.loads(SECTION_MANIFEST.read_text(encoding="utf-8"))
+
+
+def parse_openai_interface(path: pathlib.Path) -> dict[str, str]:
+    data: dict[str, str] = {}
+    text = path.read_text(encoding="utf-8")
+    for key, raw_value in INTERFACE_FIELD_RE.findall(text):
+        value = raw_value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        data[key] = value
+    return data
+
+
+def normalized_tokens(text: str) -> list[str]:
+    return [token.lower() for token in re.findall(r"[A-Za-z0-9]+", text)]
+
+
+def meaningful_short_description_tokens(text: str) -> set[str]:
+    return {
+        token
+        for token in normalized_tokens(text)
+        if token not in SHORT_DESC_STOPWORDS and (len(token) > 2 or token in {"gh", "pr", "ci"})
+    }
+
+
+def display_name_sane(skill_name: str, display_name: str) -> bool:
+    name_tokens = {token for token in normalized_tokens(skill_name) if token != "ceratops"}
+    if not name_tokens:
+        return False
+    display_tokens = set(normalized_tokens(display_name))
+    overlap = len(name_tokens & display_tokens)
+    return display_name.startswith("Ceratops ") and overlap / len(name_tokens) >= 0.5
+
+
+def short_description_relevant(short_description: str, skill_description: str) -> bool:
+    short_tokens = meaningful_short_description_tokens(short_description)
+    if not short_tokens:
+        return False
+    description_tokens = meaningful_short_description_tokens(skill_description)
+    overlap = len(short_tokens & description_tokens)
+    required_overlap = min(2, len(short_tokens))
+    return overlap >= required_overlap
 
 
 def rendered_sections_block(skill_name: str, manifest: dict[str, object]) -> str:
@@ -237,6 +304,13 @@ def check_skill(skill_dir: pathlib.Path, readme_rows: set[str], manifest: dict[s
                 errors.append(f"{name}: openai.yaml missing {required}")
         if f"${name}" not in yaml_text:
             errors.append(f"{name}: default_prompt should mention ${name}")
+        interface = parse_openai_interface(openai_yaml)
+        display_name = interface.get("display_name", "")
+        short_description = interface.get("short_description", "")
+        if display_name and not display_name_sane(name, display_name):
+            errors.append(f"{name}: display_name no longer matches the skill name closely enough")
+        if short_description and not short_description_relevant(short_description, frontmatter.get("description", "")):
+            errors.append(f"{name}: short_description no longer matches the skill description closely enough")
         errors.extend(check_skill_refs(openai_yaml, yaml_text, skill_names))
 
     errors.extend(check_skill_refs(skill_md, core_text, skill_names))
