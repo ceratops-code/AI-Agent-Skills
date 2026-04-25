@@ -7,8 +7,8 @@ description: Audit and repair GitHub repository health with Ceratops defaults, u
 
 Validate that an existing GitHub repo is clean, current, secure, documented, published, and not carrying leftover workflow debris. Apply low-risk safe fixes directly and report risky, ambiguous, destructive, paid, or credential-bound fixes precisely. Treat the bundled GitHub helper scripts as the first source of truth for machine-checkable live settings.
 
-<!-- CERATOPS_COMMON_CORE_START -->
-<!-- SOURCE: templates/fragments/core-minimal.md -->
+<!-- CERATOPS_SHARED_SECTIONS_START -->
+<!-- SECTION SOURCE: templates/sections/minimal.md -->
 
 ## Core Rules
 
@@ -23,11 +23,10 @@ Validate that an existing GitHub repo is clean, current, secure, documented, pub
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 
-<!-- SOURCE: templates/fragments/core-credentials.md -->
+<!-- SECTION SOURCE: templates/sections/credentials.md -->
 
 ## Credential Handling
 
-- Apply this section unless a skill-specific credential rule narrows it further.
 - Do not ask for credentials unless they are truly required after local checks.
 - If credentials are truly required after local checks, report only:
 
@@ -37,33 +36,31 @@ Validate that an existing GitHub repo is clean, current, secure, documented, pub
 4. the exact command the user should run
 5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
 
-<!-- SOURCE: templates/fragments/core-gh-current-state.md -->
+<!-- SECTION SOURCE: templates/sections/gh-current-state.md -->
 
 ## GH Current State
 
-- Apply this section only to skills that make GitHub-state decisions.
-- Use `gh`, GitHub API, and `ceratops_gh_runtime` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
+- Use the shared helper package `ceratops_gh_current_state` for bundled GitHub current-state checks when it covers the next decision.
+- Use `gh`, GitHub API, and `ceratops_gh_current_state` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
 - Prefer current GitHub state over memory, prose summaries, or stale screenshots.
 - Start with the narrowest live check that answers the next decision: bundled helper script, targeted `gh` query, or focused API call.
 - Check current official GitHub docs or `gh` help only when the next decision remains concretely ambiguous after targeted live GitHub evidence, or when those sources materially conflict.
 - Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
 - Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
 
-<!-- SOURCE: templates/fragments/core-gh-findings.md -->
+<!-- SECTION SOURCE: templates/sections/gh-findings.md -->
 
 ## GH Findings
 
-- Apply this section only to skills that inspect GitHub security, code-scanning, dependency, moderation, or process findings.
 - Classify only findings actually inspected in this run. Do not expand reporting to untouched queues unless they become the next actionable work or the user explicitly asked for full coverage.
 - For each inspected finding, decide whether it is safe, fix low-risk items directly when in scope, and for every finding left open report its name or id, whether it is blocking, why it remains open, and the concrete work needed to clear it.
 - Do not collapse retained findings into a generic healthy result.
 - Re-check findings whose status may have changed because of actions taken in this run.
-<!-- CERATOPS_COMMON_CORE_END -->
+<!-- CERATOPS_SHARED_SECTIONS_END -->
 
 ## Script Bundle
 
-- Shared helper package: `ceratops_gh_runtime`
-- Repo settings and moderation check: `python -m ceratops_gh_runtime repo-health --repo OWNER/REPO`
+- Repo settings and moderation check: `python -m ceratops_gh_current_state repo-health --repo OWNER/REPO`
 - Add `--json` when another step needs structured findings.
 
 ## Inputs To Capture
@@ -79,6 +76,7 @@ Infer missing inputs from live repo state and local files before asking.
 ## Boundaries
 
 - Use this skill when the task is primarily validation, stale-state cleanup, or safe repo-health repair and the repo has live GitHub state worth machine-checking.
+- Do not use this skill as a routine rubber-stamp closeout pass after normal ship, dependency-update, or merge flows. Those skills should run only the narrow repo-health checks their own result actually needs.
 - If the repo is not yet published or still needs first-time hardening, stop and use `$ceratops-gh-repo-create-and-publish`.
 - If a safe fix turns into a content change that should go through normal PR and release flow, stop audit-only mode and use `$ceratops-gh-ship-change`.
 - If only PR finalization remains after prior fixes, stop and use `$ceratops-gh-merge-pr`.
@@ -134,7 +132,7 @@ Infer missing inputs from live repo state and local files before asking.
 
 ## Completion Gate
 
-- Verify the final answer is backed by a fresh run of `python -m ceratops_gh_runtime repo-health`.
+- Verify the final answer is backed by a fresh run of `python -m ceratops_gh_current_state repo-health`.
 - Verify any Actions hardening claim is backed by a fresh local workflow scan when the repo files were available in the run.
 - Verify live state for every touched repo setting, security control, branch protection rule, PR, branch, tag, release, workflow, code scanning result, registry artifact, and docs endpoint.
 - Verify local state for every touched repo, worktree, generated file, artifact, temp path, cache, credential change, local consumer path, shortcut, scheduled task, service, shell profile, and cleanup side effect.

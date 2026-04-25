@@ -1,0 +1,119 @@
+---
+name: ceratops-skill-update
+description: Update existing Ceratops skills and the shared skill-maintenance layer in `codex-skills` while keeping ownership clear between per-skill deltas, shared sections, the section manifest, sync or validation scripts, helper runtime claims, and repo docs. Use when the user asks to update Ceratops skills, keep them consistent, add/remove/merge sections, or refresh the supporting sync and validation flow without manually drifting generated skill blocks.
+---
+
+# Ceratops Skill Update
+
+Maintain existing Ceratops skills as one consistency surface instead of patching individual skill files in isolation. Decide first whether the source of truth is a skill-local delta, a shared section, the section manifest, a sync or validation script, helper-runtime claims, or repo docs, then update the narrowest correct source and regenerate derived skill files only when needed.
+
+<!-- CERATOPS_SHARED_SECTIONS_START -->
+<!-- SECTION SOURCE: templates/sections/minimal.md -->
+
+## Core Rules
+
+- Everything in this section is mandatory unless explicitly marked optional or inapplicable.
+- Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
+- Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
+- Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
+- Do not update this `SKILL.md` during routine runs unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
+- Inspect local state and local auth before asking for credentials or making assumptions.
+- When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
+- Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
+- In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
+- If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
+
+<!-- SECTION SOURCE: templates/sections/credentials.md -->
+
+## Credential Handling
+
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
+
+1. which credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
+<!-- CERATOPS_SHARED_SECTIONS_END -->
+
+## Skill-Specific Rules
+
+- Treat `templates/sections/`, `templates/skill-sections.json`, generated shared blocks inside `skills/*/SKILL.md`, `scripts/sync-skill-sections.py`, `scripts/validate-skills.py`, related repo docs, and any touched helper-runtime claims as one coupled maintenance surface.
+- Decide the broadest correct source of truth before editing anything. Prefer shared sections and the section manifest for shared behavior, and keep per-skill text limited to true deltas.
+- Do not hand-edit a generated shared-sections block in a skill when the change belongs in `templates/sections/` or `templates/skill-sections.json`. Update the source of truth and rerun sync.
+- Add a new shared section only when it reduces meaningful duplication, clarifies ownership, or prevents conflicting drift across multiple skills. Prefer deleting, merging, or narrowing sections when that is cleaner.
+- Treat this skill as the default Ceratops entrypoint for modifying existing skills.
+- Update `agents/openai.yaml` when trigger behavior or the user-facing prompt becomes stale.
+- Update helper scripts or helper-runtime claims when the section model, generated markers, validation rules, or skill claims require it.
+- Stop in the worktree by default. Do not stage or ship the resulting repo changes unless the user explicitly asked for staging, runtime-preview sync, or GitHub shipping.
+- Use the default maintenance-check policy recorded in `templates/skill-sections.json` instead of making the user specify commands.
+
+## Inputs To Capture
+
+- Which existing skills or shared files are in scope: `skills/*`, `templates/sections/`, `templates/skill-sections.json`, `scripts/sync-skill-sections.py`, `scripts/validate-skills.py`, helper-runtime files, and repo docs.
+- Whether the requested change belongs in skill-local text, a shared section, the section manifest, sync or validation logic, helper-runtime code or claims, or repo docs.
+- Whether the task should stop at local repo changes or also stage them into the active local `release/*` batch.
+
+Infer missing inputs from the current repo state before asking.
+
+## Boundaries
+
+- Use this skill when the task is to update existing Ceratops skills or the shared skill-maintenance layer itself.
+- If the task is creating a brand-new Ceratops skill, stop and use `$ceratops-skill-create`.
+- If the task is only staging or shipping already-prepared skill changes, stop and use `$ceratops-codex-skill-stage-release` or `$ceratops-gh-codex-skill-ship`.
+- If the task is only a routine GH-family best-practice audit inside `ceratops-gh-*`, stop and use `$ceratops-gh-standards-update`.
+
+## Workflow
+
+### 1. Inspect the current maintenance surface
+
+- Inspect the targeted skills, the shared section files, the section manifest, sync and validation scripts, touched helper-runtime files or claims, and repo docs that describe the current structure.
+- Identify which parts are source of truth versus generated output.
+- Classify the requested change as skill-local, shared, structural, validation-only, helper-runtime-adjacent, or docs-only.
+
+### 2. Decide ownership before editing
+
+- Decide whether the change belongs in a per-skill delta, an existing shared section, the section manifest, sync or validation logic, helper-runtime code or claims, or repo docs.
+- Prefer the smallest change that keeps future maintenance consistent.
+- If a proposed new section would only hold trivial text or one repeated line, keep it inline unless the duplication is already causing drift or ownership confusion.
+
+### 3. Apply the updates at the real source of truth
+
+- Update existing skills, shared sections, the section manifest, sync or validation scripts, helper-runtime files or claims, and repo docs only where the chosen ownership requires it.
+- When removing, merging, or narrowing sections, update every affected assignment and keep the generated section source comments readable in the resulting `SKILL.md` files.
+- If the repo's current sync or validation flow no longer matches the section model, fix the scripts instead of working around them in skill text.
+
+### 4. Run the needed checks
+
+- If shared section source files or `templates/skill-sections.json` assignments changed, run the shared-source check path from `templates/skill-sections.json`: sync first, then validate.
+- If the change stayed inside skill-local text, `agents/openai.yaml`, or repo docs, skip sync and run the skill-local validation path from `templates/skill-sections.json`.
+- If helper-runtime code or claims changed, also run the helper-runtime smoke path from `templates/skill-sections.json`.
+- Re-open the changed files from disk and confirm the generated blocks, manifest assignments, docs, and metadata still align.
+
+### 5. Report or hand off
+
+- Stop at validated local repo changes unless the user explicitly asked for staging or shipping.
+- If local preview staging was requested, continue with `$ceratops-codex-skill-stage-release`.
+- If GitHub publication was requested, stage first if needed, then continue with `$ceratops-gh-codex-skill-ship`.
+
+## Completion Gate
+
+- Verify every changed skill and shared file still points at the intended source of truth.
+- Verify generated shared blocks were updated through the shared sources and sync flow when shared sources changed.
+- Verify the section manifest, sync script, validation script, repo docs, and touched `agents/openai.yaml` files remain aligned.
+- Verify any removed, merged, or renamed section leaves no stale assignment or stale generated block behind.
+
+## Output Contract
+
+Report only:
+
+- skills or shared maintenance surfaces updated
+- new, removed, merged, or narrowed shared sections with reasons
+- unresolved blockers or non-blocking debt
+- intentionally retained inconsistencies or follow-up items with reasons
+- anything important not verified
+
+## Example Invocation
+
+`Use $ceratops-skill-update to update the Ceratops skills, choose the right source of truth automatically, run the needed checks, and keep the repo consistent.`

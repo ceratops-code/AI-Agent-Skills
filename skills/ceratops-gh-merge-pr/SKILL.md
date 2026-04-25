@@ -7,8 +7,8 @@ description: Merge a GitHub pull request safely with Ceratops defaults, starting
 
 Merge one GitHub PR only after proving the repo will remain healthy. This is the narrow finalization workflow for PR completion; it does not take ownership of code changes, dependency campaigns, or first-time publication. Start with the bundled live PR check instead of relying on prose summaries or stale screenshots.
 
-<!-- CERATOPS_COMMON_CORE_START -->
-<!-- SOURCE: templates/fragments/core-minimal.md -->
+<!-- CERATOPS_SHARED_SECTIONS_START -->
+<!-- SECTION SOURCE: templates/sections/minimal.md -->
 
 ## Core Rules
 
@@ -23,23 +23,22 @@ Merge one GitHub PR only after proving the repo will remain healthy. This is the
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 
-<!-- SOURCE: templates/fragments/core-gh-current-state.md -->
+<!-- SECTION SOURCE: templates/sections/gh-current-state.md -->
 
 ## GH Current State
 
-- Apply this section only to skills that make GitHub-state decisions.
-- Use `gh`, GitHub API, and `ceratops_gh_runtime` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
+- Use the shared helper package `ceratops_gh_current_state` for bundled GitHub current-state checks when it covers the next decision.
+- Use `gh`, GitHub API, and `ceratops_gh_current_state` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
 - Prefer current GitHub state over memory, prose summaries, or stale screenshots.
 - Start with the narrowest live check that answers the next decision: bundled helper script, targeted `gh` query, or focused API call.
 - Check current official GitHub docs or `gh` help only when the next decision remains concretely ambiguous after targeted live GitHub evidence, or when those sources materially conflict.
 - Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
 - Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
 
-<!-- SOURCE: templates/fragments/core-credentials.md -->
+<!-- SECTION SOURCE: templates/sections/credentials.md -->
 
 ## Credential Handling
 
-- Apply this section unless a skill-specific credential rule narrows it further.
 - Do not ask for credentials unless they are truly required after local checks.
 - If credentials are truly required after local checks, report only:
 
@@ -48,13 +47,12 @@ Merge one GitHub PR only after proving the repo will remain healthy. This is the
 3. where it will be stored
 4. the exact command the user should run
 5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
-<!-- CERATOPS_COMMON_CORE_END -->
+<!-- CERATOPS_SHARED_SECTIONS_END -->
 
 ## Script Bundle
 
-- Shared helper package: `ceratops_gh_runtime`
-- PR readiness check: `python -m ceratops_gh_runtime pr-readiness --pr NUMBER_OR_URL`
-- Repo settings check when repo health is part of the merge closeout: `python -m ceratops_gh_runtime repo-health --repo OWNER/REPO`
+- PR readiness check: `python -m ceratops_gh_current_state pr-readiness --pr NUMBER_OR_URL`
+- Repo settings check when repo health is part of the merge closeout: `python -m ceratops_gh_current_state repo-health --repo OWNER/REPO`
 - Direct merge command: `gh pr merge --admin NUMBER_OR_URL_OR_BRANCH [--merge|--squash|--rebase] [--delete-branch]`
 
 ## Inputs To Capture
@@ -83,7 +81,7 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 
 ### 2. Run the live PR check first
 
-- Run `python -m ceratops_gh_runtime pr-readiness` before merge or auto-merge decisions.
+- Run `python -m ceratops_gh_current_state pr-readiness` before merge or auto-merge decisions.
 - Treat the script output as the first source of truth for draft state, mergeability, blocking review decisions, visible status-check failures, and pending status checks.
 - Re-run the script after any action that could change readiness, such as rebasing, updating the branch, dismissing a blocker, or waiting for CI.
 
@@ -126,7 +124,7 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 
 ## Completion Gate
 
-- Verify the final merge decision was backed by a fresh pre-merge `python -m ceratops_gh_runtime pr-readiness` run, then verify the post-merge PR state separately from the live PR endpoint.
+- Verify the final merge decision was backed by a fresh pre-merge `python -m ceratops_gh_current_state pr-readiness` run, then verify the post-merge PR state separately from the live PR endpoint.
 - Verify live PR state, merge commit or queue state, checks, reviews, conversations, branch protection result, branch deletion, and default branch state.
 - Verify local repo state, branch, remotes, refs, worktree cleanliness, and retained safety branches.
 

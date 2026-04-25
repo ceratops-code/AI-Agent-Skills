@@ -7,8 +7,8 @@ description: Create a minimal copy-paste prompt for spinning a newly discovered 
 
 Produce one minimal copy-paste prompt for starting a side task in a new thread.
 
-<!-- CERATOPS_COMMON_CORE_START -->
-<!-- SOURCE: templates/fragments/core-minimal.md -->
+<!-- CERATOPS_SHARED_SECTIONS_START -->
+<!-- SECTION SOURCE: templates/sections/minimal.md -->
 
 ## Core Rules
 
@@ -23,11 +23,10 @@ Produce one minimal copy-paste prompt for starting a side task in a new thread.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 
-<!-- SOURCE: templates/fragments/core-credentials.md -->
+<!-- SECTION SOURCE: templates/sections/credentials.md -->
 
 ## Credential Handling
 
-- Apply this section unless a skill-specific credential rule narrows it further.
 - Do not ask for credentials unless they are truly required after local checks.
 - If credentials are truly required after local checks, report only:
 
@@ -37,15 +36,14 @@ Produce one minimal copy-paste prompt for starting a side task in a new thread.
 4. the exact command the user should run
 5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
 
-<!-- SOURCE: templates/fragments/core-thread-first-step.md -->
+<!-- SECTION SOURCE: templates/sections/thread-first-step.md -->
 
 ## First-Step State Refresh
 
-- Apply this section only to thread-handoff skills.
 - Reuse fresh state already established in the current thread by default.
 - Refresh only facts whose staleness would change or misdirect the first step in the new thread.
 - Keep refs exact but limited to the entities the next thread is likely to open first.
-<!-- CERATOPS_COMMON_CORE_END -->
+<!-- CERATOPS_SHARED_SECTIONS_END -->
 
 ## Skill-Specific Rules
 
@@ -98,12 +96,8 @@ Infer missing inputs from the current thread and local state before asking.
 
 ### 2. Refresh only first-step-critical state
 
-- Reuse fresh state from the current thread by default.
-- Refresh only the local or remote state that would change the first step in the new thread or make the prompt misleading.
-
 ### 3. Emit a paste-ready prompt
 
-- Produce a prompt that can be pasted directly into a new thread.
 - Make the current objective and first next step explicit.
 - Write the prompt as direct instruction to the new thread, not as commentary about a handoff artifact.
 

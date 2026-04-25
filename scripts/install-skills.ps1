@@ -131,10 +131,16 @@ if (-not (Test-Path -LiteralPath $RuntimeRoot)) {
 }
 
 $python = Resolve-PythonCommand $PythonCommand
+$helperPackageNames = @("ceratops-gh-current-state", "ceratops-gh-runtime")
 try {
-    & $python -m pip uninstall --yes ceratops-gh-runtime | Out-Null
-    & $python -m pip install --editable $resolvedRepoRoot
+    foreach ($helperPackage in $helperPackageNames) {
+        & $python -m pip uninstall --yes $helperPackage | Out-Null
+    }
+    $installOutput = & $python -m pip install --editable $resolvedRepoRoot 2>&1
     if ($LASTEXITCODE -ne 0) {
+        if ($installOutput) {
+            $installOutput | ForEach-Object { Write-Error $_ }
+        }
         throw "Editable helper-package install failed."
     }
 
@@ -142,7 +148,7 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Could not verify the installed GH helper package mode."
     }
-    $editablePackage = $editablePackages | Where-Object { $_.name -eq "ceratops-gh-runtime" } | Select-Object -First 1
+    $editablePackage = $editablePackages | Where-Object { $_.name -eq "ceratops-gh-current-state" } | Select-Object -First 1
     if ($null -eq $editablePackage) {
         throw "Installed GH helper package is not registered as editable."
     }
@@ -154,16 +160,18 @@ finally {
     Remove-GeneratedEggInfo -RepoRoot $resolvedRepoRoot
 }
 
-$staleRuntimeSkill = Join-Path $RuntimeRoot "ceratops-gh-runtime"
-$staleItem = Get-Item -LiteralPath $staleRuntimeSkill -Force -ErrorAction SilentlyContinue
-if ($null -ne $staleItem) {
-    $looksLikeBrokenDirectoryLink = $staleItem.PSIsContainer -and $staleItem.Exists -eq $false
-    if (-not (Is-ReparsePoint $staleItem)) {
-        if (-not $looksLikeBrokenDirectoryLink) {
-            throw "Stale runtime skill path '$staleRuntimeSkill' exists and is not a junction."
+foreach ($staleRuntimeSkillName in @("ceratops-gh-current-state", "ceratops-gh-runtime")) {
+    $staleRuntimeSkill = Join-Path $RuntimeRoot $staleRuntimeSkillName
+    $staleItem = Get-Item -LiteralPath $staleRuntimeSkill -Force -ErrorAction SilentlyContinue
+    if ($null -ne $staleItem) {
+        $looksLikeBrokenDirectoryLink = $staleItem.PSIsContainer -and $staleItem.Exists -eq $false
+        if (-not (Is-ReparsePoint $staleItem)) {
+            if (-not $looksLikeBrokenDirectoryLink) {
+                throw "Stale runtime skill path '$staleRuntimeSkill' exists and is not a junction."
+            }
         }
+        Remove-ReparsePoint -Path $staleRuntimeSkill
     }
-    Remove-ReparsePoint -Path $staleRuntimeSkill
 }
 
 $skillsRoot = Join-Path $resolvedRepoRoot "skills"
@@ -207,4 +215,4 @@ foreach ($item in $installedItems) {
     }
 }
 
-Write-Host "Installed Ceratops skills and local GH helper package."
+Write-Output "installed"

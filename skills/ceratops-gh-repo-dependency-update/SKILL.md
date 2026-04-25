@@ -7,8 +7,8 @@ description: Process Dependabot, Renovate, security, and manual dependency updat
 
 Handle dependency updates as an end-to-end maintenance loop. Prefer safe automation for security, patch, and minor updates, stop on ambiguous major upgrades, production risk, unavailable credentials, or paid requirements, and ground queue handling and merge decisions in the bundled GitHub helper scripts first.
 
-<!-- CERATOPS_COMMON_CORE_START -->
-<!-- SOURCE: templates/fragments/core-minimal.md -->
+<!-- CERATOPS_SHARED_SECTIONS_START -->
+<!-- SECTION SOURCE: templates/sections/minimal.md -->
 
 ## Core Rules
 
@@ -23,11 +23,10 @@ Handle dependency updates as an end-to-end maintenance loop. Prefer safe automat
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 
-<!-- SOURCE: templates/fragments/core-credentials.md -->
+<!-- SECTION SOURCE: templates/sections/credentials.md -->
 
 ## Credential Handling
 
-- Apply this section unless a skill-specific credential rule narrows it further.
 - Do not ask for credentials unless they are truly required after local checks.
 - If credentials are truly required after local checks, report only:
 
@@ -37,34 +36,32 @@ Handle dependency updates as an end-to-end maintenance loop. Prefer safe automat
 4. the exact command the user should run
 5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
 
-<!-- SOURCE: templates/fragments/core-gh-current-state.md -->
+<!-- SECTION SOURCE: templates/sections/gh-current-state.md -->
 
 ## GH Current State
 
-- Apply this section only to skills that make GitHub-state decisions.
-- Use `gh`, GitHub API, and `ceratops_gh_runtime` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
+- Use the shared helper package `ceratops_gh_current_state` for bundled GitHub current-state checks when it covers the next decision.
+- Use `gh`, GitHub API, and `ceratops_gh_current_state` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
 - Prefer current GitHub state over memory, prose summaries, or stale screenshots.
 - Start with the narrowest live check that answers the next decision: bundled helper script, targeted `gh` query, or focused API call.
 - Check current official GitHub docs or `gh` help only when the next decision remains concretely ambiguous after targeted live GitHub evidence, or when those sources materially conflict.
 - Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
 - Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
 
-<!-- SOURCE: templates/fragments/core-gh-findings.md -->
+<!-- SECTION SOURCE: templates/sections/gh-findings.md -->
 
 ## GH Findings
 
-- Apply this section only to skills that inspect GitHub security, code-scanning, dependency, moderation, or process findings.
 - Classify only findings actually inspected in this run. Do not expand reporting to untouched queues unless they become the next actionable work or the user explicitly asked for full coverage.
 - For each inspected finding, decide whether it is safe, fix low-risk items directly when in scope, and for every finding left open report its name or id, whether it is blocking, why it remains open, and the concrete work needed to clear it.
 - Do not collapse retained findings into a generic healthy result.
 - Re-check findings whose status may have changed because of actions taken in this run.
-<!-- CERATOPS_COMMON_CORE_END -->
+<!-- CERATOPS_SHARED_SECTIONS_END -->
 
 ## Script Bundle
 
-- Shared helper package: `ceratops_gh_runtime`
-- Repo settings check: `python -m ceratops_gh_runtime repo-health --repo OWNER/REPO`
-- PR readiness check: `python -m ceratops_gh_runtime pr-readiness --pr NUMBER_OR_URL`
+- Repo settings check: `python -m ceratops_gh_current_state repo-health --repo OWNER/REPO`
+- PR readiness check: `python -m ceratops_gh_current_state pr-readiness --pr NUMBER_OR_URL`
 
 ## Inputs To Capture
 
@@ -100,7 +97,8 @@ Infer missing inputs from local files and live GitHub state before asking.
 ### 3. Re-check each candidate with scripts
 
 - Run the bundled PR-readiness script before enabling auto-merge or merging a dependency PR.
-- Run the repo-health script when the queue touches repo security posture, branch protection assumptions, review-policy expectations, moderation or community-health claims, code-scanning posture, or other live GitHub settings.
+- Run the repo-health script only when the queue changes or explicitly verifies repo posture surfaces such as branch protection assumptions, review-policy expectations, Actions permissions or SHA pinning, moderation or community-health claims, code-scanning posture, or other live GitHub settings the final result will rely on.
+- Do not run the repo-health script for ordinary dependency PRs whose only moving parts are manifests, lockfiles, tests, CI results, and PR readiness.
 - Re-run the relevant script after each merge or settings change instead of carrying stale queue assumptions forward.
 
 ### 4. Process updates recursively
@@ -129,8 +127,8 @@ Infer missing inputs from local files and live GitHub state before asking.
 
 ## Completion Gate
 
-- Verify every dependency PR decision is backed by a fresh `python -m ceratops_gh_runtime pr-readiness` run.
-- Verify live repo settings with `python -m ceratops_gh_runtime repo-health` when repo posture was part of the run.
+- Verify every dependency PR decision is backed by a fresh `python -m ceratops_gh_current_state pr-readiness` run.
+- Verify live repo settings with `python -m ceratops_gh_current_state repo-health` when repo posture was part of the run.
 - Verify live GitHub state for every dependency PR, alert, merge, check, branch, release, code scanning result, and branch protection gate touched.
 - Verify live registry state and local install, pull, or consumption for every artifact published.
 - Verify local state: default branch, worktree, remotes, refs, lockfiles, generated files, temp paths, caches, credentials, and retained branches.

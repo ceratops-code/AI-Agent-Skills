@@ -7,8 +7,8 @@ description: Ship local repository changes through GitHub and any relevant artif
 
 Take an existing published repo from local changes to a verified merged result. Publish external artifacts only when the change affects a releasable package, image, module, binary, or other public artifact. Verify machine-checkable GitHub state through the bundled helper scripts before trusting prose or stale screenshots.
 
-<!-- CERATOPS_COMMON_CORE_START -->
-<!-- SOURCE: templates/fragments/core-minimal.md -->
+<!-- CERATOPS_SHARED_SECTIONS_START -->
+<!-- SECTION SOURCE: templates/sections/minimal.md -->
 
 ## Core Rules
 
@@ -23,11 +23,10 @@ Take an existing published repo from local changes to a verified merged result. 
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 
-<!-- SOURCE: templates/fragments/core-credentials.md -->
+<!-- SECTION SOURCE: templates/sections/credentials.md -->
 
 ## Credential Handling
 
-- Apply this section unless a skill-specific credential rule narrows it further.
 - Do not ask for credentials unless they are truly required after local checks.
 - If credentials are truly required after local checks, report only:
 
@@ -37,34 +36,32 @@ Take an existing published repo from local changes to a verified merged result. 
 4. the exact command the user should run
 5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
 
-<!-- SOURCE: templates/fragments/core-gh-current-state.md -->
+<!-- SECTION SOURCE: templates/sections/gh-current-state.md -->
 
 ## GH Current State
 
-- Apply this section only to skills that make GitHub-state decisions.
-- Use `gh`, GitHub API, and `ceratops_gh_runtime` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
+- Use the shared helper package `ceratops_gh_current_state` for bundled GitHub current-state checks when it covers the next decision.
+- Use `gh`, GitHub API, and `ceratops_gh_current_state` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
 - Prefer current GitHub state over memory, prose summaries, or stale screenshots.
 - Start with the narrowest live check that answers the next decision: bundled helper script, targeted `gh` query, or focused API call.
 - Check current official GitHub docs or `gh` help only when the next decision remains concretely ambiguous after targeted live GitHub evidence, or when those sources materially conflict.
 - Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
 - Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
 
-<!-- SOURCE: templates/fragments/core-gh-findings.md -->
+<!-- SECTION SOURCE: templates/sections/gh-findings.md -->
 
 ## GH Findings
 
-- Apply this section only to skills that inspect GitHub security, code-scanning, dependency, moderation, or process findings.
 - Classify only findings actually inspected in this run. Do not expand reporting to untouched queues unless they become the next actionable work or the user explicitly asked for full coverage.
 - For each inspected finding, decide whether it is safe, fix low-risk items directly when in scope, and for every finding left open report its name or id, whether it is blocking, why it remains open, and the concrete work needed to clear it.
 - Do not collapse retained findings into a generic healthy result.
 - Re-check findings whose status may have changed because of actions taken in this run.
-<!-- CERATOPS_COMMON_CORE_END -->
+<!-- CERATOPS_SHARED_SECTIONS_END -->
 
 ## Script Bundle
 
-- Shared helper package: `ceratops_gh_runtime`
-- Repo settings check: `python -m ceratops_gh_runtime repo-health --repo OWNER/REPO`
-- PR readiness check: `python -m ceratops_gh_runtime pr-readiness --pr NUMBER_OR_URL`
+- Repo settings check: `python -m ceratops_gh_current_state repo-health --repo OWNER/REPO`
+- PR readiness check: `python -m ceratops_gh_current_state pr-readiness --pr NUMBER_OR_URL`
 
 ## Inputs To Capture
 
@@ -104,7 +101,8 @@ Infer missing inputs from local files and live repo state before asking.
 
 ### 3. Prove live GitHub state with scripts
 
-- Run the bundled repo-health script whenever the run touches repo settings, release posture, or repo-health claims, including review-policy or code-scanning expectations.
+- Run the bundled repo-health script only when the run changes or explicitly verifies repo posture surfaces such as branch protection or rulesets, review policy, Actions permissions or SHA pinning, security controls, moderation or community reporting, or other repo-health claims that the final answer will rely on.
+- Do not run the repo-health script for pure code, docs, tests, packaging, or artifact-publish work when those repo posture surfaces are untouched.
 - Run the bundled PR-readiness script before merge or auto-merge decisions instead of relying on prose summaries of checks, reviews, or mergeability.
 - Re-run the relevant script after any live GitHub change that could affect a reported repo-health or PR-readiness result.
 
@@ -145,8 +143,8 @@ Infer missing inputs from local files and live repo state before asking.
 
 ## Completion Gate
 
-- Verify the merge decision is backed by a fresh `python -m ceratops_gh_runtime pr-readiness` run.
-- Verify live GitHub state for the repo with `python -m ceratops_gh_runtime repo-health` when repo settings or process health were part of the run.
+- Verify the merge decision is backed by a fresh `python -m ceratops_gh_current_state pr-readiness` run.
+- Verify live GitHub state for the repo with `python -m ceratops_gh_current_state repo-health` when repo settings or process health were part of the run.
 - Verify live registry state for every published artifact and verify local install, pull, or consumption when relevant.
 - For PyPI publishes, verify the exact published version can be installed from PyPI locally and that the local smoke check uses the published artifact instead of an editable checkout.
 - Verify changed workflow files still use the intended full-SHA action refs when the run touched GitHub Actions workflows or settings.

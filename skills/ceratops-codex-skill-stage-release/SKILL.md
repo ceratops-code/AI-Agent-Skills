@@ -7,8 +7,8 @@ description: Stage committed Ceratops skill changes into the runtime checkout's 
 
 Stage committed skill branches into the runtime checkout's local release branch so Codex can use one coherent unpublished repo snapshot.
 
-<!-- CERATOPS_COMMON_CORE_START -->
-<!-- SOURCE: templates/fragments/core-minimal.md -->
+<!-- CERATOPS_SHARED_SECTIONS_START -->
+<!-- SECTION SOURCE: templates/sections/minimal.md -->
 
 ## Core Rules
 
@@ -23,11 +23,10 @@ Stage committed skill branches into the runtime checkout's local release branch 
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 
-<!-- SOURCE: templates/fragments/core-credentials.md -->
+<!-- SECTION SOURCE: templates/sections/credentials.md -->
 
 ## Credential Handling
 
-- Apply this section unless a skill-specific credential rule narrows it further.
 - Do not ask for credentials unless they are truly required after local checks.
 - If credentials are truly required after local checks, report only:
 
@@ -37,17 +36,17 @@ Stage committed skill branches into the runtime checkout's local release branch 
 4. the exact command the user should run
 5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
 
-<!-- SOURCE: templates/fragments/core-release-branch-runtime.md -->
+<!-- SECTION SOURCE: templates/sections/release-branch-runtime.md -->
 
 ## Release Branch Runtime
 
-- Apply this section only to skills that stage or ship Ceratops skill batches through a runtime `release/*` branch.
 - Treat the runtime checkout's active `release/*` branch as the single local preview source of truth for the staged repo snapshot.
 - Keep installed Ceratops skill junctions and the editable GH helper package pointed at the runtime checkout path, not at task worktrees.
 - Reuse the same `release/*` branch name locally and remotely by default. Do not rename or remap it unless the user explicitly chooses that tradeoff.
 - Refresh remote refs with `git fetch --prune origin` before judging whether a runtime `release/*` branch already exists remotely, should be reused, or was already cleaned up.
 - Rerun the runtime installer after switching the runtime checkout branch so installed skill junctions and the editable GH helper package match the active repo snapshot.
-<!-- CERATOPS_COMMON_CORE_END -->
+- When the GH skill family was touched, confirm the editable GH helper package resolves from the runtime checkout after the installer or restore step.
+<!-- CERATOPS_SHARED_SECTIONS_END -->
 
 ## Defaults
 
@@ -78,7 +77,8 @@ Infer missing inputs from local repo state before asking.
 ## Boundaries
 
 - Use this skill when the goal is coherent local preview or local batching of unpublished skill changes in the runtime checkout.
-- If the task is only creating or editing the skill contents and not staging them, stop and use the system `$skill-creator` guidance plus the relevant task skill.
+- If the task is creating a brand-new Ceratops skill and not yet staging it, stop and use `$ceratops-skill-create`.
+- If the task is updating existing Ceratops skill contents and not yet staging them, stop and use `$ceratops-skill-update`.
 - If the runtime release branch is already staged and the task is ready to publish, stop and use `$ceratops-gh-codex-skill-ship`.
 - If the task is general repo shipping not focused on Codex skills and local skill installation, stop and use `$ceratops-gh-ship-change`.
 
@@ -102,13 +102,11 @@ Infer missing inputs from local repo state before asking.
 
 - Run `powershell -ExecutionPolicy Bypass -File .\\scripts\\install-skills.ps1` from the runtime checkout.
 - Confirm the installed skill paths resolve to the runtime checkout.
-- Confirm the GH helper package resolves from the runtime checkout when the GH skill family was touched.
 
 ### 4. Validate the staged batch locally
 
-- Run `python scripts/sync-skill-core.py --check`.
 - Run `python scripts/validate-skills.py`.
-- When the GH helper package or installer changed, run `python -m ceratops_gh_runtime --help`.
+- When the GH helper package or installer changed, run `python -m ceratops_gh_current_state --help`.
 
 ### 5. Report the staged state
 

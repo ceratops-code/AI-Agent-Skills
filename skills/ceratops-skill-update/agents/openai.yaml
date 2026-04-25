@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops Skill Update"
+  short_description: "Update existing Ceratops skills and keep the section system consistent"
+  default_prompt: "Use $ceratops-skill-update to update the Ceratops skills, decide automatically which source of truth to edit, run only the needed checks, and keep the repo consistent without leaving generated skill drift behind."

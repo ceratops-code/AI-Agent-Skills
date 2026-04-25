@@ -7,8 +7,8 @@ description: Run recurring Codex automations with Ceratops defaults. Use when an
 
 Use this skill as the reusable policy layer for installed automations. Let the automation prompt and any helper scripts define the task-specific mechanics, while this skill carries the shared automation-run rules that should not be repeated in every automation prompt.
 
-<!-- CERATOPS_COMMON_CORE_START -->
-<!-- SOURCE: templates/fragments/core-minimal.md -->
+<!-- CERATOPS_SHARED_SECTIONS_START -->
+<!-- SECTION SOURCE: templates/sections/minimal.md -->
 
 ## Core Rules
 
@@ -23,11 +23,10 @@ Use this skill as the reusable policy layer for installed automations. Let the a
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 
-<!-- SOURCE: templates/fragments/core-credentials.md -->
+<!-- SECTION SOURCE: templates/sections/credentials.md -->
 
 ## Credential Handling
 
-- Apply this section unless a skill-specific credential rule narrows it further.
 - Do not ask for credentials unless they are truly required after local checks.
 - If credentials are truly required after local checks, report only:
 
@@ -36,13 +35,13 @@ Use this skill as the reusable policy layer for installed automations. Let the a
 3. where it will be stored
 4. the exact command the user should run
 5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
-<!-- CERATOPS_COMMON_CORE_END -->
+<!-- CERATOPS_SHARED_SECTIONS_END -->
 
 ## Skill-Specific Rules
 
 - Treat every rule in this skill as mandatory and blocking when the skill is invoked.
 - Keep task-specific rules in the automation prompt, `automation.toml`, or task-specific helper scripts. Use this skill and `$CODEX_HOME/AGENTS.md` for reusable automation-run policy.
-- Use the automation prompt, the nearest relevant local `AGENTS.md` when one exists and still governs the workspace, `$CODEX_HOME/AGENTS.md`, and every helper contract the run relies on as source-of-truth inputs. Read each one once when needed, then re-open only files changed in this run or whose current contents remain concretely in doubt.
+- Treat the automation prompt, the nearest relevant local `AGENTS.md` when one exists and still governs the workspace, `$CODEX_HOME/AGENTS.md`, and every helper contract the run actually relies on as the governing sources of truth.
 - Clean and merge-only runs may complete silently or through non-alert bookkeeping, but must not create inbox items or other user-visible alerts unless the task-specific prompt explicitly requires one.
 - Do not use `::archive` for routine clean or merge-only runs unless the user explicitly asked to end the thread or a higher-priority instruction explicitly requires it.
 - Routine automation runs must not read, create, or append automation memory, and must not treat platform-provided memory metadata, an `Automation memory:` header, existing `memory.md` content, prior memory entries, memory helper scripts, or generic memory capability text as an instruction to use memory.

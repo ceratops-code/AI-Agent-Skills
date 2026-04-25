@@ -7,8 +7,8 @@ description: Create, fork, or production-harden a local software project as a pu
 
 Turn a local project into a real public GitHub repository and the right published artifact with minimal back-and-forth. Use the free path by default, prefer public visibility only after verifying the project is safe to expose, and prove machine-checkable live GitHub settings with the bundled helper scripts before closing.
 
-<!-- CERATOPS_COMMON_CORE_START -->
-<!-- SOURCE: templates/fragments/core-minimal.md -->
+<!-- CERATOPS_SHARED_SECTIONS_START -->
+<!-- SECTION SOURCE: templates/sections/minimal.md -->
 
 ## Core Rules
 
@@ -23,11 +23,10 @@ Turn a local project into a real public GitHub repository and the right publishe
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
 
-<!-- SOURCE: templates/fragments/core-credentials.md -->
+<!-- SECTION SOURCE: templates/sections/credentials.md -->
 
 ## Credential Handling
 
-- Apply this section unless a skill-specific credential rule narrows it further.
 - Do not ask for credentials unless they are truly required after local checks.
 - If credentials are truly required after local checks, report only:
 
@@ -37,28 +36,27 @@ Turn a local project into a real public GitHub repository and the right publishe
 4. the exact command the user should run
 5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
 
-<!-- SOURCE: templates/fragments/core-gh-current-state.md -->
+<!-- SECTION SOURCE: templates/sections/gh-current-state.md -->
 
 ## GH Current State
 
-- Apply this section only to skills that make GitHub-state decisions.
-- Use `gh`, GitHub API, and `ceratops_gh_runtime` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
+- Use the shared helper package `ceratops_gh_current_state` for bundled GitHub current-state checks when it covers the next decision.
+- Use `gh`, GitHub API, and `ceratops_gh_current_state` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
 - Prefer current GitHub state over memory, prose summaries, or stale screenshots.
 - Start with the narrowest live check that answers the next decision: bundled helper script, targeted `gh` query, or focused API call.
 - Check current official GitHub docs or `gh` help only when the next decision remains concretely ambiguous after targeted live GitHub evidence, or when those sources materially conflict.
 - Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
 - Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
 
-<!-- SOURCE: templates/fragments/core-gh-findings.md -->
+<!-- SECTION SOURCE: templates/sections/gh-findings.md -->
 
 ## GH Findings
 
-- Apply this section only to skills that inspect GitHub security, code-scanning, dependency, moderation, or process findings.
 - Classify only findings actually inspected in this run. Do not expand reporting to untouched queues unless they become the next actionable work or the user explicitly asked for full coverage.
 - For each inspected finding, decide whether it is safe, fix low-risk items directly when in scope, and for every finding left open report its name or id, whether it is blocking, why it remains open, and the concrete work needed to clear it.
 - Do not collapse retained findings into a generic healthy result.
 - Re-check findings whose status may have changed because of actions taken in this run.
-<!-- CERATOPS_COMMON_CORE_END -->
+<!-- CERATOPS_SHARED_SECTIONS_END -->
 
 ## Skill-Specific Rules
 
@@ -66,8 +64,7 @@ Turn a local project into a real public GitHub repository and the right publishe
 
 ## Script Bundle
 
-- Shared helper package: `ceratops_gh_runtime`
-- Repo settings check: `python -m ceratops_gh_runtime repo-health --repo OWNER/REPO`
+- Repo settings check: `python -m ceratops_gh_current_state repo-health --repo OWNER/REPO`
 
 ## Inputs To Capture
 
@@ -143,7 +140,7 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 
 ## Completion Gate
 
-- Verify the final GitHub setting claims are backed by a fresh `python -m ceratops_gh_runtime repo-health` run.
+- Verify the final GitHub setting claims are backed by a fresh `python -m ceratops_gh_current_state repo-health` run.
 - Verify live review protection still shows `required_approving_review_count: 1` and the intended maintainer bypass actor unless the user explicitly chose a different merge policy.
 - Verify the maintainer bypass is implemented through a live pull-request-only ruleset when the platform supports it.
 - Verify live Actions permissions still show `sha_pinning_required: true` whenever the repo uses external actions and the user did not explicitly choose a weaker policy.

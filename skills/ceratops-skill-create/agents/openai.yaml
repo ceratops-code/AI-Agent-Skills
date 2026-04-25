@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ceratops Skill Create"
+  short_description: "Create a new Ceratops skill and stage it locally by default"
+  default_prompt: "Use $ceratops-skill-create to create a new Ceratops skill, integrate it into the section system and repo metadata, run the needed checks, and make it available locally through the runtime release branch by default."
