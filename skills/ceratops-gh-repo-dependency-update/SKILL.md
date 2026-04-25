@@ -111,6 +111,7 @@ Infer missing inputs from local files and live GitHub state before asking.
 - Fix in-scope failures. If a failure is flaky, unrelated, or upstream, prove that classification with evidence.
 - Decide from the fresh readiness check plus live GitHub state whether to merge now, enable auto-merge, or stop on a blocker.
 - When this skill merges a dependency PR directly, use `gh pr merge --admin` with the allowed merge-method flag and `--delete-branch` when cleanup is intended and allowed.
+- If checks, mergeability, and conversations are good and the only remaining blocker is the acting maintainer's own required review, follow the same documented self-merge exception as `$ceratops-gh-merge-pr` and use `gh pr merge --admin` instead of stopping.
 - Use `gh pr merge --auto` only when GitHub should wait for remaining requirements instead of closing the PR immediately.
 - After each merge, sync the default branch, re-check the queue, and continue until no actionable update remains, no progress is being made, or a real blocker is reached.
 

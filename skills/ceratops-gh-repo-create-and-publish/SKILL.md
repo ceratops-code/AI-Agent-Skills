@@ -121,6 +121,7 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 - When the host supports repository rulesets, implement the maintainer exception as a pull-request-only ruleset bypass for the authenticated maintainer role or account instead of relying only on classic branch-protection bypass allowances.
 - Enable `sha_pinning_required` once the repo workflows are compliant. Treat an unpinned external action as a blocking publish hardening gap unless the user explicitly accepts the weaker tradeoff.
 - Enable auto-merge and delete-branch-on-merge when compatible with the workflow.
+- When `.github/dependabot.yml` explicitly assigns `labels: dependencies`, create or verify the live repo label `dependencies` before the first Dependabot run.
 - Run the bundled repo-health script after GitHub settings changes that could affect a reported check and before closing publish work.
 - Treat the script findings as the first source of truth for settings such as `content_reports_enabled`, branch protection, strict checks, required approvals, stale review dismissal, code scanning default setup, secret scanning, push protection, Dependabot security updates, `sha_pinning_required`, delete-branch-on-merge, and auto-merge.
 - Verify branch protection, security controls, community health, moderation or reported-content health, and alert state from live endpoints. Do not assume repo-creation defaults already produced the intended moderation settings.
