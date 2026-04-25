@@ -132,17 +132,12 @@ if (-not (Test-Path -LiteralPath $RuntimeRoot)) {
 
 $python = Resolve-PythonCommand $PythonCommand
 $helperPackageNames = @("ceratops-gh-current-state", "ceratops-gh-runtime")
-$nativeErrorPreferenceVariable = Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue
-$hadNativeErrorPreference = ($null -ne $nativeErrorPreferenceVariable)
-if ($hadNativeErrorPreference) {
-    $previousNativeErrorPreference = $PSNativeCommandUseErrorActionPreference
-}
 try {
-    if ($hadNativeErrorPreference) {
-        $PSNativeCommandUseErrorActionPreference = $false
-    }
     foreach ($helperPackage in $helperPackageNames) {
-        & $python -m pip uninstall --yes $helperPackage *> $null
+        & $python -m pip show $helperPackage *> $null
+        if ($LASTEXITCODE -eq 0) {
+            & $python -m pip uninstall --yes $helperPackage *> $null
+        }
     }
     $installOutput = & $python -m pip install --editable $resolvedRepoRoot 2>&1
     if ($LASTEXITCODE -ne 0) {
@@ -165,9 +160,6 @@ try {
     }
 }
 finally {
-    if ($hadNativeErrorPreference) {
-        $PSNativeCommandUseErrorActionPreference = $previousNativeErrorPreference
-    }
     Remove-GeneratedEggInfo -RepoRoot $resolvedRepoRoot
 }
 
