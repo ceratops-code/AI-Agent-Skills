@@ -36,6 +36,8 @@ templates/
     minimal.md
     credentials.md
     gh-current-state.md
+    gh-repo-health-contract.md
+    gh-artifact-contract.md
     gh-findings.md
     release-branch-runtime.md
     thread-first-step.md
