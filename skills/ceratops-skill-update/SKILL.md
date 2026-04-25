@@ -87,6 +87,7 @@ Infer missing inputs from the current repo state before asking.
 ### 4. Run the needed checks
 
 - If shared section source files or `templates/skill-sections.json` assignments changed, run the shared-source check path from `templates/skill-sections.json`: sync first, then validate.
+- After a successful sync for the current shared-source delta, do not rerun sync as a routine closure check unless shared section sources, section assignments, generated blocks, or sync logic changed again; use validation and targeted diffs for later helper, changelog, or skill-local edits.
 - If the change stayed inside skill-local text, `agents/openai.yaml`, or repo docs, skip sync and run the skill-local validation path from `templates/skill-sections.json`.
 - If helper-runtime code or claims changed, also run the helper-runtime smoke path from `templates/skill-sections.json`.
 - Re-open the changed files from disk and confirm the generated blocks, manifest assignments, docs, and metadata still align.
