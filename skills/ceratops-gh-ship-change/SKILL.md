@@ -142,7 +142,8 @@ Infer missing inputs from local files and live repo state before asking.
 - Use the live script findings plus current GitHub state to decide whether to merge now, enable auto-merge, or stop on a blocker.
 - When this skill merges the PR directly, use `gh pr merge --admin` with the allowed merge-method flag and `--delete-branch` when cleanup is intended and allowed.
 - Use `gh pr merge --auto` only when GitHub should wait for remaining requirements instead of closing the PR immediately.
-- Delete the branch when safe, remove any temporary worktree created for the run after its branch is no longer needed, sync the local default branch, prune stale refs, and keep a safety branch only when needed.
+- Reuse fresh same-run evidence for local branch and worktree cleanup state; do not rerun removal or verification commands for branches or worktrees already known removed unless the state is uncertain, plausibly changed, or required fresh by another active instruction.
+- Delete the local and remote branch when safe, remove any temporary worktree created or used for the run as soon as its branch is no longer needed, sync the local default branch, prune stale refs, and keep a safety branch or worktree only when needed with an explicit reason.
 
 ### 7. Publish artifacts when relevant
 
@@ -155,7 +156,7 @@ Infer missing inputs from local files and live repo state before asking.
 - Verify live GitHub state for the repo with `python -m ceratops_gh_current_state repo-health` when repo settings or process health were part of the run.
 - Verify changed workflow files still use the intended full-SHA action refs when the run touched GitHub Actions workflows or settings.
 - Verify local state: default branch, worktree, remotes, refs, generated files, artifacts, temp paths, caches, credential changes, and local consumer paths.
-- Verify any temporary branch or worktree created for the run was removed unless intentionally retained.
+- Verify any temporary branch or worktree created or used for the run was removed unless intentionally retained with an explicit active-workflow reason.
 
 ## Output Contract
 
