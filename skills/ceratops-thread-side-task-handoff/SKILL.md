@@ -7,30 +7,49 @@ description: Create a minimal copy-paste prompt for spinning a newly discovered 
 
 Produce one minimal copy-paste prompt for starting a side task in a new thread.
 
-<!-- CERATOPS_COMMON_CORE_START -->
+<!-- CERATOPS_SHARED_SECTIONS_START -->
+<!-- SECTION SOURCE: templates/sections/minimal.md -->
+
 ## Core Rules
 
-- Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
-- Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
+- Everything in this section is mandatory unless explicitly marked optional or inapplicable.
+- Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
 - Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
 - Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
 - Do not update this `SKILL.md` during routine runs unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
 - Inspect local state and local auth before asking for credentials or making assumptions.
-- For GitHub or registry tasks only, use `gh`, GitHub API, and `ceratops_gh_runtime` as part of the first-pass direct evidence before checking current official docs or `gh` help.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
-- For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
-<!-- CERATOPS_COMMON_CORE_END -->
+
+<!-- SECTION SOURCE: templates/sections/credentials.md -->
+
+## Credential Handling
+
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
+
+1. which credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
+
+<!-- SECTION SOURCE: templates/sections/thread-first-step.md -->
+
+## First-Step State Refresh
+
+- Reuse fresh state already established in the current thread by default.
+- Refresh only facts whose staleness would change or misdirect the first step in the new thread.
+- Keep refs exact but limited to the entities the next thread is likely to open first.
+<!-- CERATOPS_SHARED_SECTIONS_END -->
 
 ## Skill-Specific Rules
 
 - Treat the original task as background. Include it in one short line only when needed.
 - Optimize for the side task only. Ignore most of the original task unless it directly constrains the new thread.
 - Produce a prompt, not a bundle and not instructions to use a follow-up handoff skill.
-- Reuse fresh state already established in the current thread.
-- Refresh only facts whose staleness would change the first step in the new thread.
 - Prefer the discovered conclusion and current objective over chronology.
 - Include what stays in the current thread only when it matters for scope control.
 - Keep refs exact but minimal.
@@ -38,6 +57,7 @@ Produce one minimal copy-paste prompt for starting a side task in a new thread.
 - Do not list general process instructions, generic runtime constraints, or merely helpful background artifacts as `source-of-truth refs` unless the side task is specifically about them or the first next step depends on opening them.
 - Put active instructions or process constraints under constraints, not under `source-of-truth refs`, unless those instruction files are themselves part of the side task.
 - If the user says `include the following questions`, `including the questions`, or equivalent wording, carry those questions into the prompt as next-thread asks instead of answering them here.
+- Do not ask for credentials unless verifying the handoff requires protected state that cannot be inferred locally.
 
 ## Inputs To Capture
 
@@ -76,19 +96,10 @@ Infer missing inputs from the current thread and local state before asking.
 
 ### 2. Refresh only first-step-critical state
 
-- Reuse fresh state from the current thread by default.
-- Refresh only the local or remote state that would change the first step in the new thread or make the prompt misleading.
-
 ### 3. Emit a paste-ready prompt
 
-- Produce a prompt that can be pasted directly into a new thread.
 - Make the current objective and first next step explicit.
 - Write the prompt as direct instruction to the new thread, not as commentary about a handoff artifact.
-
-## Credential Handling
-
-- Do not ask for credentials unless verifying the handoff requires protected state that cannot be inferred locally.
-- If credentials are required, ask only for the missing credential, why it is needed now, where it will be stored, and the exact command or setting the user must use.
 
 ## Completion Gate
 

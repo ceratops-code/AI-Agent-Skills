@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Machine-check live GitHub repo and PR state for scripted Ceratops skills."""
+"""Machine-check current GitHub repo and PR state for scripted Ceratops skills."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pathlib
 import sys
 from dataclasses import asdict, dataclass
 
-from .gh_live import CommandError, current_branch, detect_repo, gh_api, gh_pr_view
+from .gh_current_state import CommandError, current_branch, detect_repo, gh_api, gh_pr_view
 
 
 @dataclass(frozen=True)
@@ -438,10 +438,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    repo_parser = subparsers.add_parser("repo-health", help="Check live repo settings and moderation or security posture.")
+    repo_parser = subparsers.add_parser("repo-health", help="Check current repo settings and moderation or security posture.")
     repo_parser.add_argument("--repo", help="GitHub repo in OWNER/REPO form. Defaults to the current git origin remote.")
 
-    pr_parser = subparsers.add_parser("pr-readiness", help="Check live PR readiness for merge.")
+    pr_parser = subparsers.add_parser("pr-readiness", help="Check current PR readiness for merge.")
     pr_parser.add_argument("--pr", help="PR number, URL, or branch. Defaults to the PR attached to the current branch.")
 
     return parser

@@ -7,27 +7,64 @@ description: Create, fork, or production-harden a local software project as a pu
 
 Turn a local project into a real public GitHub repository and the right published artifact with minimal back-and-forth. Use the free path by default, prefer public visibility only after verifying the project is safe to expose, and prove machine-checkable live GitHub settings with the bundled helper scripts before closing.
 
-<!-- CERATOPS_COMMON_CORE_START -->
+<!-- CERATOPS_SHARED_SECTIONS_START -->
+<!-- SECTION SOURCE: templates/sections/minimal.md -->
+
 ## Core Rules
 
-- Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
-- Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
+- Everything in this section is mandatory unless explicitly marked optional or inapplicable.
+- Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
 - Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
 - Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
 - Do not update this `SKILL.md` during routine runs unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
 - Inspect local state and local auth before asking for credentials or making assumptions.
-- For GitHub or registry tasks only, use `gh`, GitHub API, and `ceratops_gh_runtime` as part of the first-pass direct evidence before checking current official docs or `gh` help.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
-- For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
-<!-- CERATOPS_COMMON_CORE_END -->
+
+<!-- SECTION SOURCE: templates/sections/credentials.md -->
+
+## Credential Handling
+
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
+
+1. which credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
+
+<!-- SECTION SOURCE: templates/sections/gh-current-state.md -->
+
+## GH Current State
+
+- Use the shared helper package `ceratops_gh_current_state` for bundled GitHub current-state checks when it covers the next decision.
+- Use `gh`, GitHub API, and `ceratops_gh_current_state` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
+- Prefer current GitHub state over memory, prose summaries, or stale screenshots.
+- Start with the narrowest live check that answers the next decision: bundled helper script, targeted `gh` query, or focused API call.
+- Check current official GitHub docs or `gh` help only when the next decision remains concretely ambiguous after targeted live GitHub evidence, or when those sources materially conflict.
+- Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
+- Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
+
+<!-- SECTION SOURCE: templates/sections/gh-findings.md -->
+
+## GH Findings
+
+- Classify only findings actually inspected in this run. Do not expand reporting to untouched queues unless they become the next actionable work or the user explicitly asked for full coverage.
+- For each inspected finding, decide whether it is safe, fix low-risk items directly when in scope, and for every finding left open report its name or id, whether it is blocking, why it remains open, and the concrete work needed to clear it.
+- Do not collapse retained findings into a generic healthy result.
+- Re-check findings whose status may have changed because of actions taken in this run.
+<!-- CERATOPS_SHARED_SECTIONS_END -->
+
+## Skill-Specific Rules
+
+- Do not prefer connector storage over normal local credential stores.
 
 ## Script Bundle
 
-- Shared helper package: `ceratops_gh_runtime`
-- Repo settings check: `python -m ceratops_gh_runtime repo-health --repo OWNER/REPO`
+- Repo settings check: `python -m ceratops_gh_current_state repo-health --repo OWNER/REPO`
 
 ## Inputs To Capture
 
@@ -60,8 +97,9 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 
 ### 2. Research and decide only where the next choice needs it
 
+- Default to the narrowest evidence that answers the next publish or hardening decision: local project files first, then the selected registry or GitHub docs for the actual project type.
 - Check current official docs for GitHub community health, moderation, Actions, branch protection, code scanning, Dependabot, secret scanning, private vulnerability reporting, releases, and the selected registry or packaging ecosystem only where the next publish or hardening decision needs that evidence.
-- Compare 2-3 strong reference repos only for a concrete ambiguous repo-structure, security, release, or packaging question. Do not do broad GH-skill best-practice maintenance during routine publish runs.
+- Compare at most 1-2 strong reference repos only for a concrete ambiguous repo-structure, security, release, or packaging question. Do not do broad GH-skill best-practice maintenance during routine publish runs.
 - Select the actual distribution target from the project type instead of forcing Docker everywhere.
 - Do not choose paid features unless they are already available at no extra cost.
 
@@ -83,7 +121,7 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 - When the host supports repository rulesets, implement the maintainer exception as a pull-request-only ruleset bypass for the authenticated maintainer role or account instead of relying only on classic branch-protection bypass allowances.
 - Enable `sha_pinning_required` once the repo workflows are compliant. Treat an unpinned external action as a blocking publish hardening gap unless the user explicitly accepts the weaker tradeoff.
 - Enable auto-merge and delete-branch-on-merge when compatible with the workflow.
-- Run the bundled repo-health script after GitHub settings changes and before closing publish work.
+- Run the bundled repo-health script after GitHub settings changes that could affect a reported check and before closing publish work.
 - Treat the script findings as the first source of truth for settings such as `content_reports_enabled`, branch protection, strict checks, required approvals, stale review dismissal, code scanning default setup, secret scanning, push protection, Dependabot security updates, `sha_pinning_required`, delete-branch-on-merge, and auto-merge.
 - Verify branch protection, security controls, community health, moderation or reported-content health, and alert state from live endpoints. Do not assume repo-creation defaults already produced the intended moderation settings.
 - For first-time public publish, also check the live community profile and do not close while the remaining gap is a safe standard-file addition you can still make directly.
@@ -100,21 +138,9 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 - Prefer existing version metadata from manifests, release config, changelog, or tag series.
 - Skip tagging when version semantics are unclear without invention, and report the skip precisely.
 
-## Credential Handling
-
-If credentials are truly required after local checks, report only:
-
-1. which credential or login is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, or connector
-
-Do not ask for credentials if a working local auth path exists. Do not prefer connector storage over normal local credential stores.
-
 ## Completion Gate
 
-- Verify the final GitHub setting claims are backed by a fresh `python -m ceratops_gh_runtime repo-health` run.
+- Verify the final GitHub setting claims are backed by a fresh `python -m ceratops_gh_current_state repo-health` run.
 - Verify live review protection still shows `required_approving_review_count: 1` and the intended maintainer bypass actor unless the user explicitly chose a different merge policy.
 - Verify the maintainer bypass is implemented through a live pull-request-only ruleset when the platform supports it.
 - Verify live Actions permissions still show `sha_pinning_required: true` whenever the repo uses external actions and the user did not explicitly choose a weaker policy.

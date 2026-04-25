@@ -7,22 +7,46 @@ description: Ship Ceratops or other local Codex skill changes from the runtime c
 
 Ship a staged Ceratops skill batch through GitHub, then restore the runtime checkout and installed skill state to clean `main`.
 
-<!-- CERATOPS_COMMON_CORE_START -->
+<!-- CERATOPS_SHARED_SECTIONS_START -->
+<!-- SECTION SOURCE: templates/sections/minimal.md -->
+
 ## Core Rules
 
-- Everything in this skill is mandatory unless explicitly marked optional or inapplicable.
-- Before completion, re-open this `SKILL.md` and verify the work line by line against `Core Rules`, `Inputs To Capture`, `Boundaries`, `Workflow`, `Credential Handling`, `Completion Gate`, and `Output Contract`.
+- Everything in this section is mandatory unless explicitly marked optional or inapplicable.
+- Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
 - Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
 - Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
 - Do not update this `SKILL.md` during routine runs unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
 - Inspect local state and local auth before asking for credentials or making assumptions.
-- For GitHub or registry tasks only, use `gh`, GitHub API, and `ceratops_gh_runtime` as part of the first-pass direct evidence before checking current official docs or `gh` help.
 - When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
-- For every open security, code-scanning, maturity, or process alert you inspect, decide whether it is safe, fix low-risk items directly, and for every alert not fixed report its name or id, whether it is blocking, why it is not being fixed now, and the concrete work needed to clear it. Do not collapse retained alerts into a generic healthy result.
 - In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
 - If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
-<!-- CERATOPS_COMMON_CORE_END -->
+
+<!-- SECTION SOURCE: templates/sections/credentials.md -->
+
+## Credential Handling
+
+- Do not ask for credentials unless they are truly required after local checks.
+- If credentials are truly required after local checks, report only:
+
+1. which credential or login is missing
+2. why it is needed
+3. where it will be stored
+4. the exact command the user should run
+5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
+
+<!-- SECTION SOURCE: templates/sections/release-branch-runtime.md -->
+
+## Release Branch Runtime
+
+- Treat the runtime checkout's active `release/*` branch as the single local preview source of truth for the staged repo snapshot.
+- Keep installed Ceratops skill junctions and the editable GH helper package pointed at the runtime checkout path, not at task worktrees.
+- Reuse the same `release/*` branch name locally and remotely by default. Do not rename or remap it unless the user explicitly chooses that tradeoff.
+- Refresh remote refs with `git fetch --prune origin` before judging whether a runtime `release/*` branch already exists remotely, should be reused, or was already cleaned up.
+- Rerun the runtime installer after switching the runtime checkout branch so installed skill junctions and the editable GH helper package match the active repo snapshot.
+- When the GH skill family was touched, confirm the editable GH helper package resolves from the runtime checkout after the installer or restore step.
+<!-- CERATOPS_SHARED_SECTIONS_END -->
 
 ## Defaults
 
@@ -56,7 +80,8 @@ Ship a staged Ceratops skill batch through GitHub, then restore the runtime chec
 ## Boundaries
 
 - Use this skill when working in the `codex-skills` runtime checkout or another skill source repo with the same local runtime-install pattern.
-- If the task is only creating or editing the skill contents and not staging or shipping them, stop and use the system `$skill-creator` guidance plus the relevant task skill.
+- If the task is creating a brand-new Ceratops skill and not yet staged or shipped, stop and use `$ceratops-skill-create`.
+- If the task is updating existing Ceratops skill contents and not yet staged or shipped, stop and use `$ceratops-skill-update`.
 - If the runtime checkout is not yet staged on the intended `release/*` branch, stop and use `$ceratops-codex-skill-stage-release`.
 - If the task is general repo shipping not focused on Codex skills and local skill installation, stop and use `$ceratops-gh-ship-change`.
 
@@ -70,15 +95,15 @@ Ship a staged Ceratops skill batch through GitHub, then restore the runtime chec
 ### 2. Validate the staged release batch
 
 - Confirm the runtime checkout is on the intended `release/*` branch and clean aside from deliberate staged commits.
-- Run `python scripts/sync-skill-core.py --check`.
 - Run the skill validator for every changed skill.
 - Check that `agents/openai.yaml` still matches the intended user-facing name, short description, and default prompt.
 - Verify any referenced bundled resources exist and are actually needed.
-- When the GH helper package or installer changed, prove the packaged runtime still imports with `python -m ceratops_gh_runtime --help`.
+- When the GH helper package or installer changed, prove the packaged runtime still imports with `python -m ceratops_gh_current_state --help`.
 
 ### 3. Ship the staged repo change
 
 - Use `$ceratops-gh-ship-change` from the runtime checkout when the staged release branch needs to be committed, pushed, PR'd, merged, and cleaned up.
+- If GitHub deleted the remote `release/*` branch after a prior merge, recreate the same-named remote branch from the current local `release/*` branch instead of inventing a different remote branch name.
 - Reuse an existing branch or PR when the staged release branch already has one.
 - If the work is only validation or stale-state cleanup with no content changes, use `$ceratops-gh-repo-health-audit` instead.
 
@@ -86,24 +111,11 @@ Ship a staged Ceratops skill batch through GitHub, then restore the runtime chec
 
 - Run `scripts/restore-runtime-main.ps1` to switch the runtime checkout back to `main`, fast-forward from `origin/main`, optionally drop the release branch when it is merged or tree-identical after a squash merge, and rerun the installer.
 - Confirm the installed skill path resolves to the runtime checkout on `main`.
-- Confirm the GH helper package resolves from the runtime checkout when the GH skill family was touched.
 
 ### 5. Verify final installed state
 
 - After merge, verify the runtime checkout is synced clean and the installed skill path still resolves correctly.
 - Report any intentionally retained installed exceptions or repo leftovers.
-
-## Credential Handling
-
-If credentials are truly required after local checks, report only:
-
-1. which GitHub credential is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, or connector
-
-Do not ask for credentials if a working local auth path exists.
 
 ## Completion Gate
 

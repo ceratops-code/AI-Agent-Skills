@@ -3,14 +3,15 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ceratops-gh-runtime"
+name = "ceratops-gh-current-state"
 version = "0.1.0"
 description = "Local helper package for the Ceratops GitHub skill family."
 readme = "README.md"
 requires-python = ">=3.10"
 
 [project.scripts]
-ceratops-gh-live-checks = "ceratops_gh_runtime.gh_live_checks:main"
+ceratops-gh-current-state-checks = "ceratops_gh_current_state.gh_current_state_checks:main"
+
 
 [tool.setuptools]
 package-dir = {"" = "src"}

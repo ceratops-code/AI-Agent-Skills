@@ -131,22 +131,42 @@ if (-not (Test-Path -LiteralPath $RuntimeRoot)) {
 }
 
 $python = Resolve-PythonCommand $PythonCommand
+$helperPackageNames = @("ceratops-gh-current-state", "ceratops-gh-runtime")
 try {
-    & $python -m pip uninstall --yes ceratops-gh-runtime | Out-Null
-    & $python -m pip install --editable $resolvedRepoRoot
+    $installedPackagesJson = & $python -m pip list --format=json 2>$null
     if ($LASTEXITCODE -ne 0) {
+        throw "Could not list currently installed Python packages."
+    }
+    $installedPackages = $installedPackagesJson | ConvertFrom-Json
+    $installedPackageNames = @{}
+    foreach ($package in $installedPackages) {
+        if ($null -ne $package.name) {
+            $installedPackageNames[[string]$package.name] = $true
+        }
+    }
+    foreach ($helperPackage in $helperPackageNames) {
+        if ($installedPackageNames.ContainsKey($helperPackage)) {
+            & $python -m pip uninstall --yes $helperPackage *> $null
+        }
+    }
+    $installOutput = & $python -m pip install --editable $resolvedRepoRoot 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        if ($installOutput) {
+            $installOutput | ForEach-Object { Write-Error $_ }
+        }
         throw "Editable helper-package install failed."
     }
 
-    $editablePackages = (& $python -m pip list --editable --format=json | ConvertFrom-Json)
+    $editablePackageShow = & $python -m pip show ceratops-gh-current-state 2>$null
     if ($LASTEXITCODE -ne 0) {
-        throw "Could not verify the installed GH helper package mode."
+        throw "Could not inspect the installed GH helper package."
     }
-    $editablePackage = $editablePackages | Where-Object { $_.name -eq "ceratops-gh-runtime" } | Select-Object -First 1
-    if ($null -eq $editablePackage) {
+    $editableProjectLocationLine = $editablePackageShow | Where-Object { $_ -like "Editable project location:*" } | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($editableProjectLocationLine)) {
         throw "Installed GH helper package is not registered as editable."
     }
-    if ($editablePackage.editable_project_location -ne $resolvedRepoRoot) {
+    $editableProjectLocation = $editableProjectLocationLine.Substring("Editable project location:".Length).Trim()
+    if ($editableProjectLocation -ne $resolvedRepoRoot) {
         throw "Installed GH helper package does not point at the requested checkout."
     }
 }
@@ -154,16 +174,18 @@ finally {
     Remove-GeneratedEggInfo -RepoRoot $resolvedRepoRoot
 }
 
-$staleRuntimeSkill = Join-Path $RuntimeRoot "ceratops-gh-runtime"
-$staleItem = Get-Item -LiteralPath $staleRuntimeSkill -Force -ErrorAction SilentlyContinue
-if ($null -ne $staleItem) {
-    $looksLikeBrokenDirectoryLink = $staleItem.PSIsContainer -and $staleItem.Exists -eq $false
-    if (-not (Is-ReparsePoint $staleItem)) {
-        if (-not $looksLikeBrokenDirectoryLink) {
-            throw "Stale runtime skill path '$staleRuntimeSkill' exists and is not a junction."
+foreach ($staleRuntimeSkillName in @("ceratops-gh-current-state", "ceratops-gh-runtime")) {
+    $staleRuntimeSkill = Join-Path $RuntimeRoot $staleRuntimeSkillName
+    $staleItem = Get-Item -LiteralPath $staleRuntimeSkill -Force -ErrorAction SilentlyContinue
+    if ($null -ne $staleItem) {
+        $looksLikeBrokenDirectoryLink = $staleItem.PSIsContainer -and $staleItem.Exists -eq $false
+        if (-not (Is-ReparsePoint $staleItem)) {
+            if (-not $looksLikeBrokenDirectoryLink) {
+                throw "Stale runtime skill path '$staleRuntimeSkill' exists and is not a junction."
+            }
         }
+        Remove-ReparsePoint -Path $staleRuntimeSkill
     }
-    Remove-ReparsePoint -Path $staleRuntimeSkill
 }
 
 $skillsRoot = Join-Path $resolvedRepoRoot "skills"
@@ -207,4 +229,4 @@ foreach ($item in $installedItems) {
     }
 }
 
-Write-Host "Installed Ceratops skills and local GH helper package."
+Write-Output "installed"
