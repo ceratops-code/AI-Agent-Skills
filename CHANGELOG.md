@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Clarified that Ceratops cleanup flows should reuse fresh same-run branch and worktree removal evidence instead of rerunning cleanup checks for already-removed items.
 - Made Ceratops staging and shipping cleanup remove merged task worktrees, task branches, and release branches automatically when safe, with explicit retention required for exceptions.
 - Changed repo-health checks to classify plan-limited private-repo branch protection or rulesets as an informational paid requirement instead of a missing-protection failure.
 - Clarified that `ceratops-skill-update` should not rerun shared-section sync after a successful sync unless the shared-source delta changed again.
