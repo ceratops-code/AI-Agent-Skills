@@ -134,7 +134,7 @@ $python = Resolve-PythonCommand $PythonCommand
 $helperPackageNames = @("ceratops-gh-current-state", "ceratops-gh-runtime")
 try {
     foreach ($helperPackage in $helperPackageNames) {
-        & $python -m pip uninstall --yes $helperPackage | Out-Null
+        & $python -m pip uninstall --yes $helperPackage *> $null
     }
     $installOutput = & $python -m pip install --editable $resolvedRepoRoot 2>&1
     if ($LASTEXITCODE -ne 0) {
