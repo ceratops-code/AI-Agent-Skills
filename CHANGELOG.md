@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Made Ceratops staging and shipping cleanup remove merged task worktrees, task branches, and release branches automatically when safe, with explicit retention required for exceptions.
 - Changed repo-health checks to classify plan-limited private-repo branch protection or rulesets as an informational paid requirement instead of a missing-protection failure.
 - Clarified that `ceratops-skill-update` should not rerun shared-section sync after a successful sync unless the shared-source delta changed again.
 - Clarified that merge-only PR finalization must hand off to `ceratops-gh-ship-change` when merging creates an immediate release or artifact-publish obligation.

@@ -64,8 +64,8 @@ Ship a staged Ceratops skill batch through GitHub, then restore the runtime chec
 - Ensure `SKILL.md`, `agents/openai.yaml`, and any bundled resources stay aligned.
 - Prefer running the repo installer when GH skills, the GH helper package, or install metadata changed; otherwise repair the local installed junctions directly when needed.
 - Reuse the general GitHub ship flow rather than inventing a parallel release process.
-- Restore the runtime checkout to synced `main` and rerun the installer after merge.
-- Remove low-risk stale installed copies, stale junctions, stale release branches, or stale generated skill artifacts when safe.
+- Restore the runtime checkout to synced `main`, remove the local `release/*` branch automatically when it is merged or tree-identical to `main`, and rerun the installer after merge; retain the release branch only with an explicit active-workflow reason.
+- Remove low-risk stale task worktrees, task branches, installed copies, stale junctions, stale release branches, or stale generated skill artifacts when safe.
 
 ## Script Bundle
 
@@ -109,7 +109,7 @@ Ship a staged Ceratops skill batch through GitHub, then restore the runtime chec
 
 ### 4. Restore runtime `main`
 
-- Run `scripts/restore-runtime-main.ps1` to switch the runtime checkout back to `main`, fast-forward from `origin/main`, optionally drop the release branch when it is merged or tree-identical after a squash merge, and rerun the installer.
+- Run `scripts/restore-runtime-main.ps1` to switch the runtime checkout back to `main`, fast-forward from `origin/main`, drop the release branch when it is merged or tree-identical after a squash merge, and rerun the installer.
 - Confirm the installed skill path resolves to the runtime checkout on `main`.
 
 ### 5. Verify final installed state
@@ -122,6 +122,7 @@ Ship a staged Ceratops skill batch through GitHub, then restore the runtime chec
 - Verify every changed skill validates locally.
 - Verify the repo change is merged or correctly blocked.
 - Verify the runtime checkout ends on local `main` tracking `origin/main`, unless intentionally retained on a release branch.
+- Verify no source task branch, source task worktree, or release branch remains unless an explicit active-workflow reason is reported.
 - Verify each expected installed junction resolves to the runtime checkout.
 - Verify the GH helper package resolves from the runtime checkout when the GH skill family was part of the run.
 
