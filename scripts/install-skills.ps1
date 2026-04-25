@@ -133,9 +133,19 @@ if (-not (Test-Path -LiteralPath $RuntimeRoot)) {
 $python = Resolve-PythonCommand $PythonCommand
 $helperPackageNames = @("ceratops-gh-current-state", "ceratops-gh-runtime")
 try {
+    $installedPackagesJson = & $python -m pip list --format=json 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not list currently installed Python packages."
+    }
+    $installedPackages = $installedPackagesJson | ConvertFrom-Json
+    $installedPackageNames = @{}
+    foreach ($package in $installedPackages) {
+        if ($null -ne $package.name) {
+            $installedPackageNames[[string]$package.name] = $true
+        }
+    }
     foreach ($helperPackage in $helperPackageNames) {
-        & $python -m pip show $helperPackage *> $null
-        if ($LASTEXITCODE -eq 0) {
+        if ($installedPackageNames.ContainsKey($helperPackage)) {
             & $python -m pip uninstall --yes $helperPackage *> $null
         }
     }
