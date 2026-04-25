@@ -20,7 +20,7 @@ Use this file as the bounded audit map for `ceratops-gh-standards-update`. It is
 
 - Verify CI, lint, test, and release workflow expectations only where the GH skill family makes claims about them.
 - Verify mutable external action refs, workflow permissions, required checks, release tagging, and post-publish verification guidance where relevant.
-- Treat artifact attestations, provenance, SBOM, or other supply-chain extras as conditional. Use current official guidance and the repo's actual ecosystem before treating them as default requirements.
+- Treat artifact attestations, provenance, SBOM, or other supply-chain extras as conditional and artifact-specific. Verify them when the selected publish workflow already emits them or the artifact contract makes provenance part of the deliverable; otherwise report them as an optional hardening path rather than a default requirement.
 
 ## 4. Artifact Surfaces
 
@@ -37,8 +37,8 @@ Use this file as the bounded audit map for `ceratops-gh-standards-update`. It is
 ### PyPI Or Python Packages
 
 - Verify whether the repo publishes to PyPI at all, and which package metadata files own that contract.
-- When PyPI publishing is in scope, verify `pyproject.toml` metadata, README or long-description expectations, license metadata, `requires-python`, build backend, sdist and wheel expectations, trusted publishing when supported, version verification, and smoke-install guidance.
-- Use current official PyPI and Python packaging docs for publish and verification expectations. Do not preserve stale `setup.py`, twine-only, or manual-token guidance when the current official path has moved.
+- When PyPI publishing is in scope, verify `pyproject.toml` metadata, README or long-description expectations, license metadata, `requires-python`, build backend, sdist and wheel expectations, Trusted Publishing or another short-lived identity path when supported, version verification, smoke-install guidance, and attestation or provenance behavior from the selected publisher.
+- Use current official PyPI and Python packaging docs for publish and verification expectations. Do not preserve stale `setup.py`, twine-only, or long-lived-token guidance when the current official path has moved.
 
 ### Other Registries Or Public Artifacts
 

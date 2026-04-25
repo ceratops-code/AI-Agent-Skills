@@ -48,6 +48,36 @@ Turn a local project into a real public GitHub repository and the right publishe
 - Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
 - Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
 
+<!-- SECTION SOURCE: templates/sections/gh-repo-health-contract.md -->
+
+## GH Repo Health Contract
+
+- Apply this contract to repo creation, first-time hardening, repo-health audit, and repo-health repair. For normal ship, dependency-update, or merge runs, apply only the parts made stale by the current change or needed for a final repo-health claim.
+- Capture or verify the repo identity and public contract: owner, name, default branch, visibility, topics, homepage, support route, CODEOWNERS owners, and local consumers tied to the repo path.
+- Execute or verify public repo files when relevant: `README`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, issue intake, pull request intake, support routing, CI, release workflows, dependency update automation, and code scanning config.
+- Execute or verify GitHub process settings when relevant: default-branch protection or rulesets, real required checks, strict status checks, pull-request flow, required reviews, stale review dismissal, conversation resolution, admin enforcement, force-push bans, deletion bans, auto-merge, and delete-branch-on-merge.
+- Execute or verify public-repo security and moderation when available at no extra cost: private vulnerability reporting or an explicit private reporting path, Dependabot security updates, dependency graph, secret scanning, push protection, code scanning, community profile, and reported-content or moderation health.
+- Execute or verify workflow hardening when repo workflows are present: every non-local action should use a verified full SHA with a same-line release comment, `sha_pinning_required` should be enabled once workflows are compliant, and reusable workflow tag refs should be classified deliberately.
+- When `.github/dependabot.yml` explicitly assigns `labels: dependencies`, create or verify the live repo label `dependencies`.
+- Run the bundled repo-health script after GitHub settings changes that could affect a reported check and whenever the final answer relies on repo-health settings.
+- Verify or classify stale PRs, branches, tags, releases, generated files, local path references, old automation references, security alerts, code-scanning alerts, maturity findings, and process alerts when they are in scope.
+
+<!-- SECTION SOURCE: templates/sections/gh-artifact-contract.md -->
+
+## GH Artifact Contract
+
+- Apply this contract only when the repo has an external artifact, the current change affects a releasable artifact, or the final answer makes an artifact or no-artifact claim.
+- Identify the real deliverable from the project instead of forcing Docker, PyPI, or any other registry by default.
+- Capture or verify the artifact identity, registry target, version source, release policy, tag style, changelog or release-note source, and post-publish consumer check.
+- In audit-only flows, verify and classify artifact state; do not publish or mutate registry artifacts unless the workflow explicitly moves into a ship or publish skill.
+- Build, package, install, pull, run, or consume local artifacts enough to catch packaging and runtime failures before publishing or before making a local artifact-health claim.
+- Publish external artifacts only when repo policy and the merged change require a release, tag, package, image, module, binary, or other public artifact.
+- Derive versions from trustworthy project metadata and tag history instead of inventing semantics.
+- Verify live release and registry endpoints after publishing or when auditing artifact state, including tags, digests, package pages, release pages, and published artifacts.
+- For PyPI publishes, prefer Trusted Publishing or another short-lived identity path over repository-stored long-lived tokens when supported, build the intended sdist and wheel, publish the intended version, verify the live PyPI version, install that exact version from PyPI locally, and run the smoke or documented consumer check against the published artifact instead of an editable checkout.
+- For PyPI publishes that emit attestations or provenance, verify the metadata through PyPI or the selected verifier instead of relying only on upload success.
+- For Docker or OCI image publishes, build locally, run a smoke test, publish the intended tags or digests, verify the live registry state, and pull or consume the published image when relevant.
+
 <!-- SECTION SOURCE: templates/sections/gh-findings.md -->
 
 ## GH Findings
@@ -71,11 +101,7 @@ Turn a local project into a real public GitHub repository and the right publishe
 - GitHub owner or org. Prefer `ceratops-code` only when user or existing org context explicitly indicates Ceratops ownership and access is available at no extra cost.
 - Repo name, default branch, visibility, branch naming, and whether the repo should remain a fork.
 - Maintainer merge policy: by Ceratops default, require 1 approving review on the default branch and add a pull-request-only bypass for the authenticated maintainer role or account so the owner can still self-ship; only choose a different review policy when the user explicitly asks for it.
-- Actions policy: by Ceratops default, pin every non-local action to a full commit SHA with a same-line release comment and enable the repo-level SHA-pinning setting once the workflows are compliant; only keep a weaker posture when the user explicitly chooses it.
-- Package or image identity for the real deliverable: Docker, PyPI, npm, Maven, NuGet, crates.io, RubyGems, PowerShell Gallery, GitHub Packages, or another relevant registry.
-- Version source, release policy, tag style, changelog or release-note source, and first-release expectations.
-- License intent, topics, CODEOWNERS owners, support route, and security reporting path.
-- Local consumers of the project path such as shortcuts, automation configs, services, tests, docs, generated runtime paths, or Docker MCP overrides.
+- Any missing inputs required by the GH repo health contract or GH artifact contract.
 
 Infer the safest practical default unless the choice is risky, destructive, ambiguous, or credential-bound.
 
@@ -98,45 +124,31 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 ### 2. Research and decide only where the next choice needs it
 
 - Default to the narrowest evidence that answers the next publish or hardening decision: local project files first, then the selected registry or GitHub docs for the actual project type.
-- Check current official docs for GitHub community health, moderation, Actions, branch protection, code scanning, Dependabot, secret scanning, private vulnerability reporting, releases, and the selected registry or packaging ecosystem only where the next publish or hardening decision needs that evidence.
+- Check current official docs only where a repo-health or artifact-contract decision remains unresolved by local files and live state.
 - Compare at most 1-2 strong reference repos only for a concrete ambiguous repo-structure, security, release, or packaging question. Do not do broad GH-skill best-practice maintenance during routine publish runs.
-- Select the actual distribution target from the project type instead of forcing Docker everywhere.
 - Do not choose paid features unless they are already available at no extra cost.
 
-### 3. Make the repo publishable
+### 3. Execute repo and artifact contracts
 
-- Add or update only the relevant repo files and workflows for the project type.
-- In repo-owned workflows, pin every non-local action to a full commit SHA and keep the intended release tag or version on the same line in a comment so Dependabot can keep updating it.
-- For first-time public repos, add the standard public-repo community files unless a stronger project-specific alternative already exists: `README`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, and at least one issue or pull-request intake template.
+- Execute the GH repo health contract as creation and hardening work, not as passive audit.
+- Execute the GH artifact contract only for the real deliverable.
 - Replace internal, misleading, or broken defaults before publication.
 - Add ecosystem-standard manifests and metadata only when relevant to the actual project type.
-- Prefer a real private reporting path for vulnerabilities and enable no-cost security controls when available and relevant.
 
 ### 4. Configure GitHub and prove the result
 
 - Create or fork the GitHub repo, preserve upstream linkage when needed, push the repo, and verify the live endpoint.
-- Set precise topics. Keep `CODEOWNERS` minimal and accurate.
 - Turn off unused live features such as wiki or projects when the repo does not actually use them.
-- Configure default-branch protection with real required checks, strict status checks, PR flow, `required_approving_review_count: 1`, stale review dismissal, conversation resolution, admin enforcement, no force pushes, and no deletions when available at no extra cost.
 - When the host supports repository rulesets, implement the maintainer exception as a pull-request-only ruleset bypass for the authenticated maintainer role or account instead of relying only on classic branch-protection bypass allowances.
-- Enable `sha_pinning_required` once the repo workflows are compliant. Treat an unpinned external action as a blocking publish hardening gap unless the user explicitly accepts the weaker tradeoff.
-- Enable auto-merge and delete-branch-on-merge when compatible with the workflow.
-- When `.github/dependabot.yml` explicitly assigns `labels: dependencies`, create or verify the live repo label `dependencies` before the first Dependabot run.
-- Run the bundled repo-health script after GitHub settings changes that could affect a reported check and before closing publish work.
-- Treat the script findings as the first source of truth for settings such as `content_reports_enabled`, branch protection, strict checks, required approvals, stale review dismissal, code scanning default setup, secret scanning, push protection, Dependabot security updates, `sha_pinning_required`, delete-branch-on-merge, and auto-merge.
-- Verify branch protection, security controls, community health, moderation or reported-content health, and alert state from live endpoints. Do not assume repo-creation defaults already produced the intended moderation settings.
-- For first-time public publish, also check the live community profile and do not close while the remaining gap is a safe standard-file addition you can still make directly.
+- Do not assume repo-creation defaults already produced the intended repo-health settings.
 
 ### 5. Validate and publish
 
 - Run the relevant local validation, ensure the latest relevant CI and code-scanning runs on the default branch are green, and publish the real external artifact only when the project actually has one.
-- Verify live GitHub, release, and registry endpoints instead of trusting only local CLI success.
 - If a single-maintainer fixture or sandbox repo needs one last hardening PR and GitHub self-approval rules would otherwise deadlock the run, merge that PR with `gh pr merge --admin` using the allowed method instead of weakening the steady-state review rule, then verify the final live state.
 
 ### 6. Tag and release
 
-- Create and push a release tag only when the repo is publishable and the version source is clear.
-- Prefer existing version metadata from manifests, release config, changelog, or tag series.
 - Skip tagging when version semantics are unclear without invention, and report the skip precisely.
 
 ## Completion Gate
@@ -144,7 +156,6 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 - Verify the final GitHub setting claims are backed by a fresh `python -m ceratops_gh_current_state repo-health` run.
 - Verify live review protection still shows `required_approving_review_count: 1` and the intended maintainer bypass actor unless the user explicitly chose a different merge policy.
 - Verify the maintainer bypass is implemented through a live pull-request-only ruleset when the platform supports it.
-- Verify live Actions permissions still show `sha_pinning_required: true` whenever the repo uses external actions and the user did not explicitly choose a weaker policy.
 - Verify live external state for every touched repo, protection rule, security setting, release, package, image, CI run, code scanning result, PR state, registry artifact, and docs endpoint.
 - Verify local state for every touched repo, worktree, generated file, artifact directory, cache, temp path, credential or config change, local consumer path, shortcut, scheduled task, service, shell profile, and cleanup side effect.
 - Ensure the local repo is clean on the default branch and tracking the remote default branch. If a squash merge or history rewrite would strand useful local work, keep one clearly named safety branch and report it.

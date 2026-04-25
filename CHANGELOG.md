@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Clarified that merge-only PR finalization must hand off to `ceratops-gh-ship-change` when merging creates an immediate release or artifact-publish obligation.
+- Split repeated GitHub repo-health and artifact-publish expectations into shared generated sections for the GH skill family.
+- Refreshed Ceratops GitHub artifact-publishing guidance for current PyPI Trusted Publishing and attestation expectations while keeping provenance checks conditional on the real publish flow.
 - Added Ceratops GitHub guidance to create or verify the `dependencies` repo label when Dependabot config explicitly uses it, and aligned dependency-update self-review admin merges with the merge skill.
 - Renamed the shared build-time layer from `fragments` to `sections`, dropped the `core-` prefixes, and updated the sync or validation tooling plus generated skill markers and source comments to match.
 - Split Ceratops skill authoring into `ceratops-skill-create` and `ceratops-skill-update`, added manifest-driven maintenance workflow hints, and made new-skill creation stage into the local runtime preview flow by default.

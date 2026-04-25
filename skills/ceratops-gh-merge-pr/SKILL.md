@@ -59,6 +59,7 @@ Merge one GitHub PR only after proving the repo will remain healthy. This is the
 
 - PR URL, number, branch, or local branch that identifies the PR.
 - Repo owner and name, default branch, merge method preference, and whether auto-merge or immediate merge is expected.
+- Release policy, artifact-publish expectation, and whether merging this PR creates an immediate publish obligation.
 - Required checks, review policy, conversation-resolution policy, merge queue, admin enforcement, branch deletion policy, and whether the branch is from a fork.
 - Whether the PR changes workflow refs or GitHub Actions permissions.
 - Local branch and worktree state that might be affected by syncing or cleanup.
@@ -69,6 +70,7 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 
 - Use this skill when the PR content is already ready and the remaining work is to verify gates, merge, and clean up.
 - If the PR needs code, docs, CI, or packaging changes first, stop and use `$ceratops-gh-ship-change`.
+- If merging the PR requires an immediate release, tag, package, image, or registry publish, stop and use `$ceratops-gh-ship-change` so the merge and artifact contract are handled together.
 - If the PR queue is part of a broader dependency-update campaign, stop and use `$ceratops-gh-repo-dependency-update`.
 - If the repo itself is not yet published or still needs first-time hardening, stop and use `$ceratops-gh-repo-create-and-publish`.
 
@@ -102,6 +104,7 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 - Confirm required reviews are satisfied and no blocking review remains.
 - Confirm required conversations are resolved.
 - Confirm the PR is up to date when strict status checks require it.
+- Confirm the PR can be completed by merge and cleanup alone. If completion also requires release or artifact publishing, stop and use `$ceratops-gh-ship-change`.
 - If the PR changes workflow refs or GitHub Actions permissions, confirm it does not introduce mutable external action refs that violate the repo's SHA-pinning policy. If it does, stop and use `$ceratops-gh-ship-change`.
 
 ### 6. Merge or enable auto-merge
