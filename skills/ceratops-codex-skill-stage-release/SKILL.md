@@ -58,6 +58,7 @@ Stage committed skill branches into the runtime checkout's local release branch 
 ## Skill-Specific Rules
 
 - Stage only committed task-worktree branches. Do not use this skill as a substitute for intentional commits on the source branches.
+- After a branch is successfully merged into the local release branch, remove that branch's task worktree and local source branch automatically when safe; use `-KeepMergedBranches` only when there is an explicit active-workflow reason and report that reason.
 - After a squash-merged ship, recreate or rebase long-lived task branches from updated `main` before staging more work. Do not re-merge a branch whose earlier contents already landed on `main` via squash.
 - Use `--reset` staging when rebuilding the release branch from `main` is cheaper or safer than untangling partial staged state.
 
@@ -70,6 +71,7 @@ Stage committed skill branches into the runtime checkout's local release branch 
 - The committed task branches that are ready to join the local batch.
 - The runtime checkout path and intended local `release/*` branch.
 - Whether the release branch should append more branches or be rebuilt from `main`.
+- Any explicit reason to keep a merged source task branch or task worktree after staging.
 - Local validation expectations for the staged batch.
 
 Infer missing inputs from local repo state before asking.
@@ -95,7 +97,7 @@ Infer missing inputs from local repo state before asking.
 
 ### 2. Stage the runtime release branch
 
-- Run `scripts/stage-release.ps1` to create or reuse the local `release/*` branch from `main`, switch the runtime checkout there, and merge the requested committed branches.
+- Run `scripts/stage-release.ps1` to create or reuse the local `release/*` branch from `main`, switch the runtime checkout there, merge the requested committed branches, and remove each merged source task worktree and local source branch unless explicitly retained.
 - If the runtime checkout is dirty before staging, stop and resolve that state instead of merging into it blindly.
 
 ### 3. Sync installed runtime state
@@ -116,7 +118,7 @@ Infer missing inputs from local repo state before asking.
 ## Completion Gate
 
 - Verify the runtime checkout is on the intended local `release/*` branch.
-- Verify each requested task branch was staged or a blocker was reported precisely.
+- Verify each requested task branch was staged and its source worktree and local branch were removed, or a blocker or explicit retention reason was reported precisely.
 - Verify the installed skill paths resolve to the runtime checkout.
 - Verify the local validation batch passed or the blocking failures were reported.
 

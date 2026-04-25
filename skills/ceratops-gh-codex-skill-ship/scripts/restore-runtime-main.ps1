@@ -3,7 +3,8 @@ param(
     [string]$RuntimeRepoRoot,
     [string]$MainBranch = "main",
     [string]$ReleaseBranch = "release/local",
-    [switch]$DropReleaseBranch
+    [switch]$DropReleaseBranch,
+    [switch]$KeepReleaseBranch
 )
 
 Set-StrictMode -Version Latest
@@ -42,7 +43,7 @@ if (-not [string]::IsNullOrWhiteSpace($status)) {
 Invoke-Git @("checkout", $MainBranch)
 Invoke-Git @("pull", "--ff-only", "origin", $MainBranch)
 
-if ($DropReleaseBranch) {
+if ($DropReleaseBranch -or -not $KeepReleaseBranch) {
     & git -C $resolvedRuntimeRepoRoot show-ref --verify --quiet "refs/heads/$ReleaseBranch"
     if ($LASTEXITCODE -eq 0) {
         & git -C $resolvedRuntimeRepoRoot merge-base --is-ancestor $ReleaseBranch $MainBranch
