@@ -21,6 +21,7 @@ Use this file as the bounded audit map for `ceratops-gh-standards-update`. It is
 - Verify CI, lint, test, and release workflow expectations only where the GH skill family makes claims about them.
 - Verify mutable external action refs, workflow permissions, required checks, release tagging, and post-publish verification guidance where relevant.
 - Treat artifact attestations, provenance, SBOM, or other supply-chain extras as conditional and artifact-specific. Verify them when the selected publish workflow already emits them or the artifact contract makes provenance part of the deliverable; otherwise report them as an optional hardening path rather than a default requirement.
+- When GitHub Actions artifact attestations are in scope, verify that the workflow grants only the needed permissions for attestation generation and that the published artifact can be verified with GitHub or registry-specific tooling.
 
 ## 4. Artifact Surfaces
 
@@ -31,18 +32,25 @@ Use this file as the bounded audit map for `ceratops-gh-standards-update`. It is
 ### Docker Or OCI Images
 
 - Verify whether the repo publishes Docker or OCI images at all, and where.
-- When Docker or OCI publishing is in scope, verify Dockerfile and publish guidance around `.dockerignore`, build context scope, base-image pinning strategy, non-root execution when practical, multi-stage builds when useful, exposed ports or health checks only when appropriate, documented image tags, and local build or smoke-check expectations.
+- When Docker or OCI publishing is in scope, verify Dockerfile and publish guidance around `.dockerignore`, build context scope, base-image pinning strategy, non-root execution when practical, multi-stage builds when useful, exposed ports or health checks only when appropriate, documented image tags, local build or smoke-check expectations, and provenance or SBOM attestations emitted by the selected publish flow.
+- When Docker or OCI provenance is emitted, verify that build arguments are not being misused for secrets that would leak through attestation metadata.
 - Use current official Docker, OCI, registry, and GitHub Actions docs for the exact policy questions that matter. Do not cargo-cult every hardening option into a universal default.
 
 ### PyPI Or Python Packages
 
 - Verify whether the repo publishes to PyPI at all, and which package metadata files own that contract.
-- When PyPI publishing is in scope, verify `pyproject.toml` metadata, README or long-description expectations, license metadata, `requires-python`, build backend, sdist and wheel expectations, Trusted Publishing or another short-lived identity path when supported, version verification, smoke-install guidance, and attestation or provenance behavior from the selected publisher.
+- When PyPI publishing is in scope, verify `pyproject.toml` metadata, README or long-description expectations, `license` or `license-files` metadata, `requires-python`, build backend, sdist and wheel expectations, Trusted Publishing or another short-lived identity path when supported, version verification, smoke-install guidance, and attestation or provenance behavior from the selected publisher.
 - Use current official PyPI and Python packaging docs for publish and verification expectations. Do not preserve stale `setup.py`, twine-only, or long-lived-token guidance when the current official path has moved.
+
+### npm Packages
+
+- Verify whether the repo publishes to npm at all, and which package metadata files own that contract.
+- When npm publishing is in scope, verify `package.json` metadata, package contents, lockfile and build commands, public or scoped access, version and dist-tag expectations, Trusted Publishing or another short-lived identity path when supported, current npm and Node prerequisites for trusted publishing, live package-version verification, consumer smoke-install guidance, and provenance behavior from the selected publisher.
+- Use current official npm docs and live npm registry behavior for publish and verification expectations. Do not preserve stale long-lived-token guidance when npm Trusted Publishing is supported for the real publish environment.
 
 ### Other Registries Or Public Artifacts
 
-- When another registry or public artifact type is in scope, use the exact artifact contract from the repo and the corresponding publish or ship workflow instead of forcing Docker or PyPI assumptions onto it.
+- When another registry or public artifact type is in scope, use the exact artifact contract from the repo and the corresponding publish or ship workflow instead of forcing Docker, PyPI, or npm assumptions onto it.
 - Verify the ecosystem-standard manifest, metadata, build, release, publish, and smoke-check expectations for the real deliverable, such as npm packages, Maven artifacts, NuGet packages, crates.io crates, RubyGems gems, PowerShell Gallery modules, GitHub Packages outputs, standalone binaries, or another supported public artifact.
 - Prefer current official ecosystem docs and live registry behavior for the touched artifact type. Keep the standards audit anchored to artifact types the Ceratops publish or ship skills actually support.
 
