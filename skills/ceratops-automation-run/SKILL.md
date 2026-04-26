@@ -1,6 +1,6 @@
 ---
 name: ceratops-automation-run
-description: Run recurring Codex automations with Ceratops defaults. Use when an automation prompt needs shared policy for re-opening prompt and helper contracts, keeping task-specific logic in the automation prompt or helper scripts, suppressing routine clean-run alerts, avoiding routine automation memory, and reporting no-alert or no-memory conflicts explicitly.
+description: Run recurring Codex automations with Ceratops defaults. Use when an automation run needs shared policy for re-opening prompt and helper contracts, keeping task-specific logic in the automation prompt or helper scripts, suppressing routine clean-run alerts, avoiding routine automation memory, and reporting no-alert or no-memory conflicts explicitly.
 ---
 
 # Ceratops Automation Run
@@ -41,6 +41,7 @@ Use this skill as the reusable policy layer for installed automations. Let the a
 
 - Treat every rule in this skill as mandatory and blocking when the skill is invoked.
 - Keep task-specific rules in the automation prompt, `automation.toml`, or task-specific helper scripts. Use this skill and `$CODEX_HOME/AGENTS.md` for reusable automation-run policy.
+- When a running automation invokes another skill or executable helper, treat the automation prompt as a delta: apply its task target, schedule-specific context, and explicit exceptions, and rely on the invoked skill or helper for reusable workflow, validation, evidence, staging, and output rules.
 - Treat the automation prompt, the nearest relevant local `AGENTS.md` when one exists and still governs the workspace, `$CODEX_HOME/AGENTS.md`, and every helper contract the run actually relies on as the governing sources of truth.
 - Clean and merge-only runs may complete silently or through non-alert bookkeeping, but must not create inbox items or other user-visible alerts unless the task-specific prompt explicitly requires one.
 - Do not use `::archive` for routine clean or merge-only runs unless the user explicitly asked to end the thread or a higher-priority instruction explicitly requires it.
@@ -58,7 +59,7 @@ Use this skill as the reusable policy layer for installed automations. Let the a
 
 ## Boundaries
 
-- Use this skill for recurring automation runs and for editing automation prompts so shared automation-run policy stays reusable instead of duplicated.
+- Use this skill for recurring automation runs. Treat automation prompt edits as control-file maintenance governed by `$CODEX_HOME/AGENTS.md` and the relevant task-specific workflow.
 - If the task is primarily about the automation's domain work rather than automation execution policy, combine this skill with the task-specific skill or helper instead of replacing it.
 - If the task is only creating or updating a reusable Codex skill, stop and use `$skill-creator` plus the relevant domain skill.
 

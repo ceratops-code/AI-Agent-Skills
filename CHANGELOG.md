@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Clarified that `ceratops-automation-run` is for recurring automation runs, treats delegated skill or helper prompts as task-specific deltas, and leaves automation prompt edits to control-file maintenance workflows.
 - Added npm Trusted Publishing plus conditional provenance and attestation checks to the GH artifact contract and standards baseline.
 - Added the missing release-branch staging helper used by `ceratops-codex-skill-stage-release`.
 - Added the missing runtime-restore helper used by `ceratops-gh-codex-skill-ship`.
