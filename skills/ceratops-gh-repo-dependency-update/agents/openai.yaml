@@ -1,4 +1,6 @@
 interface:
   display_name: "Ceratops GH Repo Dependency Update"
   short_description: "Process dependency updates with live scripted checks"
+  icon_small: "../../assets/ceratops-logo-500.png"
+  icon_large: "../../assets/ceratops-logo-500.png"
   default_prompt: "Use $ceratops-gh-repo-dependency-update to process dependency PRs with the bundled live checks, merge safe updates, and stop only on real blockers."

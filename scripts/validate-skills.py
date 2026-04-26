@@ -20,7 +20,11 @@ NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 SKILL_REF_RE = re.compile(r"\$([a-z0-9][a-z0-9-]*)")
 README_SKILL_ROW_RE = re.compile(r"^\|\s*`(?P<name>ceratops-[a-z0-9-]+)`\s*\|", re.MULTILINE)
 ALLOWED_EXTERNAL_SKILL_REFS = {"skill-creator"}
-INTERFACE_FIELD_RE = re.compile(r"^\s*(display_name|short_description|default_prompt):\s*(.+?)\s*$", re.MULTILINE)
+INTERFACE_FIELD_RE = re.compile(
+    r"^\s*(display_name|short_description|icon_small|icon_large|default_prompt):\s*(.+?)\s*$",
+    re.MULTILINE,
+)
+CERATOPS_ICON_REL = "../../assets/ceratops-logo-500.png"
 SHORT_DESC_STOPWORDS = {
     "a",
     "an",
@@ -299,7 +303,7 @@ def check_skill(skill_dir: pathlib.Path, readme_rows: set[str], manifest: dict[s
         errors.append(f"{name}: missing agents/openai.yaml")
     else:
         yaml_text = openai_yaml.read_text(encoding="utf-8")
-        for required in ("display_name:", "short_description:", "default_prompt:"):
+        for required in ("display_name:", "short_description:", "icon_small:", "icon_large:", "default_prompt:"):
             if required not in yaml_text:
                 errors.append(f"{name}: openai.yaml missing {required}")
         if f"${name}" not in yaml_text:
@@ -307,10 +311,17 @@ def check_skill(skill_dir: pathlib.Path, readme_rows: set[str], manifest: dict[s
         interface = parse_openai_interface(openai_yaml)
         display_name = interface.get("display_name", "")
         short_description = interface.get("short_description", "")
+        icon_small = interface.get("icon_small", "")
+        icon_large = interface.get("icon_large", "")
         if display_name and not display_name_sane(name, display_name):
             errors.append(f"{name}: display_name no longer matches the skill name closely enough")
         if short_description and not short_description_relevant(short_description, frontmatter.get("description", "")):
             errors.append(f"{name}: short_description no longer matches the skill description closely enough")
+        for field_name, icon_value in (("icon_small", icon_small), ("icon_large", icon_large)):
+            if icon_value and icon_value != CERATOPS_ICON_REL:
+                errors.append(f"{name}: {field_name} should use shared Ceratops icon {CERATOPS_ICON_REL}")
+            if icon_value and not (skill_dir / icon_value).resolve().is_file():
+                errors.append(f"{name}: {field_name} points to missing file {icon_value}")
         errors.extend(check_skill_refs(openai_yaml, yaml_text, skill_names))
 
     errors.extend(check_skill_refs(skill_md, core_text, skill_names))
