@@ -1,6 +1,6 @@
 # Best-Practice Baseline
 
-Use this file as the bounded audit map for `ceratops-gh-standards-update`. It is a checklist, not a frozen truth source. When the next decision matters, confirm the current state from official docs, live GitHub behavior, package metadata, and registry endpoints.
+Use this file as the bounded audit map for `ceratops-gh-skills-standards-update`. It is a checklist, not a frozen truth source. When the next decision matters, confirm the current state from official docs, live GitHub behavior, package metadata, and registry endpoints.
 
 ## 1. GitHub Repo Contract
 

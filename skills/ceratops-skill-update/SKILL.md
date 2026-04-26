@@ -62,7 +62,7 @@ Infer missing inputs from the current repo state before asking.
 - Use this skill when the task is to update existing Ceratops skills or the shared skill-maintenance layer itself.
 - If the task is creating a brand-new Ceratops skill, stop and use `$ceratops-skill-create`.
 - If the task is only staging or shipping already-prepared skill changes, stop and use `$ceratops-codex-skill-stage-release` or `$ceratops-gh-codex-skill-ship`.
-- If the task is only a routine GH-family best-practice audit inside `ceratops-gh-*`, stop and use `$ceratops-gh-standards-update`.
+- If the task is only a routine GH-family best-practice audit inside `ceratops-gh-*`, stop and use `$ceratops-gh-skills-standards-update`.
 
 ## Workflow
 

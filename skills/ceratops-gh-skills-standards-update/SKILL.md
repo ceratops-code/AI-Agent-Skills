@@ -1,9 +1,9 @@
 ---
-name: ceratops-gh-standards-update
+name: ceratops-gh-skills-standards-update
 description: Audit the Ceratops GitHub skill family in the `codex-skills` repo against current GitHub repository, settings, workflow, and relevant artifact-publishing best practices for the artifact types covered by the Ceratops publish and ship skills, including Docker, PyPI, and other supported registries or public artifacts when those surfaces are in scope, then apply safe low-risk updates. Use when routine or explicit GH-skill upkeep should first build a current best-practice baseline and then see whether `skills/ceratops-gh-*`, shared section rules, helper-runtime claims, or repo docs need updates.
 ---
 
-# Ceratops GH Standards Update
+# Ceratops GH Skills Standards Update
 
 Audit the Ceratops GitHub skill family deliberately instead of letting normal GH task skills drift into generalized upkeep. Build a current best-practice baseline first, then compare the Ceratops GH skill family against that baseline and refresh only the safe in-scope deltas.
 
@@ -150,4 +150,4 @@ For routine automation runs with no repo change and no recommendation, do not op
 
 ## Example Invocation
 
-`Use $ceratops-gh-standards-update to build a current best-practice baseline for GitHub repo contents, settings, workflows, and any relevant artifact publishing covered by the Ceratops publish and ship skills, then update the Ceratops GitHub skill family where safe.`
+`Use $ceratops-gh-skills-standards-update to build a current best-practice baseline for GitHub repo contents, settings, workflows, and any relevant artifact publishing covered by the Ceratops publish and ship skills, then update the Ceratops GitHub skill family where safe.`
