@@ -26,6 +26,8 @@ Reusable Ceratops skills for Codex and other `SKILL.md`-compatible agents.
 ## Layout
 
 ```text
+assets/
+  ceratops-logo-500.png
 skills/
   <skill-name>/
     SKILL.md
@@ -49,6 +51,7 @@ src/
 ```
 
 `SKILL.md` is the portable source of truth. `agents/openai.yaml` is Codex UI metadata and may be ignored by other agents.
+All Ceratops skills use the shared repo icon at `assets/ceratops-logo-500.png`.
 `src/ceratops_gh_current_state/` is the local helper package used by the Ceratops GitHub skill family.
 `skills/ceratops-gh-standards-update/` is the source of truth for deliberate GH-family best-practice audits and for the recurring automation that invokes them.
 
