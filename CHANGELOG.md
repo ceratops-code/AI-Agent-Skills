@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added npm Trusted Publishing plus conditional provenance and attestation checks to the GH artifact contract and standards baseline.
+- Added the missing release-branch staging helper used by `ceratops-codex-skill-stage-release`.
+- Added the missing runtime-restore helper used by `ceratops-gh-codex-skill-ship`.
 - Clarified that Ceratops cleanup flows should reuse fresh same-run branch and worktree removal evidence instead of rerunning cleanup checks for already-removed items.
 - Made Ceratops staging and shipping cleanup remove merged task worktrees, task branches, and release branches automatically when safe, with explicit retention required for exceptions.
 - Changed repo-health checks to classify plan-limited private-repo branch protection or rulesets as an informational paid requirement instead of a missing-protection failure.
