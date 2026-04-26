@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Renamed `ceratops-gh-standards-update` to `ceratops-gh-skills-standards-update` and updated skill metadata, docs, section assignments, and references.
 - Clarified that `ceratops-automation-run` is for recurring automation runs, treats delegated skill or helper prompts as task-specific deltas, and leaves automation prompt edits to control-file maintenance workflows.
 - Added npm Trusted Publishing plus conditional provenance and attestation checks to the GH artifact contract and standards baseline.
 - Added the missing release-branch staging helper used by `ceratops-codex-skill-stage-release`.
@@ -19,10 +20,10 @@
 - Moved credential handling into one shared section across the skill family, removed duplicated per-skill credential sections, and trimmed GH skill sections that only restated shared rules or workflow steps.
 - Split the synced shared skill core into six build-time sections with an explicit per-skill manifest, and made generated `SKILL.md` blocks show source comments for each shared section.
 - Renamed the GH helper surface from `gh_live*` to `gh_current_state*`, removed the old compatibility aliases, and updated docs and packaging to point only at the current-state names.
-- Widened `ceratops-gh-standards-update` artifact coverage from Docker or PyPI examples to the full artifact scope used by the Ceratops publish and ship skills.
-- Reframed `ceratops-gh-standards-update` around a bounded best-practice audit: routine runs now start from current GitHub repo, settings, workflow, and relevant artifact guidance before deciding whether the Ceratops GH skill family needs updates.
+- Widened `ceratops-gh-skills-standards-update` artifact coverage from Docker or PyPI examples to the full artifact scope used by the Ceratops publish and ship skills.
+- Reframed `ceratops-gh-skills-standards-update` around a bounded best-practice audit: routine runs now start from current GitHub repo, settings, workflow, and relevant artifact guidance before deciding whether the Ceratops GH skill family needs updates.
 - Replaced direct runtime-preview work with a local `release/*` runtime branch flow, added `ceratops-codex-skill-stage-release`, and rewrote `ceratops-gh-codex-skill-ship` around staging batches into the runtime checkout and restoring clean `main` after shipping.
-- Renamed `ceratops-gh-best-practice-update` to `ceratops-gh-standards-update`, `ceratops-consistency-audit` to `ceratops-code-consistency-audit`, and `ceratops-codex-skill-ship` to `ceratops-gh-codex-skill-ship`.
+- Renamed `ceratops-gh-best-practice-update` to `ceratops-gh-skills-standards-update`, `ceratops-consistency-audit` to `ceratops-code-consistency-audit`, and `ceratops-codex-skill-ship` to `ceratops-gh-codex-skill-ship`.
 - Removed `ceratops-thread-resume-after-restart` and folded same-thread restart or crash recovery into `ceratops-thread-resume-manual-stop`.
 - Added `ceratops-automation-run` so recurring automations can share one reusable policy layer for prompt or helper re-open checks, clean-run silence, no-memory defaults, and explicit conflict reporting.
 - Cleaned up editable-install `egg-info` artifacts automatically during skill installs and ignored stray `*.egg-info/` folders as a backstop.
@@ -34,7 +35,7 @@
 - Explicitly required `ceratops-gh-ship-change` to remove temporary worktrees and branches during end-of-run cleanup unless intentionally retained.
 - Added a Ceratops SHA-pinning policy for GitHub Actions: publish and workflow-change runs must end on verified full SHAs, audit runs must surface missing enforcement explicitly, and repo-health now reports the live `sha_pinning_required` setting.
 - Added a shared Ceratops skill-core rule to preserve existing text-file line endings unless normalization is intentional.
-- Split the synced Ceratops core into a GH-family variant, moved routine GH-skill standards refresh into the dedicated `ceratops-gh-standards-update` skill, and narrowed routine GH task-skill runs to task-specific live evidence checks.
+- Split the synced Ceratops core into a GH-family variant, moved routine GH-skill standards refresh into the dedicated `ceratops-gh-skills-standards-update` skill, and narrowed routine GH task-skill runs to task-specific live evidence checks.
 - Refactored core sync so GH skills inherit the base Ceratops core plus a GH-only overlay, moved generic routine-run rules back into the base core, and limited live community-profile checks to audit and publish workflows.
 - Collapsed the one-line GH overlay back into `templates/common-core.md`, deleted `templates/common-core-gh.md`, and simplified sync and validation to use one shared core template. This was later replaced by the sections manifest and `templates/sections/`.
 
