@@ -22,6 +22,7 @@ Use this file as the bounded audit map for `ceratops-gh-skills-standards-update`
 - Verify mutable external action refs, workflow permissions, required checks, release tagging, and post-publish verification guidance where relevant.
 - Treat artifact attestations, provenance, SBOM, or other supply-chain extras as conditional and artifact-specific. Verify them when the selected publish workflow already emits them or the artifact contract makes provenance part of the deliverable; otherwise report them as an optional hardening path rather than a default requirement.
 - When GitHub Actions artifact attestations are in scope, verify that the workflow grants only the needed permissions for attestation generation and that the published artifact can be verified with GitHub or registry-specific tooling.
+- When an attestation workflow intentionally records linked-artifact metadata, verify that `artifact-metadata: write` is scoped only to the job that needs it and is not treated as required for ordinary attestation generation.
 
 ## 4. Artifact Surfaces
 
