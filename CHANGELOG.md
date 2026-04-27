@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added linked-artifact metadata permission checks to the GH skills standards baseline for GitHub Actions attestation workflows.
 - Renamed `ceratops-gh-standards-update` to `ceratops-gh-skills-standards-update` and updated skill metadata, docs, section assignments, and references.
 - Clarified that `ceratops-automation-run` is for recurring automation runs, treats delegated skill or helper prompts as task-specific deltas, and leaves automation prompt edits to control-file maintenance workflows.
 - Added npm Trusted Publishing plus conditional provenance and attestation checks to the GH artifact contract and standards baseline.
