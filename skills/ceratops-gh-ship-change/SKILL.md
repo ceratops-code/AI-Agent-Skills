@@ -14,6 +14,7 @@ Take an existing published repo from local changes to a verified merged result. 
 
 - Everything in this section is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
+- Blocking: Reuse fresh sufficient same-run evidence across adjacent, resumed, or chained workflows when it still proves the current decision; do not reacquire evidence or rerun checks solely to refresh already-sufficient evidence unless state is uncertain, plausibly changed, externally mutable for the decision, materially broadened, or required fresh by a higher-precedence instruction, skill, automation, or completion gate.
 - Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
 - Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
 - Do not update this `SKILL.md` during routine runs unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
@@ -144,7 +145,6 @@ Infer missing inputs from local files and live repo state before asking.
 - Use the live script findings plus current GitHub state to decide whether to merge now, enable auto-merge, or stop on a blocker.
 - When this skill merges the PR directly, use `gh pr merge --admin` with the allowed merge-method flag and `--delete-branch` when cleanup is intended and allowed.
 - Use `gh pr merge --auto` only when GitHub should wait for remaining requirements instead of closing the PR immediately.
-- Reuse fresh same-run evidence for local branch and worktree cleanup state; do not rerun removal or verification commands for branches or worktrees already known removed unless the state is uncertain, plausibly changed, or required fresh by another active instruction.
 - Delete the local and remote branch when safe, remove any temporary worktree created or used for the run as soon as its branch is no longer needed, sync the local default branch, prune stale refs, and keep a safety branch or worktree only when needed with an explicit reason.
 
 ### 7. Publish artifacts when relevant

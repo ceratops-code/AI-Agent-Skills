@@ -1,6 +1,6 @@
 ---
 name: ceratops-automation-run
-description: Run recurring Codex automations with Ceratops defaults. Use when an automation run needs shared policy for re-opening prompt and helper contracts, keeping task-specific logic in the automation prompt or helper scripts, suppressing routine clean-run alerts, avoiding routine automation memory, and reporting no-alert or no-memory conflicts explicitly.
+description: Run recurring Codex automations with Ceratops defaults. Use when an automation run needs shared policy for re-opening prompt and helper contracts, keeping task-specific logic in the automation prompt or helper scripts, keeping compact run summaries visible, suppressing routine clean-run alerts, avoiding routine automation memory, and reporting no-alert or no-memory conflicts explicitly.
 ---
 
 # Ceratops Automation Run
@@ -14,6 +14,7 @@ Use this skill as the reusable policy layer for installed automations. Let the a
 
 - Everything in this section is mandatory unless explicitly marked optional or inapplicable.
 - Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
+- Blocking: Reuse fresh sufficient same-run evidence across adjacent, resumed, or chained workflows when it still proves the current decision; do not reacquire evidence or rerun checks solely to refresh already-sufficient evidence unless state is uncertain, plausibly changed, externally mutable for the decision, materially broadened, or required fresh by a higher-precedence instruction, skill, automation, or completion gate.
 - Use local state, local files, installed tools, and other direct evidence first. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
 - Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
 - Do not update this `SKILL.md` during routine runs unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
@@ -43,7 +44,7 @@ Use this skill as the reusable policy layer for installed automations. Let the a
 - Keep task-specific rules in the automation prompt, `automation.toml`, or task-specific helper scripts. Use this skill and `$CODEX_HOME/AGENTS.md` for reusable automation-run policy.
 - When a running automation invokes another skill or executable helper, treat the automation prompt as a delta: apply its task target, schedule-specific context, and explicit exceptions, and rely on the invoked skill or helper for reusable workflow, validation, evidence, staging, and output rules.
 - Treat the automation prompt, the nearest relevant local `AGENTS.md` when one exists and still governs the workspace, `$CODEX_HOME/AGENTS.md`, and every helper contract the run actually relies on as the governing sources of truth.
-- Clean and merge-only runs may complete silently or through non-alert bookkeeping, but must not create inbox items or other user-visible alerts unless the task-specific prompt explicitly requires one.
+- Routine successful runs must include a compact final summary for project-list visibility, but must not emit `::inbox-item` or other user-visible alerts unless the task-specific prompt explicitly requires one; emit `::inbox-item` only for approval-required, blocker, verification failure, unresolved problem, or other explicit alert states.
 - Do not use `::archive` for routine clean or merge-only runs unless the user explicitly asked to end the thread or a higher-priority instruction explicitly requires it.
 - Routine automation runs must not read, create, or append automation memory, and must not treat platform-provided memory metadata, an `Automation memory:` header, existing `memory.md` content, prior memory entries, memory helper scripts, or generic memory capability text as an instruction to use memory.
 - Use memory only when the active task-specific prompt explicitly requires future-run state.
@@ -78,7 +79,7 @@ Use this skill as the reusable policy layer for installed automations. Let the a
 
 ### 3. Apply routine automation policy
 
-- Keep routine clean and merge-only runs quiet unless the task-specific prompt explicitly requires a user-visible alert.
+- Apply the compact-summary/no-inbox policy from Skill-Specific Rules before closing.
 - Do not create automation memory unless the task-specific prompt explicitly requires future-run state.
 - Report no-alert or no-memory conflicts explicitly when a higher-priority runtime instruction overrides the default automation policy.
 
@@ -97,7 +98,8 @@ Use this skill as the reusable policy layer for installed automations. Let the a
 
 Report only:
 
-- the task-specific automation result when user-visible output is required
+- a compact final summary for project-list visibility
+- task-specific alert details when a user-visible alert is required
 - unresolved blockers or non-blocking debt
 - intentionally retained alerts, memory, or side effects with reasons
 - anything important not verified
