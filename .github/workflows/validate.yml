@@ -23,9 +23,6 @@ jobs:
       - name: Install local helper package
         run: python -m pip install .
 
-      - name: Sync shared skill sections
-        run: python scripts/sync-skill-sections.py
-
       - name: Validate skills
         run: python scripts/validate-skills.py
 
