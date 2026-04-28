@@ -131,6 +131,8 @@ if (-not (Test-Path -LiteralPath $RuntimeRoot)) {
 }
 
 $python = Resolve-PythonCommand $PythonCommand
+$previousPipDisableVersionCheck = $env:PIP_DISABLE_PIP_VERSION_CHECK
+$env:PIP_DISABLE_PIP_VERSION_CHECK = "1"
 $helperPackageNames = @("ceratops-gh-current-state", "ceratops-gh-runtime")
 try {
     $installedPackagesJson = & $python -m pip list --format=json 2>$null
@@ -171,6 +173,11 @@ try {
     }
 }
 finally {
+    if ($null -eq $previousPipDisableVersionCheck) {
+        Remove-Item Env:\PIP_DISABLE_PIP_VERSION_CHECK -ErrorAction SilentlyContinue
+    } else {
+        $env:PIP_DISABLE_PIP_VERSION_CHECK = $previousPipDisableVersionCheck
+    }
     Remove-GeneratedEggInfo -RepoRoot $resolvedRepoRoot
 }
 
