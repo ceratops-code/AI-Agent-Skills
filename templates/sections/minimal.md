@@ -2,7 +2,7 @@
 
 ## Core Rules
 
-- Mandatory: Everything in this section is part of the skill contract unless explicitly inapplicable to the current task.
+- Blocking: Everything in this section is part of the skill contract unless explicitly inapplicable to the current task.
 - Blocking: When this skill is invoked, follow this `SKILL.md` as the workflow contract for the task; if a higher-precedence instruction conflicts with a required skill step, report the conflict instead of silently skipping the step.
 - Blocking: Do not claim completion unless this skill's completion gate is satisfied, intentionally inapplicable, or reported as a blocker.
 - Blocking: Scope completion, current-state, root-cause, no-fix, unsupported, and durable-resolution claims to evidence actually checked, or to fresh same-task evidence that still applies.
