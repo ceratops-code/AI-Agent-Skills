@@ -107,7 +107,7 @@ python .\scripts\validate-skills.py
 Run `python .\scripts\sync-skill-sections.py` before validation only when shared section source files or `templates/skill-sections.json` assignments changed. For skill-local `SKILL.md`, `agents/openai.yaml`, or doc-only edits, skip sync and run the validator directly.
 `templates/skill-sections.json` also records the default maintenance-check policy so the Ceratops skill-create or update workflows can decide which checks to run without extra user instructions.
 The sync step composes each skill's shared block from `templates/skill-sections.json` and `templates/sections/`, and each generated `SKILL.md` block includes section-source comments so the origin of every shared section stays visible in the skill file itself. The validator checks skill frontmatter, folder/name consistency, section assignments, generated-block drift, Codex metadata, placeholder leftovers, real README skill rows, cross-skill references, maintenance-workflow targets, stale active terminology, and high-confidence secret patterns.
-Run `python -m ceratops_gh_current_state --help` only when helper-runtime code or helper-runtime claims changed. With working GitHub auth, you can also run `python -m ceratops_gh_current_state repo-health --repo ceratops-code/codex-skills`.
+Run `python -m ceratops_gh_current_state --help` only when helper-runtime code or helper-runtime claims changed. With working GitHub auth, you can also run `python -m ceratops_gh_current_state repo-health --repo ceratops-code/AI-Agent-Skills`.
 
 ## Releases
 

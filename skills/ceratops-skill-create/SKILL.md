@@ -1,6 +1,6 @@
 ---
 name: ceratops-skill-create
-description: Create a brand-new Ceratops skill in `codex-skills`, integrate it into the shared section system and repo metadata, validate the result with the needed checks, and make it available locally through the runtime `release/*` branch by default. Use when the user asks for a new Ceratops skill rather than an update to an existing one.
+description: Create a brand-new Ceratops skill in `AI-Agent-Skills`, integrate it into the shared section system and repo metadata, validate the result with the needed checks, and make it available locally through the runtime `release/*` branch by default. Use when the user asks for a new Ceratops skill rather than an update to an existing one.
 ---
 
 # Ceratops Skill Create

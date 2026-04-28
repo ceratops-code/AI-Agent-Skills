@@ -1,6 +1,6 @@
 ---
 name: ceratops-gh-skills-standards-update
-description: Audit the Ceratops GitHub skill family in the `codex-skills` repo against current GitHub repository, settings, workflow, and relevant artifact-publishing best practices for the artifact types covered by the Ceratops publish and ship skills, including Docker, PyPI, and other supported registries or public artifacts when those surfaces are in scope, then apply safe low-risk updates. Use when routine or explicit GH-skill upkeep should first build a current best-practice baseline and then see whether `skills/ceratops-gh-*`, shared section rules, helper-runtime claims, or repo docs need updates.
+description: Audit the Ceratops GitHub skill family in the `AI-Agent-Skills` repo against current GitHub repository, settings, workflow, and relevant artifact-publishing best practices for the artifact types covered by the Ceratops publish and ship skills, including Docker, PyPI, and other supported registries or public artifacts when those surfaces are in scope, then apply safe low-risk updates. Use when routine or explicit GH-skill upkeep should first build a current best-practice baseline and then see whether `skills/ceratops-gh-*`, shared section rules, helper-runtime claims, or repo docs need updates.
 ---
 
 # Ceratops GH Skills Standards Update
@@ -73,7 +73,7 @@ Audit the Ceratops GitHub skill family deliberately instead of letting normal GH
 ## Inputs To Capture
 
 - Whether the run is routine automation upkeep or an explicit user-requested GH-skill refresh.
-- Current target scope inside `codex-skills`: `skills/ceratops-gh-*`, `templates/sections/`, `templates/skill-sections.json`, `scripts/sync-skill-sections.py`, `scripts/validate-skills.py`, `src/ceratops_gh_current_state/`, and repo docs.
+- Current target scope inside `AI-Agent-Skills`: `skills/ceratops-gh-*`, `templates/sections/`, `templates/skill-sections.json`, `scripts/sync-skill-sections.py`, `scripts/validate-skills.py`, `src/ceratops_gh_current_state/`, and repo docs.
 - Which best-practice surfaces are actually in scope: GitHub repo contents, repo settings, workflow hardening, release posture, artifact types supported by `ceratops-gh-repo-create-and-publish` or `ceratops-gh-ship-change`, or a documented no-artifact posture.
 - Whether current findings stay inside safe minor updates or cross the approval boundary.
 - Whether the current task should only stage updates into the active local `release/*` batch or also ship them through GitHub now.
