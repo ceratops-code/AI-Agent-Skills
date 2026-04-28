@@ -85,7 +85,7 @@ Handle dependency updates as an end-to-end maintenance loop. Prefer safe automat
 
 ## Inputs To Capture
 
-- Target repo, branch, dependency PRs, package-manager ecosystems, and whether security updates are priority-only.
+- Target repo, branch, dependency PRs, package-manager ecosystems, and whether security updates are priority-only, security-only, or part of a full dependency PR queue.
 - Release policy, changelog expectations, local verification commands, and any missing inputs required by the GH artifact contract.
 - Branch protection, required checks, code scanning, vulnerability alerts, auto-merge policy, and delete-branch policy.
 - Whether `github-actions` updates are in scope and whether the repo enforces SHA pinning.
@@ -103,9 +103,12 @@ Infer missing inputs from local files and live GitHub state before asking.
 
 ### 1. Inspect queue and risk
 
-- Inspect git state, open PRs, dependency alerts, bot config, manifests, lockfiles, CI, security settings, tags, releases, and registry metadata.
+- Inspect git state, open dependency-bot PRs, dependency alerts, bot config, manifests, lockfiles, CI, security settings, tags, releases, and registry metadata.
 - Check GitHub auth, registry auth, and connected tooling before asking for credentials.
-- Build an update queue from live PRs, alerts, and local manifests, and classify each update by risk.
+- Build an update queue from live dependency-bot PRs, alerts, alert-linked update PRs, and local manifests, and classify each update by risk.
+- Treat Dependabot or Renovate PRs as first-class queue items even when no security alert is open; do not report a dependency queue as clean from an alert-only check unless the task explicitly excludes routine dependency PRs.
+- When the task spans multiple repositories, enumerate dependency-bot PRs and dependency alerts for every included repository before reporting that no actionable dependency work exists.
+- For each queued PR or alert, capture whether it is security-linked or routine, the affected package or action, ecosystem, manifest or workflow path, update size, branch freshness, checks, review state, mergeability, and whether the change stays within the repo's dependency policy.
 
 ### 2. Research update evidence
 
@@ -123,6 +126,7 @@ Infer missing inputs from local files and live GitHub state before asking.
 ### 4. Process updates recursively
 
 - Prioritize security and low-risk updates unless ordering constraints require otherwise.
+- Process already-open routine dependency PRs when they are in scope and low-risk; if the task is security-only, classify routine dependency PRs as intentionally retained with that exact scope reason instead of silently ignoring them.
 - Inspect the diff, manifest changes, lockfile changes, transitive changes, CI impact, and release impact for each update.
 - Refresh lockfiles or generated dependency metadata using the project package manager unless the ecosystem explicitly expects manual edits.
 - For `github-actions` updates, keep action refs on full commit SHAs with same-line version comments so Dependabot can keep updating them. If the repo enforces SHA pinning, do not merge a PR that downgrades a workflow back to tag-only refs.
@@ -132,7 +136,7 @@ Infer missing inputs from local files and live GitHub state before asking.
 - When this skill merges a dependency PR directly, use `gh pr merge --admin` with the allowed merge-method flag and `--delete-branch` when cleanup is intended and allowed.
 - If checks, mergeability, and conversations are good and the only remaining blocker is the acting maintainer's own required review, follow the same documented self-merge exception as `$ceratops-gh-merge-pr` and use `gh pr merge --admin` instead of stopping.
 - Use `gh pr merge --auto` only when GitHub should wait for remaining requirements instead of closing the PR immediately.
-- After each merge, sync the default branch, re-check the queue, and continue until no actionable update remains, no progress is being made, or a real blocker is reached.
+- After each merge, sync the default branch, re-check open dependency-bot PRs and dependency alerts, and continue until no actionable update remains, no progress is being made, or a real blocker is reached.
 
 ### 5. Publish and verify when required
 
@@ -148,6 +152,7 @@ Infer missing inputs from local files and live GitHub state before asking.
 - Verify every dependency PR decision is backed by a fresh `python -m ceratops_gh_current_state pr-readiness` run.
 - Verify live repo settings with `python -m ceratops_gh_current_state repo-health` when repo posture was part of the run.
 - Verify live GitHub state for every dependency PR, alert, merge, check, branch, release, code scanning result, and branch protection gate touched.
+- Verify every dependency-bot PR and dependency alert in the inspected scope is either resolved, merged, blocked, out of scope by explicit task boundary, or intentionally retained with a concrete reason.
 - Verify local state: default branch, worktree, remotes, refs, lockfiles, generated files, temp paths, caches, credentials, and retained branches.
 
 ## Output Contract
