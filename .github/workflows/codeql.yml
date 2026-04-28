@@ -20,6 +20,8 @@ jobs:
     name: analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CODEQL_OVERLAY_DATABASE_MODE: none
     strategy:
       fail-fast: false
       matrix:
