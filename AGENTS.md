@@ -10,6 +10,7 @@ Blocking / Instruction and skill maintenance:
 - Blocking: Before proposing or editing `AGENTS.md`, `automation.toml`, `SKILL.md`, shared skill sections, skill manifests, or helper-contract text, re-open the relevant files from disk and use the current contents as the source of truth.
 - Blocking: Treat recommendations about instruction, automation, skill, and helper-contract changes as advisory unless the user explicitly asks to apply a named change.
 - Blocking: For every new or edited rule line in an instruction file, start the line with `Blocking:`, `Mandatory:`, or `Metadata:`.
+- Blocking: In repo-tracked files intended for public sharing or GitHub, including repo-tracked `AGENTS.md`, `automation.toml`, `SKILL.md`, generated skill blocks, scripts, docs, and examples, do not hardcode user-local absolute filesystem paths unless an external runtime explicitly requires them; use repo-relative paths or portable variables such as `$CODEX_HOME`.
 - Blocking: Prefer concise, principle-based, machine-oriented wording; avoid example lists unless the examples are needed to disambiguate behavior.
 - Blocking: After instruction edits, verify the changed diff or reopened section and confirm no new duplicate, contradiction, or dropped behavior was introduced.
 - Blocking: When an automation uses a script or helper, compare prompt and code before finishing and keep outcome, blocker, cleanup, alert, and memory paths aligned.
