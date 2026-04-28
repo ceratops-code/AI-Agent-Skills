@@ -12,29 +12,31 @@ Validate that an existing GitHub repo is clean, current, secure, documented, pub
 
 ## Core Rules
 
-- Everything in this section is mandatory unless explicitly marked optional or inapplicable.
-- Before completion, verify the work against this `SKILL.md` and any governing files already used in the run. Re-open only files changed in this run or whose current contents remain concretely in doubt.
-- Blocking: Reuse fresh sufficient same-run evidence across adjacent, resumed, or chained workflows when it still proves the current decision; do not reacquire evidence or rerun checks solely to refresh already-sufficient evidence unless state is uncertain, plausibly changed, externally mutable for the decision, materially broadened, or required fresh by a higher-precedence instruction, skill, automation, or completion gate.
-- Blocking: Use local state, local files, local auth, installed tools, and other direct evidence before external sources or assumptions. Check current official docs or other live official sources only when the task depends on unstable external behavior and the available direct evidence still leaves a concrete task-blocking ambiguity or material conflict.
-- Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine runs.
-- Do not update this `SKILL.md` during routine runs unless the user explicitly asked for skill maintenance or the current task cannot be completed safely without a narrow in-scope fix.
-- When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
-- Classify each touched artifact, external entity, and side effect as active, intentionally retained with reason, stale and removed, not applicable, or blocked.
-- In user-facing answers, keep routine success reporting implicit. Omit PR metadata, commit IDs, check lists, cleanup logs, and exact local paths unless they materially change the user's next action, explain a blocker, or were explicitly requested.
-- If any required item is unmet or unverifiable, report the blocker instead of claiming completion.
+- Blocking: Everything in this section is part of the skill contract unless explicitly inapplicable to the current task.
+- Blocking: When this skill is invoked, follow this `SKILL.md` as the workflow contract for the task; if a higher-precedence instruction conflicts with a required skill step, report the conflict instead of silently skipping the step.
+- Blocking: Do not claim completion unless this skill's completion gate is satisfied, intentionally inapplicable, or reported as a blocker.
+- Blocking: Scope completion, current-state, root-cause, no-fix, unsupported, and durable-resolution claims to evidence actually checked, or to fresh same-task evidence that still applies.
+- Blocking: Reuse fresh sufficient same-run evidence unless state is uncertain, plausibly changed, materially broadened, externally mutable for the decision, or this skill explicitly requires a fresh check.
+- Blocking: Prefer direct local evidence and targeted diagnostics for the next skill decision; use current official sources only when local evidence leaves a concrete ambiguity or the task depends on unstable external behavior.
+- Blocking: Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine skill runs unless the user explicitly asks or a required decision remains ambiguous after targeted evidence.
+- Blocking: Ask before risky, destructive, irreversible, credential-dependent, externally mutating, complex, invasive, nonstandard, or high-maintenance steps unless the user already explicitly requested that tradeoff.
+- Blocking: Do not update this `SKILL.md` or other skill/control files during a routine run unless the user explicitly asked for skill maintenance or the task cannot be completed safely without a narrow in-scope fix.
+- Mandatory: When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
+- Mandatory: Follow this skill's output contract when present; otherwise report only the outcome, unresolved blockers, retained state with reasons, and important unverified items.
 
 <!-- SECTION SOURCE: templates/sections/credentials.md -->
 
 ## Credential Handling
 
-- Do not ask for credentials unless they are truly required after local checks.
-- If credentials are truly required after local checks, report only:
+- Blocking: Do not ask for credentials unless they are truly required after local checks.
+- Blocking: If credentials are truly required after local checks, report only:
 
 1. which credential or login is missing
 2. why it is needed
 3. where it will be stored
 4. the exact command the user should run
 5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
+- Blocking: If the user refuses a missing permission, credential, login, or scope, stop retrying and report the blocked action and exact entities still pending.
 
 <!-- SECTION SOURCE: templates/sections/gh-current-state.md -->
 
