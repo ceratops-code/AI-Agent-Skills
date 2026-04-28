@@ -52,7 +52,7 @@ Ship a staged Ceratops skill batch through GitHub, then restore the runtime chec
 
 ## Defaults
 
-- Source repo: `$HOME/CodexProjects/CeratopsSkills/codex-skills`
+- Source repo: `$HOME/CodexProjects/AI-Agent-Skills`
 - Installed Ceratops skill path: `$CODEX_HOME/skills/<skill-name>`
 - Default release branch: `release/local`
 - Local GH helper package install command: `python -m pip install --editable .`
@@ -81,7 +81,7 @@ Ship a staged Ceratops skill batch through GitHub, then restore the runtime chec
 
 ## Boundaries
 
-- Use this skill when working in the `codex-skills` runtime checkout or another skill source repo with the same local runtime-install pattern.
+- Use this skill when working in the `AI-Agent-Skills` runtime checkout or another skill source repo with the same local runtime-install pattern.
 - If the task is creating a brand-new Ceratops skill and not yet staged or shipped, stop and use `$ceratops-skill-create`.
 - If the task is updating existing Ceratops skill contents and not yet staged or shipped, stop and use `$ceratops-skill-update`.
 - If the runtime checkout is not yet staged on the intended `release/*` branch, stop and use `$ceratops-codex-skill-stage-release`.

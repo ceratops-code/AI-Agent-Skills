@@ -12,7 +12,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 if ([string]::IsNullOrWhiteSpace($RuntimeRepoRoot)) {
-    $RuntimeRepoRoot = Join-Path $env:USERPROFILE "CodexProjects\CeratopsSkills\codex-skills"
+    $RuntimeRepoRoot = Join-Path $env:USERPROFILE "CodexProjects\AI-Agent-Skills"
 }
 
 $resolvedRuntimeRepoRoot = (Resolve-Path -LiteralPath $RuntimeRepoRoot).Path
@@ -148,8 +148,7 @@ foreach ($mergeBranch in $MergeBranches) {
 }
 
 if (-not $KeepMergedBranches) {
-    $projectRoot = Split-Path -Parent $resolvedRuntimeRepoRoot
-    $projectWorktreesRoot = Join-Path $projectRoot "worktrees"
+    $projectWorktreesRoot = Join-Path $resolvedRuntimeRepoRoot "worktrees"
 
     foreach ($target in $cleanupTargets) {
         if (-not [string]::IsNullOrWhiteSpace($target.WorktreePath)) {

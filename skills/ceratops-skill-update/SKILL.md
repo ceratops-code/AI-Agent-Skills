@@ -1,6 +1,6 @@
 ---
 name: ceratops-skill-update
-description: Update existing Ceratops skills and the shared skill-maintenance layer in `codex-skills` while keeping ownership clear between per-skill deltas, shared sections, the section manifest, sync or validation scripts, helper runtime claims, and repo docs. Use when the user asks to update Ceratops skills, keep them consistent, add/remove/merge sections, or refresh the supporting sync and validation flow without manually drifting generated skill blocks.
+description: Update existing Ceratops skills and the shared skill-maintenance layer in `AI-Agent-Skills` while keeping ownership clear between per-skill deltas, shared sections, the section manifest, sync or validation scripts, helper runtime claims, and repo docs. Use when the user asks to update Ceratops skills, keep them consistent, add/remove/merge sections, or refresh the supporting sync and validation flow without manually drifting generated skill blocks.
 ---
 
 # Ceratops Skill Update

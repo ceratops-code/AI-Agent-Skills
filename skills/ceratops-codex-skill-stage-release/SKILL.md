@@ -52,7 +52,7 @@ Stage committed skill branches into the runtime checkout's local release branch 
 
 ## Defaults
 
-- Source repo: `$HOME/CodexProjects/CeratopsSkills/codex-skills`
+- Source repo: `$HOME/CodexProjects/AI-Agent-Skills`
 - Installed Ceratops skill path: `$CODEX_HOME/skills/<skill-name>`
 - Default release branch: `release/local`
 - Runtime installer: `powershell -ExecutionPolicy Bypass -File .\\scripts\\install-skills.ps1`

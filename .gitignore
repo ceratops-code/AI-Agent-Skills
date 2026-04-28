@@ -7,5 +7,6 @@ dist/
 build/
 *.egg-info/
 *.log
+worktrees/
 .DS_Store
 Thumbs.db
