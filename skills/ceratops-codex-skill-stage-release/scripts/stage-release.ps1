@@ -148,8 +148,7 @@ foreach ($mergeBranch in $MergeBranches) {
 }
 
 if (-not $KeepMergedBranches) {
-    $projectRoot = Split-Path -Parent $resolvedRuntimeRepoRoot
-    $projectWorktreesRoot = Join-Path $projectRoot "worktrees"
+    $projectWorktreesRoot = Join-Path $resolvedRuntimeRepoRoot "worktrees"
 
     foreach ($target in $cleanupTargets) {
         if (-not [string]::IsNullOrWhiteSpace($target.WorktreePath)) {
