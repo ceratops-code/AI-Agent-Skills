@@ -60,6 +60,8 @@ Stage committed skill branches into the runtime checkout's local release branch 
 ## Skill-Specific Rules
 
 - Stage only committed task-worktree branches. Do not use this skill as a substitute for intentional commits on the source branches.
+- Blocking: Before reporting a staged release branch as ready to ship or invoking `$ceratops-gh-codex-skill-ship`, check remaining local worktrees and local branches for staged, unstaged, untracked, or committed work that is not included in the release branch.
+- Blocking: If another local branch or worktree has work not included in the release branch, stop before shipping and ask whether to commit and stage it into the same release, intentionally retain it for later, or clean it up; do not decide silently.
 - After a branch is successfully merged into the local release branch, remove that branch's task worktree and local source branch automatically when safe; use `-KeepMergedBranches` only when there is an explicit active-workflow reason and report that reason.
 - After a squash-merged ship, recreate or rebase long-lived task branches from updated `main` before staging more work. Do not re-merge a branch whose earlier contents already landed on `main` via squash.
 - Use `--reset` staging when rebuilding the release branch from `main` is cheaper or safer than untangling partial staged state.
@@ -67,6 +69,7 @@ Stage committed skill branches into the runtime checkout's local release branch 
 ## Script Bundle
 
 - Release-branch staging helper: `scripts/stage-release.ps1`
+- Pending local work check: `scripts/check-pending-release-work.ps1`
 
 ## Inputs To Capture
 
@@ -74,6 +77,7 @@ Stage committed skill branches into the runtime checkout's local release branch 
 - The runtime checkout path and intended local `release/*` branch.
 - Whether the release branch should append more branches or be rebuilt from `main`.
 - Any explicit reason to keep a merged source task branch or task worktree after staging.
+- Any other local worktree or branch with staged, unstaged, untracked, or committed work not included in the intended release branch.
 - Local validation expectations for the staged batch.
 
 Infer missing inputs from local repo state before asking.
@@ -91,6 +95,7 @@ Infer missing inputs from local repo state before asking.
 ### 1. Inspect source and runtime state
 
 - Inspect the source worktree branches, runtime checkout branch, installed junction state, and any duplicated installed copies.
+- Blocking: Inspect remaining local worktrees and local branches before ship handoff so non-staged work is not silently left behind.
 - Confirm each branch to stage is intentionally committed and available to the shared repo.
 - Refresh remote refs with `git fetch --prune origin` before judging whether `origin/release/*` still exists or whether a prior staged branch or PR was already cleaned up.
 - Assume the next ship will reuse the same `release/*` branch name remotely unless the user explicitly chose a different branch-naming scheme.
@@ -114,6 +119,8 @@ Infer missing inputs from local repo state before asking.
 
 ### 5. Report the staged state
 
+- Blocking: Run `scripts/check-pending-release-work.ps1` against the runtime checkout and intended release branch before reporting the batch as ship-ready or continuing to `$ceratops-gh-codex-skill-ship`.
+- Blocking: If the pending-work check reports any other dirty worktree, untracked work, staged work, unstaged work, or branch commits outside the release branch, stop before shipping and ask the user whether to include, retain, or clean up that work.
 - Report the active local `release/*` branch, the staged task branches, and any blockers that still prevent shipping.
 - Leave the runtime checkout on the staged release branch only when the batch is intentionally active.
 
@@ -121,6 +128,7 @@ Infer missing inputs from local repo state before asking.
 
 - Verify the runtime checkout is on the intended local `release/*` branch.
 - Verify each requested task branch was staged and its source worktree and local branch were removed, or a blocker or explicit retention reason was reported precisely.
+- Blocking: Verify the pending local work check passed before ship handoff, or every reported non-staged branch or worktree is covered by an explicit user choice, retention reason, or blocker.
 - Verify the installed skill paths resolve to the runtime checkout.
 - Verify the local validation batch passed or the blocking failures were reported.
 
@@ -130,7 +138,7 @@ Report only:
 
 - the active local release branch and staged task branches
 - unresolved blockers or non-blocking debt
-- intentionally retained runtime state with reasons
+- intentionally retained runtime state, branches, or worktrees with reasons
 - anything important not verified
 
 ## Example Invocation
