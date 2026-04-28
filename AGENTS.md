@@ -1,0 +1,17 @@
+Metadata: Project-specific rules for the `codex-skills` repository.
+
+Blocking / Runtime checkout and worktrees:
+- Blocking: The primary `codex-skills` runtime checkout that installed Ceratops skill junctions resolve to must stay either on local `main` tracking `origin/main` or on a local `release/*` branch created from `main` for an active unpublished batch.
+- Blocking: Do not develop or patch Ceratops skill source directly in the runtime checkout during create, update, audit, or repair work; for any task that modifies skills, work in one thread-owned git worktree, name that worktree after the thread rather than a subtask, reuse it for follow-on skill changes in the same thread unless conflicting branch histories or explicit user direction require a new one, and do not place it inside the runtime checkout.
+- Blocking: Keep installed Ceratops skill junctions and the editable GH helper package pointed at the runtime checkout path, not at task worktrees. For local preview of unpublished batches, refresh remote refs with `git fetch --prune origin`, then merge ready worktree branches into the runtime checkout's local `release/*` branch and rerun the runtime install instead of pointing runtime paths at task worktrees.
+- Blocking: Before closing a skill-modifying task, do not stage or merge local skill-source changes into the active local `release/*` batch unless the user explicitly asked for staging, shipping, or runtime-preview sync for that task. Exception: when the task's primary goal is creating a brand-new Ceratops skill through `$ceratops-skill-create`, local staging into the active `release/*` batch is part of completion unless the user explicitly opts out. When staging is required, do it with `$ceratops-codex-skill-stage-release` and verify the runtime install there, or ship the active `release/*` batch through the Ceratops GitHub skill flow. After shipping a batch, update the runtime checkout from `origin/main`, verify installed skills resolve to the runtime checkout, and remove no-longer-needed task worktrees and release branches unless there is an explicit reason to keep them.
+
+Blocking / Instruction and skill maintenance:
+- Blocking: Before proposing or editing `AGENTS.md`, `automation.toml`, `SKILL.md`, shared skill sections, skill manifests, or helper-contract text, re-open the relevant files from disk and use the current contents as the source of truth.
+- Blocking: Treat recommendations about instruction, automation, skill, and helper-contract changes as advisory unless the user explicitly asks to apply a named change.
+- Blocking: For every new or edited rule line in an instruction file, start the line with `Blocking:`, `Mandatory:`, or `Metadata:`.
+- Blocking: Prefer concise, principle-based, machine-oriented wording; avoid example lists unless the examples are needed to disambiguate behavior.
+- Blocking: After instruction edits, verify the changed diff or reopened section and confirm no new duplicate, contradiction, or dropped behavior was introduced.
+- Blocking: When an automation uses a script or helper, compare prompt and code before finishing and keep outcome, blocker, cleanup, alert, and memory paths aligned.
+- Blocking: Put deterministic, testable, or procedural automation behavior in scripts or helpers rather than prompt text when such helpers exist.
+- Blocking: When updating an automation, skill, instruction, or related helper script, assess whether the change could materially increase recurring or avoidable credit usage; if so, report that before treating the update as done.
