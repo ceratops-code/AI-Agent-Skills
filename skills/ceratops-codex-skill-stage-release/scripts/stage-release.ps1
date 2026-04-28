@@ -148,7 +148,11 @@ foreach ($mergeBranch in $MergeBranches) {
 }
 
 if (-not $KeepMergedBranches) {
-    $projectWorktreesRoot = Join-Path $resolvedRuntimeRepoRoot "worktrees"
+    $repoName = Split-Path -Leaf $resolvedRuntimeRepoRoot
+    $projectWorktreesRoots = @(
+        (Join-Path $resolvedRuntimeRepoRoot "worktrees"),
+        (Join-Path (Split-Path -Parent $resolvedRuntimeRepoRoot) "worktrees\$repoName")
+    )
 
     foreach ($target in $cleanupTargets) {
         if (-not [string]::IsNullOrWhiteSpace($target.WorktreePath)) {
@@ -156,11 +160,15 @@ if (-not $KeepMergedBranches) {
             if ($resolvedWorktreePath -ieq $resolvedRuntimeRepoRoot) {
                 throw "Refusing to remove runtime checkout worktree for branch '$($target.Branch)'."
             }
-            if (-not (Test-Path -LiteralPath $projectWorktreesRoot)) {
-                throw "Expected project worktree root '$projectWorktreesRoot' before removing '$resolvedWorktreePath'."
+            $allowedRoot = $null
+            foreach ($candidateRoot in $projectWorktreesRoots) {
+                if ((Test-Path -LiteralPath $candidateRoot) -and (Test-IsUnderPath -Path $resolvedWorktreePath -ParentPath $candidateRoot)) {
+                    $allowedRoot = (Resolve-Path -LiteralPath $candidateRoot).Path
+                    break
+                }
             }
-            if (-not (Test-IsUnderPath -Path $resolvedWorktreePath -ParentPath $projectWorktreesRoot)) {
-                throw "Refusing to remove worktree outside '$projectWorktreesRoot': $resolvedWorktreePath"
+            if ([string]::IsNullOrWhiteSpace($allowedRoot)) {
+                throw "Refusing to remove worktree outside allowed project worktree roots: $resolvedWorktreePath"
             }
             Invoke-Git @("worktree", "remove", $resolvedWorktreePath)
         }
