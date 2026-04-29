@@ -10,67 +10,35 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+if ($MainBranch -ne "main") {
+    throw "The centralized restore-runtime-main helper supports only the main branch."
+}
+
 if ([string]::IsNullOrWhiteSpace($RuntimeRepoRoot)) {
-    $RuntimeRepoRoot = Join-Path $env:USERPROFILE "CodexProjects\AI-Agent-Skills"
+    $RuntimeRepoRoot = Join-Path $PSScriptRoot "..\..\.."
 }
 
 $resolvedRuntimeRepoRoot = (Resolve-Path -LiteralPath $RuntimeRepoRoot).Path
+$scriptPath = Join-Path $resolvedRuntimeRepoRoot "scripts\restore-runtime-main.ps1"
+if (-not (Test-Path -LiteralPath $scriptPath)) {
+    throw "Could not find centralized runtime restore helper at '$scriptPath'."
+}
 
-function Invoke-Git {
-    param([string[]]$Arguments)
+$arguments = @("-MainBranch", $MainBranch, "-ReleaseBranch", $ReleaseBranch)
+if ($DropReleaseBranch) {
+    $arguments += "-DropReleaseBranch"
+}
+if ($KeepReleaseBranch) {
+    $arguments += "-KeepReleaseBranch"
+}
 
-    & git -C $resolvedRuntimeRepoRoot @Arguments
+Push-Location -LiteralPath $resolvedRuntimeRepoRoot
+try {
+    & $scriptPath @arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "git failed: $($Arguments -join ' ')"
+        exit $LASTEXITCODE
     }
 }
-
-function Get-GitOutput {
-    param([string[]]$Arguments)
-
-    $output = & git -C $resolvedRuntimeRepoRoot @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "git failed: $($Arguments -join ' ')"
-    }
-    return ($output -join "`n").Trim()
+finally {
+    Pop-Location
 }
-
-$status = Get-GitOutput @("status", "--porcelain")
-if (-not [string]::IsNullOrWhiteSpace($status)) {
-    throw "Runtime checkout '$resolvedRuntimeRepoRoot' has uncommitted changes. Clean or commit them before restoring main."
-}
-
-Invoke-Git @("checkout", $MainBranch)
-Invoke-Git @("pull", "--ff-only", "origin", $MainBranch)
-
-if ($DropReleaseBranch -or -not $KeepReleaseBranch) {
-    & git -C $resolvedRuntimeRepoRoot show-ref --verify --quiet "refs/heads/$ReleaseBranch"
-    if ($LASTEXITCODE -eq 0) {
-        & git -C $resolvedRuntimeRepoRoot merge-base --is-ancestor $ReleaseBranch $MainBranch
-        $branchIsMerged = ($LASTEXITCODE -eq 0)
-        $treesMatch = $false
-
-        if (-not $branchIsMerged) {
-            & git -C $resolvedRuntimeRepoRoot diff --quiet $MainBranch $ReleaseBranch
-            $treesMatch = ($LASTEXITCODE -eq 0)
-        }
-
-        if ($branchIsMerged -or $treesMatch) {
-            Invoke-Git @("branch", "-D", $ReleaseBranch)
-        }
-        else {
-            throw "Release branch '$ReleaseBranch' is neither merged into '$MainBranch' nor tree-identical to it."
-        }
-    }
-}
-
-& powershell -ExecutionPolicy Bypass -File (Join-Path $resolvedRuntimeRepoRoot "scripts\install-skills.ps1") -RepoRoot $resolvedRuntimeRepoRoot
-if ($LASTEXITCODE -ne 0) {
-    throw "Runtime installer failed after restoring '$MainBranch'."
-}
-
-$activeBranch = Get-GitOutput @("branch", "--show-current")
-$head = Get-GitOutput @("rev-parse", "HEAD")
-
-Write-Host "Runtime checkout restored to: $activeBranch"
-Write-Host "HEAD: $head"
