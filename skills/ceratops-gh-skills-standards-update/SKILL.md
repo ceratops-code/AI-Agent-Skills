@@ -54,7 +54,7 @@ Audit the Ceratops GitHub skill family deliberately instead of letting normal GH
 
 - For this skill, the shared section rule against generalized best-practice refresh during routine runs is inapplicable. Routine runs must perform a bounded standards refresh across GitHub repo-management concepts, workflow hardening, and the artifact-publishing surfaces that the Ceratops GH skill family actually claims to cover.
 - Do not use this skill to audit or repair the health of a specific repository. Use `$ceratops-gh-repo-health-audit` for repo-health checks, and use live GitHub, registry, official-doc, or reference-repo evidence here only when needed to decide whether a Ceratops GH skill-family claim is current.
-- Build the baseline from current official docs, live product behavior, and 2-3 current public third-party GitHub reference repositories that are relevant to the standards question. Use `gh`, GitHub API, package metadata, and registry endpoints as supporting evidence, and inspect reference repositories only as examples of current patterns rather than as health-audit targets.
+- Blocking: Build the baseline from current official docs, live product behavior, and 2-3 current public third-party GitHub reference repositories that are relevant to the standards question. Use `gh`, GitHub API, package metadata, and registry endpoints as supporting evidence, inspect reference repositories only as examples of current patterns rather than as health-audit targets, and separate no-extra-cost defaults from paid GitHub Code Security or Secret Protection features.
 - Treat artifact surfaces as in scope only when the GH skill family, repo docs, or helper claims actually touch them, using the artifact boundary defined by `ceratops-gh-repo-create-and-publish` and `ceratops-gh-ship-change`.
 - Separate the baseline from the Ceratops delta: first decide what current best practice says, then inspect whether `skills/ceratops-gh-*`, shared section wording or assignments, helper-runtime claims, and repo docs are stale.
 - Keep detailed audit checklists in `references/` rather than bloating `SKILL.md`.
@@ -63,7 +63,7 @@ Audit the Ceratops GitHub skill family deliberately instead of letting normal GH
 ## Inputs To Capture
 
 - Whether the run is routine automation upkeep or an explicit user-requested GH-skill refresh.
-- Current target scope inside `AI-Agent-Skills`: `skills/ceratops-gh-*`, `templates/sections/`, `templates/skill-sections.json`, `scripts/sync-skill-sections.py`, `scripts/validate-skills.py`, `src/ceratops_gh_current_state/`, and repo docs.
+- Blocking: Current target scope inside `AI-Agent-Skills`: `skills/ceratops-gh-*`, `templates/sections/`, `templates/skill-sections.json`, `references/`, `scripts/sync-skill-sections.py`, `scripts/validate-skills.py`, `src/ceratops_gh_current_state/`, and repo docs.
 - Which best-practice surfaces are actually in scope: GitHub repo-content expectations, repo-settings concepts, workflow hardening, release posture, artifact types supported by `ceratops-gh-repo-create-and-publish` or `ceratops-gh-ship-change`, or a documented no-artifact posture.
 - The reference repositories used for standards comparison and which specific standards question each one informed.
 - Whether current findings stay inside safe minor updates or cross the approval boundary.
@@ -88,13 +88,13 @@ Infer missing inputs from local repo state, installed skill state, live GitHub e
 
 ### 2. Build the current best-practice baseline
 
-- Read `references/best-practice-baseline.md` at the start of the audit and use it as the bounded checklist for the next evidence-gathering steps.
+- Blocking: Read `references/best-practice-baseline.md` at the start of the audit and use it as the bounded checklist for the next evidence-gathering steps.
 - Use local files, `gh`, GitHub API, `gh` help, package metadata, release metadata, and registry endpoints as the first-pass evidence for the GitHub or artifact behavior that the GH skill family encodes.
 - Check current official GitHub docs for repository-management settings, workflow policy, rulesets, actions, security, release behavior, and repository-content expectations wherever the next best-practice decision depends on them.
 - Check current official Docker, GHCR, PyPI, or Python packaging docs only for artifact surfaces that are actually in scope.
 ### 3. Audit the GH skill family
 
-- Review `skills/ceratops-gh-*`, `templates/sections/`, `templates/skill-sections.json`, `scripts/sync-skill-sections.py`, `scripts/validate-skills.py`, and `src/ceratops_gh_current_state/` only where a GH-skill claim depends on them.
+- Blocking: Review `skills/ceratops-gh-*`, `templates/sections/`, `templates/skill-sections.json`, `references/`, `scripts/sync-skill-sections.py`, `scripts/validate-skills.py`, and `src/ceratops_gh_current_state/` only where a GH-skill claim depends on them.
 - Look for duplicate guidance, contradictory defaults, stale GitHub setting names, stale required-file assumptions, stale repository-health expectations, stale workflow hardening guidance, stale artifact-publishing guidance, partial follow-through, or logic that belongs in a shared section instead of a single skill.
 - Keep repo docs aligned when stale: `README.md`, `CONTRIBUTING.md`, and `CHANGELOG.md`.
 

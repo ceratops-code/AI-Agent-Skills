@@ -58,6 +58,58 @@ def active_branch_rulesets(rulesets: object) -> list[dict[str, object]]:
     return active
 
 
+def add_endpoint_enabled(
+    findings: list[Finding],
+    result_check: str,
+    endpoint_label: str,
+    result: object,
+    *,
+    failure_level: str = "FAIL",
+) -> None:
+    if isinstance(result, tuple):
+        ok, stderr_or_status = result
+    else:
+        ok = bool(getattr(result, "ok"))
+        stderr_or_status = getattr(result, "stderr") or getattr(result, "status")
+
+    if ok:
+        add(findings, "PASS", result_check, f"{endpoint_label} enabled.")
+    else:
+        add(
+            findings,
+            failure_level,
+            result_check,
+            f"{endpoint_label} is not enabled or could not be verified.",
+            actual=stderr_or_status,
+            expected="enabled",
+        )
+
+
+def add_security_status(
+    findings: list[Finding],
+    check_name: str,
+    security: dict[str, object],
+    *,
+    required_for_public: bool,
+    repo_info: dict[str, object],
+) -> None:
+    status = (security.get(check_name) or {}).get("status") if isinstance(security.get(check_name), dict) else None
+    is_public = not bool(repo_info.get("private"))
+    if status == "enabled":
+        add(findings, "PASS", check_name, f"{check_name} is enabled.", actual=status)
+    elif required_for_public and is_public:
+        add(findings, "FAIL", check_name, f"{check_name} should be enabled for public repos.", actual=status, expected="enabled")
+    else:
+        add(
+            findings,
+            "INFO",
+            check_name,
+            f"{check_name} is disabled or unavailable. Treat this as a paid GitHub Secret Protection or Code Security requirement unless a live plan shows it is available at no extra cost.",
+            actual=status,
+            expected="enabled when the repo has the required paid security product",
+        )
+
+
 def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object], list[Finding]]:
     repo_info_result = gh_api(f"repos/{repo}", cwd=cwd)
     if not repo_info_result.ok or not isinstance(repo_info_result.data, dict):
@@ -70,6 +122,7 @@ def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object],
     owner_type = owner.get("type")
     is_public = not bool(repo_info.get("private"))
     is_archived = bool(repo_info.get("archived"))
+    is_fork = bool(repo_info.get("fork"))
 
     actions_permissions_result = gh_api(f"repos/{repo}/actions/permissions", cwd=cwd)
     if actions_permissions_result.ok and isinstance(actions_permissions_result.data, dict):
@@ -97,7 +150,7 @@ def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object],
 
     profile_result = gh_api(f"repos/{repo}/community/profile", cwd=cwd)
     profile = profile_result.data if profile_result.ok and isinstance(profile_result.data, dict) else {}
-    if is_public and owner_type == "Organization" and not is_archived:
+    if is_public and owner_type == "Organization" and not is_archived and not is_fork:
         if not profile_result.ok:
             add(
                 findings,
@@ -125,8 +178,8 @@ def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object],
             findings,
             "SKIP",
             "content_reports_enabled",
-            "Reported-content moderation is only enforced for non-archived organization-owned public repos.",
-            actual={"owner_type": owner_type, "private": repo_info.get("private"), "archived": is_archived},
+            "Reported-content moderation is only enforced for non-archived, non-fork, organization-owned public repos.",
+            actual={"owner_type": owner_type, "private": repo_info.get("private"), "archived": is_archived, "fork": is_fork},
         )
 
     protection_result = gh_api(f"repos/{repo}/branches/{default_branch}/protection", cwd=cwd)
@@ -258,6 +311,30 @@ def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object],
                 add(findings, "FAIL", check_name, message, actual=value, expected=expected)
 
     security = repo_info.get("security_and_analysis") or {}
+    if not is_archived:
+        add_endpoint_enabled(
+            findings,
+            "dependency_graph",
+            "Dependency graph",
+            gh_api(f"repos/{repo}/dependency-graph/sbom", cwd=cwd),
+        )
+        add_endpoint_enabled(
+            findings,
+            "dependabot_alerts",
+            "Dependabot alerts",
+            gh_api(f"repos/{repo}/vulnerability-alerts", cwd=cwd),
+        )
+        add_endpoint_enabled(
+            findings,
+            "dependabot_security_updates",
+            "Dependabot security updates",
+            gh_api(f"repos/{repo}/automated-security-fixes", cwd=cwd),
+        )
+    else:
+        add(findings, "SKIP", "dependency_graph", "Archived repos do not require active dependency graph checks.")
+        add(findings, "SKIP", "dependabot_alerts", "Archived repos do not require active Dependabot alert checks.")
+        add(findings, "SKIP", "dependabot_security_updates", "Archived repos do not require active Dependabot security updates.")
+
     if is_public and not is_archived:
         code_scanning_result = gh_api(f"repos/{repo}/code-scanning/default-setup", cwd=cwd)
         if code_scanning_result.ok and isinstance(code_scanning_result.data, dict):
@@ -293,25 +370,37 @@ def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object],
                 actual=code_scanning_result.stderr or code_scanning_result.status,
                 expected="configured or explicit custom setup",
             )
-        for check_name, api_key, expected in (
-            ("secret_scanning", "secret_scanning", "enabled"),
-            ("secret_scanning_push_protection", "secret_scanning_push_protection", "enabled"),
-            ("dependabot_security_updates", "dependabot_security_updates", "enabled"),
-        ):
-            status = (security.get(api_key) or {}).get("status")
-            if status == expected:
-                add(findings, "PASS", check_name, f"{check_name} is enabled.", actual=status)
-            else:
-                add(
-                    findings,
-                    "FAIL",
-                    check_name,
-                    f"{check_name} should be enabled for public repos.",
-                    actual=status,
-                    expected=expected,
-                )
+        add_security_status(findings, "secret_scanning", security, required_for_public=True, repo_info=repo_info)
+        add_security_status(findings, "secret_scanning_push_protection", security, required_for_public=True, repo_info=repo_info)
     else:
-        add(findings, "SKIP", "security_and_analysis", "Security-setting enforcement is only applied to non-archived public repos.")
+        add(
+            findings,
+            "SKIP",
+            "code_scanning_default_setup",
+            "Code scanning is only enforced for public repos unless GitHub Code Security is available for the private or internal repo.",
+            actual={"private": repo_info.get("private"), "archived": is_archived},
+        )
+        if not is_archived:
+            add_security_status(findings, "secret_scanning", security, required_for_public=False, repo_info=repo_info)
+            add_security_status(findings, "secret_scanning_push_protection", security, required_for_public=False, repo_info=repo_info)
+        else:
+            add(findings, "SKIP", "secret_scanning", "Archived repos do not require active secret scanning checks.")
+            add(findings, "SKIP", "secret_scanning_push_protection", "Archived repos do not require active push protection checks.")
+
+    if not is_archived:
+        for optional_check in (
+            "secret_scanning_non_provider_patterns",
+            "secret_scanning_validity_checks",
+            "secret_scanning_generic_secrets",
+        ):
+            add_security_status(findings, optional_check, security, required_for_public=False, repo_info=repo_info)
+    else:
+        for optional_check in (
+            "secret_scanning_non_provider_patterns",
+            "secret_scanning_validity_checks",
+            "secret_scanning_generic_secrets",
+        ):
+            add(findings, "SKIP", optional_check, f"Archived repos do not require active {optional_check} checks.")
 
     for check_name, field_name, expectation in (
         ("allow_auto_merge", "allow_auto_merge", True),
@@ -363,6 +452,7 @@ def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object],
         "owner_type": owner_type,
         "default_branch": default_branch,
         "archived": is_archived,
+        "fork": is_fork,
     }
     return summary, findings
 
