@@ -1,6 +1,6 @@
 # Best-Practice Baseline
 
-Use this file as the bounded audit map for `ceratops-gh-skills-standards-update`. It is a checklist, not a frozen truth source. When the next decision matters, confirm the current state from official docs, live GitHub behavior, package metadata, registry endpoints, and 2-3 current public third-party GitHub reference repositories relevant to the standards question.
+Use this file as the bounded audit map for `ceratops-gh-skills-standards-update`. It is a checklist, not a frozen truth source. When the next decision matters, confirm the current state from the evidence sources required by the skill.
 
 ## 1. GitHub Repo Contract
 
@@ -63,6 +63,6 @@ Use this file as the bounded audit map for `ceratops-gh-skills-standards-update`
 
 ## 6. Reference Repository Use
 
-- Use reference repositories as standards comparators only; do not audit or repair their repo health.
-- Pick 2-3 current public third-party GitHub repositories that visibly exercise the standards surface under review, such as workflow hardening, release posture, community files, or artifact publishing.
+- Use the skill-required reference repositories as standards comparators only; do not audit or repair their repo health.
+- Prefer repositories that visibly exercise the standards surface under review, such as workflow hardening, release posture, community files, or artifact publishing.
 - Inspect only the files, metadata, visible settings, or release artifacts needed for the standards question, and record which question each reference repository informed.

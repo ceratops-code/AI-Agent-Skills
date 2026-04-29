@@ -65,7 +65,7 @@ Audit the Ceratops GitHub skill family deliberately instead of letting normal GH
 - Whether the run is routine automation upkeep or an explicit user-requested GH-skill refresh.
 - Current target scope inside `AI-Agent-Skills`: `skills/ceratops-gh-*`, `templates/sections/`, `templates/skill-sections.json`, `scripts/sync-skill-sections.py`, `scripts/validate-skills.py`, `src/ceratops_gh_current_state/`, and repo docs.
 - Which best-practice surfaces are actually in scope: GitHub repo-content expectations, repo-settings concepts, workflow hardening, release posture, artifact types supported by `ceratops-gh-repo-create-and-publish` or `ceratops-gh-ship-change`, or a documented no-artifact posture.
-- Which 2-3 current public third-party GitHub reference repositories were used for standards comparison, and which specific standards question each one informed.
+- The reference repositories used for standards comparison and which specific standards question each one informed.
 - Whether current findings stay inside safe minor updates or cross the approval boundary.
 - Whether the current task should only stage updates into the active local `release/*` batch or also ship them through GitHub now.
 
@@ -92,8 +92,6 @@ Infer missing inputs from local repo state, installed skill state, live GitHub e
 - Use local files, `gh`, GitHub API, `gh` help, package metadata, release metadata, and registry endpoints as the first-pass evidence for the GitHub or artifact behavior that the GH skill family encodes.
 - Check current official GitHub docs for repository-management settings, workflow policy, rulesets, actions, security, release behavior, and repository-content expectations wherever the next best-practice decision depends on them.
 - Check current official Docker, GHCR, PyPI, or Python packaging docs only for artifact surfaces that are actually in scope.
-- Use 2-3 strong current public third-party GitHub reference repos as standards examples for concrete GitHub workflow, security, release, or packaging patterns; inspect only the files, metadata, or visible settings relevant to the current standards question, and do not report those repositories as repo-health targets.
-
 ### 3. Audit the GH skill family
 
 - Review `skills/ceratops-gh-*`, `templates/sections/`, `templates/skill-sections.json`, `scripts/sync-skill-sections.py`, `scripts/validate-skills.py`, and `src/ceratops_gh_current_state/` only where a GH-skill claim depends on them.
