@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Added GitHub code-security configuration, Dependabot alert, dependency graph, and optional paid secret-scanning add-on coverage to the GH repo-health and standards-update guidance.
+- Added GitHub code-security configuration, Dependabot alert, dependency graph, and optional paid or churn-prone security add-on coverage to the GH repo-health and standards-update guidance.
 - Added the missing GH standards best-practice baseline reference file used by `ceratops-gh-skills-standards-update`.
 - Clarified that `ceratops-gh-skills-standards-update` owns standards upkeep only, not per-repo health audits, and added bounded third-party GitHub reference-repo comparison to its baseline workflow.
 - Added linked-artifact metadata permission checks to the GH skills standards baseline for GitHub Actions attestation workflows.

@@ -335,6 +335,48 @@ def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object],
         add(findings, "SKIP", "dependabot_alerts", "Archived repos do not require active Dependabot alert checks.")
         add(findings, "SKIP", "dependabot_security_updates", "Archived repos do not require active Dependabot security updates.")
 
+    if owner_type == "Organization" and not is_archived:
+        configuration_result = gh_api(f"repos/{repo}/code-security-configuration", cwd=cwd)
+        if configuration_result.ok and isinstance(configuration_result.data, dict):
+            configuration = configuration_result.data.get("configuration") or configuration_result.data
+            add(
+                findings,
+                "PASS",
+                "code_security_configuration",
+                "A code security configuration is attached to the repository.",
+                actual={
+                    "name": configuration.get("name") if isinstance(configuration, dict) else None,
+                    "dependency_graph_autosubmit_action": (
+                        configuration.get("dependency_graph_autosubmit_action") if isinstance(configuration, dict) else None
+                    ),
+                },
+            )
+        elif configuration_result.ok:
+            add(
+                findings,
+                "INFO",
+                "code_security_configuration",
+                "No code security configuration is attached to this repository. Prefer org defaults and attachment for org-wide or new-repo security posture when org security-manager access is available.",
+                expected="attached code security configuration for org-wide posture management",
+            )
+        else:
+            add(
+                findings,
+                "WARN",
+                "code_security_configuration",
+                "Could not verify whether a code security configuration is attached.",
+                actual=configuration_result.stderr or configuration_result.status,
+                expected="attached configuration or intentional unmanaged repo settings",
+            )
+    else:
+        add(
+            findings,
+            "SKIP",
+            "code_security_configuration",
+            "Code security configuration attachment is only checked for non-archived organization repositories.",
+            actual={"owner_type": owner_type, "archived": is_archived},
+        )
+
     if is_public and not is_archived:
         code_scanning_result = gh_api(f"repos/{repo}/code-scanning/default-setup", cwd=cwd)
         if code_scanning_result.ok and isinstance(code_scanning_result.data, dict):
@@ -392,6 +434,7 @@ def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object],
             "secret_scanning_non_provider_patterns",
             "secret_scanning_validity_checks",
             "secret_scanning_generic_secrets",
+            "secret_scanning_extended_metadata",
         ):
             add_security_status(findings, optional_check, security, required_for_public=False, repo_info=repo_info)
     else:
@@ -399,6 +442,7 @@ def repo_health(repo: str, cwd: pathlib.Path | None) -> tuple[dict[str, object],
             "secret_scanning_non_provider_patterns",
             "secret_scanning_validity_checks",
             "secret_scanning_generic_secrets",
+            "secret_scanning_extended_metadata",
         ):
             add(findings, "SKIP", optional_check, f"Archived repos do not require active {optional_check} checks.")
 
