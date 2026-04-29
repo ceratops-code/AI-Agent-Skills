@@ -21,6 +21,8 @@ Audit the Ceratops GitHub skill family deliberately instead of letting normal GH
 - Blocking: Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine skill runs unless the user explicitly asks or a required decision remains ambiguous after targeted evidence.
 - Blocking: Ask before risky, destructive, irreversible, credential-dependent, externally mutating, complex, invasive, nonstandard, or high-maintenance steps unless the user already explicitly requested that tradeoff.
 - Blocking: Do not update this `SKILL.md` or other skill/control files during a routine run unless the user explicitly asked for skill maintenance or the task cannot be completed safely without a narrow in-scope fix.
+- Blocking: For skill runtime workflows, invoke shared helpers through installed console commands or `python -m <module>` entrypoints; do not locate shared helpers by absolute paths, by the repo's parent directory, or by per-skill `scripts` junctions.
+- Blocking: When a Ceratops skill-maintenance workflow explicitly needs a repo-maintenance script, treat `scripts/<name>` paths as relative to the active `AI-Agent-Skills` checkout root; resolve that root from the current worktree with `git rev-parse --show-toplevel` or from the installed skill junction under `$CODEX_HOME/skills/<skill-name>`, and stop as blocked if neither resolves to a checkout containing `skills/`, `templates/`, and `scripts/`.
 - Mandatory: When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
 - Mandatory: Follow this skill's output contract when present; otherwise report only the outcome, unresolved blockers, retained state with reasons, and important unverified items.
 
@@ -115,7 +117,7 @@ Infer missing inputs from local repo state, installed skill state, live GitHub e
 - Apply safe file-reference updates when standard repo files, GitHub settings, workflow surfaces, or artifact-publish expectations were added, removed, or renamed.
 - Apply low-risk deduplication or refactoring inside the GH skill family that preserves behavior and clarifies ownership between the shared sections, this skill, and artifact-specific task skills.
 - Add or update bounded reference material when the skill needs a checklist that would otherwise bloat `SKILL.md`.
-- Do not edit the runtime checkout directly. For repo changes, work in a dedicated worktree under the owning project folder.
+- Blocking: Do not edit the runtime checkout directly. For repo changes, use the worktree path required by the active repo-level instructions for the `AI-Agent-Skills` checkout.
 - Do not apply new or stricter default GitHub policy, changed merge or review posture, changed security posture, new mandatory paid features, widened scope beyond `ceratops-gh-*`, or GH helper-runtime changes that materially alter live-check behavior without explicit approval.
 
 ### 5. Validate and align

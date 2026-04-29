@@ -1,5 +1,8 @@
 param(
-    [string]$ReleaseBranch = "release/local"
+    [string]$MainBranch = "main",
+    [string]$ReleaseBranch = "release/local",
+    [switch]$DropReleaseBranch,
+    [switch]$KeepReleaseBranch
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,14 +51,14 @@ if ($status) {
 }
 
 Invoke-Git "fetch" "--prune" "origin"
-Invoke-Git "switch" "main"
-Invoke-Git "merge" "--ff-only" "origin/main"
+Invoke-Git "switch" $MainBranch
+Invoke-Git "merge" "--ff-only" "origin/$MainBranch"
 
-if (Test-BranchExists $ReleaseBranch) {
-    & git merge-base --is-ancestor $ReleaseBranch "main"
+if (($DropReleaseBranch -or -not $KeepReleaseBranch) -and (Test-BranchExists $ReleaseBranch)) {
+    & git merge-base --is-ancestor $ReleaseBranch $MainBranch
     $merged = $LASTEXITCODE -eq 0
 
-    & git diff --quiet "main" $ReleaseBranch
+    & git diff --quiet $MainBranch $ReleaseBranch
     $treeIdentical = $LASTEXITCODE -eq 0
 
     if ($merged -or $treeIdentical) {
