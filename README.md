@@ -43,6 +43,8 @@ templates/
     gh-findings.md
     release-branch-runtime.md
     thread-first-step.md
+references/
+  best-practice-baseline.md
 src/
   ceratops_gh_current_state/
     __main__.py
