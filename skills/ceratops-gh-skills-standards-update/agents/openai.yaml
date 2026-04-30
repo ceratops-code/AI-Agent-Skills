@@ -1,6 +1,6 @@
 interface:
   display_name: "Ceratops GH Skills Standards Update"
-  short_description: "Audit GH skills against current standards and artifact best practices"
+  short_description: "Audit GH skills and propose standards updates"
   icon_small: "../../assets/ceratops-logo-500.png"
   icon_large: "../../assets/ceratops-logo-500.png"
-  default_prompt: "Use $ceratops-gh-skills-standards-update to build a current best-practice baseline for GitHub repository-management standards, settings, workflows, and any relevant artifact publishing covered by the Ceratops publish and ship skills, then update the Ceratops GitHub skill family where safe."
+  default_prompt: "Use $ceratops-gh-skills-standards-update to build a current best-practice baseline for GitHub repository-management standards, settings, workflows, and any relevant artifact publishing covered by the Ceratops publish and ship skills, then report proposed Ceratops GitHub skill-family updates for explicit approval."

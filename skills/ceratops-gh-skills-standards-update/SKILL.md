@@ -1,11 +1,11 @@
 ---
 name: ceratops-gh-skills-standards-update
-description: Audit the Ceratops GitHub skill family in the `AI-Agent-Skills` repo against current GitHub repository-management, settings, workflow, and relevant artifact-publishing best practices for the artifact types covered by the Ceratops publish and ship skills, including Docker, PyPI, and other supported registries or public artifacts when those surfaces are in scope, then apply safe low-risk updates. Use when routine or explicit GH-skill upkeep should first build a current best-practice baseline and then see whether `skills/ceratops-gh-*`, shared section rules, helper-runtime claims, or repo docs need updates.
+description: Audit the Ceratops GitHub skill family in the `AI-Agent-Skills` repo against current GitHub repository-management, settings, workflow, and relevant artifact-publishing best practices for the artifact types covered by the Ceratops publish and ship skills, including Docker, PyPI, and other supported registries or public artifacts when those surfaces are in scope, then report proposed updates for explicit approval. Use when routine or explicit GH-skill upkeep should first build a current best-practice baseline and then see whether `skills/ceratops-gh-*`, shared section rules, helper-runtime claims, or repo docs need approved updates.
 ---
 
 # Ceratops GH Skills Standards Update
 
-Audit the Ceratops GitHub skill family deliberately instead of letting normal GH task skills drift into generalized upkeep. Build a current best-practice baseline first, then compare the Ceratops GH skill family against that baseline and refresh only the safe in-scope deltas.
+Audit the Ceratops GitHub skill family deliberately instead of letting normal GH task skills drift into generalized upkeep. Build a current best-practice baseline first, then compare the Ceratops GH skill family against that baseline and report proposed deltas for explicit approval before any repo changes are applied.
 
 <!-- CERATOPS_SHARED_SECTIONS_START -->
 <!-- SECTION SOURCE: templates/sections/minimal.md -->
@@ -48,7 +48,7 @@ Audit the Ceratops GitHub skill family deliberately instead of letting normal GH
 
 ## References
 
-- Best-practice audit map: `references/best-practice-baseline.md`
+- Repo-root best-practice audit map: `references/best-practice-baseline.md`
 
 ## Skill-Specific Rules
 
@@ -57,8 +57,7 @@ Audit the Ceratops GitHub skill family deliberately instead of letting normal GH
 - Blocking: Build the baseline from current official docs, live product behavior, and 2-3 current public third-party GitHub reference repositories that are relevant to the standards question. Use `gh`, GitHub API, package metadata, and registry endpoints as supporting evidence, inspect reference repositories only as examples of current patterns rather than as health-audit targets, and separate no-extra-cost defaults from paid GitHub Code Security or Secret Protection features.
 - Treat artifact surfaces as in scope only when the GH skill family, repo docs, or helper claims actually touch them, using the artifact boundary defined by `ceratops-gh-repo-create-and-publish` and `ceratops-gh-ship-change`.
 - Separate the baseline from the Ceratops delta: first decide what current best practice says, then inspect whether `skills/ceratops-gh-*`, shared section wording or assignments, helper-runtime claims, and repo docs are stale.
-- Keep detailed audit checklists in `references/` rather than bloating `SKILL.md`.
-- Apply safe wording, file-reference, checklist, and repo-doc updates directly. Report approval-bound policy, security, review, merge, cost, or helper-runtime changes instead of silently tightening defaults.
+- Keep detailed audit checklists in repo-root `references/` rather than bloating `SKILL.md`.
 
 ## Inputs To Capture
 
@@ -66,7 +65,7 @@ Audit the Ceratops GitHub skill family deliberately instead of letting normal GH
 - Blocking: Current target scope inside `AI-Agent-Skills`: `skills/ceratops-gh-*`, `templates/sections/`, `templates/skill-sections.json`, `references/`, `scripts/sync-skill-sections.py`, `scripts/validate-skills.py`, `src/ceratops_gh_current_state/`, and repo docs.
 - Which best-practice surfaces are actually in scope: GitHub repo-content expectations, repo-settings concepts, workflow hardening, release posture, artifact types supported by `ceratops-gh-repo-create-and-publish` or `ceratops-gh-ship-change`, or a documented no-artifact posture.
 - The reference repositories used for standards comparison and which specific standards question each one informed.
-- Whether current findings stay inside safe minor updates or cross the approval boundary.
+- Which proposed changes require explicit approval and which findings require no repo change.
 - Whether the current task should only stage updates into the active local `release/*` batch or also ship them through GitHub now.
 
 Infer missing inputs from local repo state, installed skill state, live GitHub evidence, and the active automation prompt before asking.
@@ -76,7 +75,7 @@ Infer missing inputs from local repo state, installed skill state, live GitHub e
 - Use this skill when the work is to refresh the Ceratops GitHub skill family against current GitHub repository-management, settings, workflow, release, or artifact-publishing best practices.
 - If the task is normal repo shipping, PR handling, dependency updates, or repo-health work rather than GH skill-family upkeep, stop and use the matching `ceratops-gh-*` task skill.
 - If the work is only shipping already-prepared skill changes with no further upkeep analysis, stop and use `$ceratops-gh-codex-skill-ship`.
-- If the requested change would widen scope beyond `ceratops-gh-*`, change default GitHub policy, change merge or review posture, change security posture, add mandatory paid features, or materially alter the GH helper runtime, stop before applying it and report the recommendation.
+- If the requested change would widen scope beyond `ceratops-gh-*`, change default GitHub policy, change merge or review posture, change security posture, add mandatory paid features, or materially alter the GH helper runtime, report the recommendation as approval-required and do not apply it without explicit approval.
 
 ## Workflow
 
@@ -84,11 +83,11 @@ Infer missing inputs from local repo state, installed skill state, live GitHub e
 
 - Inspect current repo branch, worktree state, existing `ceratops-gh-*` skill folders, shared section files and manifest, GH helper runtime files, repo docs, installed Ceratops skill junctions, and the installed automation prompt when this run came from automation.
 - Check GitHub auth, local git auth, and installed tooling before asking for credentials.
-- Classify current differences as stale local dirt, safe in-scope change, approval-bound change, or not applicable.
+- Classify current differences as stale local dirt, proposed in-scope change, approval-required change, or not applicable.
 
 ### 2. Build the current best-practice baseline
 
-- Blocking: Read `references/best-practice-baseline.md` at the start of the audit and use it as the bounded checklist for the next evidence-gathering steps.
+- Blocking: Read repo-root `references/best-practice-baseline.md` at the start of the audit and use it as the bounded checklist for the next evidence-gathering steps.
 - Use local files, `gh`, GitHub API, `gh` help, package metadata, release metadata, and registry endpoints as the first-pass evidence for the GitHub or artifact behavior that the GH skill family encodes.
 - Check current official GitHub docs for repository-management settings, workflow policy, rulesets, actions, security, release behavior, and repository-content expectations wherever the next best-practice decision depends on them.
 - Check current official Docker, GHCR, PyPI, or Python packaging docs only for artifact surfaces that are actually in scope.
@@ -98,33 +97,33 @@ Infer missing inputs from local repo state, installed skill state, live GitHub e
 - Look for duplicate guidance, contradictory defaults, stale GitHub setting names, stale required-file assumptions, stale repository-health expectations, stale workflow hardening guidance, stale artifact-publishing guidance, partial follow-through, or logic that belongs in a shared section instead of a single skill.
 - Keep repo docs aligned when stale: `README.md`, `CONTRIBUTING.md`, and `CHANGELOG.md`.
 
-### 4. Apply safe updates only
+### 4. Prepare approval request
 
-- Apply wording updates that align behavior with the current best-practice baseline and current GitHub or registry terms.
-- Apply safe file-reference updates when standard repo files, GitHub settings, workflow surfaces, or artifact-publish expectations were added, removed, or renamed.
-- Apply low-risk deduplication or refactoring inside the GH skill family that preserves behavior and clarifies ownership between the shared sections, this skill, and artifact-specific task skills.
-- Add or update bounded reference material when the skill needs a checklist that would otherwise bloat `SKILL.md`.
+- Prepare exact proposed wording updates that align behavior with the current best-practice baseline and current GitHub or registry terms.
+- Prepare exact proposed file-reference updates when standard repo files, GitHub settings, workflow surfaces, or artifact-publish expectations were added, removed, or renamed.
+- Prepare exact proposed low-risk deduplication or refactoring inside the GH skill family that preserves behavior and clarifies ownership between the shared sections, this skill, and artifact-specific task skills.
+- Prepare exact proposed bounded reference material when the skill needs a checklist that would otherwise bloat `SKILL.md`.
 - Blocking: Do not edit the runtime checkout directly. For repo changes, use the worktree path required by the active repo-level instructions for the `AI-Agent-Skills` checkout.
-- Do not apply new or stricter default GitHub policy, changed merge or review posture, changed security posture, new mandatory paid features, widened scope beyond `ceratops-gh-*`, or GH helper-runtime changes that materially alter live-check behavior without explicit approval.
+- Blocking: Do not apply any proposed change until the user explicitly approves that change.
 
 ### 5. Validate and align
 
-- If `templates/sections/` or `templates/skill-sections.json` changed, run the shared-source maintenance workflow recorded in `templates/skill-sections.json`.
-- Otherwise run the skill-local-or-metadata maintenance workflow recorded in `templates/skill-sections.json`.
-- If `src/ceratops_gh_current_state/` or helper-runtime claims changed, also run the helper-runtime maintenance workflow recorded in `templates/skill-sections.json`.
-- Verify changed `SKILL.md` files, `agents/openai.yaml`, repo docs, and the installed automation prompt all point at the current source of truth.
+- If explicitly approved changes alter `templates/sections/` or `templates/skill-sections.json`, run the shared-source maintenance workflow recorded in `templates/skill-sections.json`.
+- If explicitly approved changes stay inside skill-local text, `agents/openai.yaml`, repo docs, or repo-root `references/`, run the skill-local-or-metadata maintenance workflow recorded in `templates/skill-sections.json`.
+- If explicitly approved changes alter `src/ceratops_gh_current_state/` or helper-runtime claims, also run the helper-runtime maintenance workflow recorded in `templates/skill-sections.json`.
+- Verify changed `SKILL.md` files, `agents/openai.yaml`, repo docs, repo-root references, and the installed automation prompt all point at the current source of truth.
 
 ### 6. Stage or ship and sync local runtime
 
-- If safe minor updates were applied, use `$ceratops-codex-skill-stage-release` to merge the ready worktree branch into the runtime `release/*` branch, rerun the installer from the runtime checkout, and verify installed `ceratops-gh-*` skills resolve there.
+- If explicitly approved updates were applied and staging was requested, use `$ceratops-codex-skill-stage-release` to merge the ready worktree branch into the runtime `release/*` branch, rerun the installer from the runtime checkout, and verify installed `ceratops-gh-*` skills resolve there.
 - Use `$ceratops-gh-codex-skill-ship` only when the current task explicitly expects GitHub publication after the standards refresh.
 - If approval-required changes were found, report them without applying them.
 - For routine automation runs with no repo change and no recommendation, complete without opening an inbox item.
 
 ## Completion Gate
 
-- Verify every changed in-scope skill validates locally.
-- Verify repo changes are staged into the active local `release/*` batch or shipped, according to the current task.
+- Verify every changed in-scope skill validates locally when explicitly approved changes were applied.
+- Verify repo changes are staged into the active local `release/*` batch or shipped only when explicitly requested by the current task.
 - Verify installed `ceratops-gh-*` junctions resolve to the intended source folder after staging or shipping when the GH skill family changed.
 - Verify the automation prompt, this `SKILL.md`, and the active instruction sources remain aligned.
 
@@ -132,7 +131,7 @@ Infer missing inputs from local repo state, installed skill state, live GitHub e
 
 Report only:
 
-- applied safe GH-skill updates
+- applied explicitly approved GH-skill updates
 - approval-required recommendations, blockers, or non-blocking debt
 - intentionally retained leftovers or exceptions with reasons
 - anything important not verified
@@ -141,4 +140,4 @@ For routine automation runs with no repo change and no recommendation, do not op
 
 ## Example Invocation
 
-`Use $ceratops-gh-skills-standards-update to build a current best-practice baseline for GitHub repo contents, settings, workflows, and any relevant artifact publishing covered by the Ceratops publish and ship skills, then update the Ceratops GitHub skill family where safe.`
+`Use $ceratops-gh-skills-standards-update to build a current best-practice baseline for GitHub repo contents, settings, workflows, and any relevant artifact publishing covered by the Ceratops publish and ship skills, then report proposed Ceratops GitHub skill-family updates for explicit approval.`

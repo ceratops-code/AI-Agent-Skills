@@ -11,7 +11,7 @@ Reusable Ceratops skills for Codex and other `SKILL.md`-compatible agents.
 | `ceratops-gh-repo-dependency-update` | Process Dependabot, Renovate, security, and manual dependency update work recursively. |
 | `ceratops-gh-repo-health-audit` | Audit and repair GitHub repo health, security posture, stale state, and publication gaps. |
 | `ceratops-gh-merge-pr` | Safely merge a GitHub PR, verify checks and protection with live scripted readiness checks, clean up branches, and sync local state. |
-| `ceratops-gh-skills-standards-update` | Audit the Ceratops GitHub skill family against current GitHub and relevant artifact best practices, then refresh safe deltas. |
+| `ceratops-gh-skills-standards-update` | Audit the Ceratops GitHub skill family against current GitHub and relevant artifact best practices, then report proposed updates for explicit approval. |
 | `ceratops-skill-create` | Create a new Ceratops skill, integrate it into the shared section system, and stage it into the local runtime release branch by default. |
 | `ceratops-skill-update` | Update existing Ceratops skills, shared sections, sync or validation flow, and related helper or doc alignment while keeping generated skill blocks consistent. |
 | `ceratops-automation-run` | Run recurring automations with shared Ceratops alert, memory, and completion policy. |
@@ -55,7 +55,7 @@ src/
 `SKILL.md` is the portable source of truth. `agents/openai.yaml` is Codex UI metadata and may be ignored by other agents.
 All Ceratops skills use the shared repo icon at `assets/ceratops-logo-500.png`.
 `src/ceratops_gh_current_state/` is the local helper package used by the Ceratops GitHub skill family.
-`skills/ceratops-gh-skills-standards-update/` is the source of truth for deliberate GH-family best-practice audits and for the recurring automation that invokes them.
+`skills/ceratops-gh-skills-standards-update/` defines the deliberate GH-family best-practice audit workflow and the recurring automation that invokes it. The repo-root `references/best-practice-baseline.md` is the single bounded checklist for that workflow.
 
 ## Install For Codex
 
