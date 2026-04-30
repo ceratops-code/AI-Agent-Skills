@@ -32,6 +32,8 @@ skills/
   <skill-name>/
     SKILL.md
     agents/openai.yaml
+    assets/
+      ceratops-logo-500.png
 templates/
   skill-sections.json
   sections/
@@ -53,7 +55,7 @@ src/
 ```
 
 `SKILL.md` is the portable source of truth. `agents/openai.yaml` is Codex UI metadata and may be ignored by other agents.
-All Ceratops skills use the shared repo icon at `assets/ceratops-logo-500.png`.
+Each Ceratops skill declares the runtime-local icon path `./assets/ceratops-logo-500.png`. The repo-root `assets/ceratops-logo-500.png` is the source copied into each skill by `scripts/install-skills.ps1`.
 `src/ceratops_gh_current_state/` is the local helper package used by the Ceratops GitHub skill family.
 `skills/ceratops-gh-skills-standards-update/` defines the deliberate GH-family best-practice audit workflow and the recurring automation that invokes it. The repo-root `references/best-practice-baseline.md` is the single bounded checklist for that workflow.
 
@@ -71,9 +73,10 @@ Run one explicit bootstrap step from the repo root:
 powershell -ExecutionPolicy Bypass -File .\scripts\install-skills.ps1
 ```
 
-That bootstrap does two things explicitly:
+That bootstrap does three things explicitly:
 
 - installs the local GH helper package from this checkout with `python -m pip install --editable .`
+- refreshes each skill-local Ceratops icon from the repo-root icon source
 - junctions each skill folder into `$CODEX_HOME/skills/`
 
 Installed Ceratops skills should keep pointing at the runtime checkout path. That checkout may sit on local `main` tracking `origin/main` or on a local `release/*` branch for an active unpublished batch. After the runtime checkout changes branches, rerun `scripts/install-skills.ps1` so new, renamed, or deleted skill junctions and the editable helper package match the active repo snapshot.

@@ -25,7 +25,8 @@ INTERFACE_FIELD_RE = re.compile(
     r"^\s*(display_name|short_description|icon_small|icon_large|default_prompt):\s*(.+?)\s*$",
     re.MULTILINE,
 )
-CERATOPS_ICON_REL = "../../assets/ceratops-logo-500.png"
+CERATOPS_ICON_REL = "./assets/ceratops-logo-500.png"
+CERATOPS_ICON_SOURCE = ROOT / "assets" / "ceratops-logo-500.png"
 SHORT_DESC_STOPWORDS = {
     "a",
     "an",
@@ -332,8 +333,11 @@ def check_skill(skill_dir: pathlib.Path, readme_rows: set[str], manifest: dict[s
         for field_name, icon_value in (("icon_small", icon_small), ("icon_large", icon_large)):
             if icon_value and icon_value != CERATOPS_ICON_REL:
                 errors.append(f"{name}: {field_name} should use shared Ceratops icon {CERATOPS_ICON_REL}")
-            if icon_value and not (skill_dir / icon_value).resolve().is_file():
+            icon_path = (skill_dir / icon_value).resolve() if icon_value else None
+            if icon_path and not icon_path.is_file():
                 errors.append(f"{name}: {field_name} points to missing file {icon_value}")
+            elif icon_path and CERATOPS_ICON_SOURCE.is_file() and icon_path.read_bytes() != CERATOPS_ICON_SOURCE.read_bytes():
+                errors.append(f"{name}: {field_name} does not match repo icon {CERATOPS_ICON_SOURCE.relative_to(ROOT)}")
         errors.extend(check_skill_refs(openai_yaml, yaml_text, skill_names))
 
     errors.extend(check_skill_refs(skill_md, core_text, skill_names))
@@ -365,6 +369,8 @@ def main() -> int:
         errors.append("missing README.md")
     if not SECTION_MANIFEST.is_file():
         errors.append("missing templates/skill-sections.json")
+    if not CERATOPS_ICON_SOURCE.is_file():
+        errors.append(f"missing shared Ceratops icon source: {CERATOPS_ICON_SOURCE.relative_to(ROOT)}")
 
     manifest = load_section_manifest() if SECTION_MANIFEST.is_file() else {"sections": {}, "skills": {}}
     sections = manifest.get("sections", {})

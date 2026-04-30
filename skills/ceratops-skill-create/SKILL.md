@@ -46,7 +46,7 @@ Create a brand-new Ceratops skill as a complete repo-integrated addition instead
 - Treat new-skill creation as complete only when the new skill folder, section assignments, generated shared block, metadata, and repo docs are aligned.
 - Use `$skill-creator` only as the internal scaffolding step when a new folder or starter metadata is needed. Do not stop after scaffolding.
 - Keep the new skill as delta-only as practical: reuse existing shared sections first, and add a new shared section only when it clearly reduces duplication or drift across multiple skills.
-- Set both `interface.icon_small` and `interface.icon_large` in `agents/openai.yaml` to the shared Ceratops icon path `../../assets/ceratops-logo-500.png`.
+- Blocking: Copy the repo-root Ceratops icon from `assets/ceratops-logo-500.png` into the new skill at `assets/ceratops-logo-500.png`, and set both `interface.icon_small` and `interface.icon_large` in `agents/openai.yaml` to `./assets/ceratops-logo-500.png`.
 - Use the default maintenance-check policy recorded in `templates/skill-sections.json` instead of making the user specify commands.
 - Local runtime availability is part of completion by default. After the new skill validates, make an intentional commit on the worktree branch and continue with `$ceratops-codex-skill-stage-release` unless the user explicitly opts out.
 - Do not publish to GitHub unless the user explicitly asked for shipping.
@@ -78,7 +78,7 @@ Infer missing inputs from the repo's current structure and the user request befo
 ### 2. Create the new skill and integrate it
 
 - Scaffold the new skill folder when needed.
-- Create or update `SKILL.md`, `agents/openai.yaml`, and any bundled resources, including the shared Ceratops icon metadata.
+- Blocking: Create or update `SKILL.md`, `agents/openai.yaml`, and any bundled resources, including the skill-local Ceratops icon file and metadata.
 - Add the new skill to `templates/skill-sections.json`, assign the right shared sections, and update repo docs so the new skill is discoverable and described correctly.
 - Update sync or validation scripts only when the new skill exposes a real gap in the current maintenance model.
 
@@ -96,7 +96,7 @@ Infer missing inputs from the repo's current structure and the user request befo
 
 ## Completion Gate
 
-- Verify the new skill folder, manifest assignment, generated shared block, `agents/openai.yaml`, shared icon metadata, and repo docs all align.
+- Blocking: Verify the new skill folder, manifest assignment, generated shared block, `agents/openai.yaml`, skill-local icon file and metadata, and repo docs all align.
 - Verify the required sync or validation path ran successfully.
 - Verify the new skill was committed and staged into the runtime local preview flow, unless the user explicitly opted out or a blocker prevented it.
 
