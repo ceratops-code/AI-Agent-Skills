@@ -13,6 +13,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKILLS_DIR = ROOT / "skills"
 README = ROOT / "README.md"
 SECTION_MANIFEST = ROOT / "templates" / "skill-sections.json"
+BASELINE_REFERENCE = pathlib.Path("references/best-practice-baseline.md")
 SECTIONS_START = "<!-- CERATOPS_SHARED_SECTIONS_START -->"
 SECTIONS_END = "<!-- CERATOPS_SHARED_SECTIONS_END -->"
 
@@ -253,6 +254,17 @@ def check_stale_active_terms() -> list[str]:
     return errors
 
 
+def check_baseline_reference_ownership() -> list[str]:
+    errors: list[str] = []
+    for path in ROOT.rglob("best-practice-baseline.md"):
+        if not path.is_file() or ".git" in path.parts:
+            continue
+        rel = path.relative_to(ROOT)
+        if rel != BASELINE_REFERENCE:
+            errors.append(f"{rel}: duplicate best-practice baseline; use {BASELINE_REFERENCE}")
+    return errors
+
+
 def check_skill(skill_dir: pathlib.Path, readme_rows: set[str], manifest: dict[str, object], skill_names: set[str]) -> list[str]:
     errors: list[str] = []
     name = skill_dir.name
@@ -418,6 +430,7 @@ def main() -> int:
         errors.extend(check_skill(skill_dir, readme_rows, manifest, skill_names))
     errors.extend(check_secrets())
     errors.extend(check_stale_active_terms())
+    errors.extend(check_baseline_reference_ownership())
 
     if errors:
         print(f"errors: {len(errors)}", file=sys.stderr)

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Consolidated the GH standards best-practice baseline into the repo-root `references/best-practice-baseline.md`, removed the duplicate skill-local baseline, and made standards-update repo changes require explicit user approval.
 - Added GitHub code-security configuration, Dependabot alert, dependency graph, and optional paid or churn-prone security add-on coverage to the GH repo-health and standards-update guidance.
 - Added the missing GH standards best-practice baseline reference file used by `ceratops-gh-skills-standards-update`.
 - Clarified that `ceratops-gh-skills-standards-update` owns standards upkeep only, not per-repo health audits, and added bounded third-party GitHub reference-repo comparison to its baseline workflow.
