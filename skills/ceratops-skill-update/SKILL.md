@@ -49,6 +49,7 @@ Maintain existing Ceratops skills as one consistency surface instead of patching
 - Add a new shared section only when it reduces meaningful duplication, clarifies ownership, or prevents conflicting drift across multiple skills. Prefer deleting, merging, or narrowing sections when that is cleaner.
 - Treat this skill as the default Ceratops entrypoint for modifying existing skills.
 - Update `agents/openai.yaml` when trigger behavior or the user-facing prompt becomes stale.
+- Blocking: Ensure every Ceratops skill keeps `assets/ceratops-logo-500.png` copied from the repo-root `assets/ceratops-logo-500.png`, and sets both `interface.icon_small` and `interface.icon_large` in `agents/openai.yaml` to `./assets/ceratops-logo-500.png` when skill metadata, installer, or validation surfaces are updated.
 - Update helper scripts or helper-runtime claims when the section model, generated markers, validation rules, or skill claims require it.
 - Stop in the worktree by default. Do not stage or ship the resulting repo changes unless the user explicitly asked for staging, runtime-preview sync, or GitHub shipping.
 - Use the default maintenance-check policy recorded in `templates/skill-sections.json` instead of making the user specify commands.
@@ -107,6 +108,7 @@ Infer missing inputs from the current repo state before asking.
 - Verify every changed skill and shared file still points at the intended source of truth.
 - Verify generated shared blocks were updated through the shared sources and sync flow when shared sources changed.
 - Verify the section manifest, sync script, validation script, repo docs, and touched `agents/openai.yaml` files remain aligned.
+- Blocking: Verify all Ceratops skill-local icon copies match the repo-root icon source and all `agents/openai.yaml` icon paths are runtime-local.
 - Verify any removed, merged, or renamed section leaves no stale assignment or stale generated block behind.
 
 ## Output Contract

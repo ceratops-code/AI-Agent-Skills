@@ -125,6 +125,38 @@ function Ensure-Junction {
     New-Item -ItemType Junction -Path $Path -Target $resolvedTarget | Out-Null
 }
 
+function Ensure-SkillIcon {
+    param(
+        [string]$RepoRoot,
+        [string]$SkillRoot
+    )
+
+    $sourceIcon = Join-Path $RepoRoot "assets\ceratops-logo-500.png"
+    if (-not (Test-Path -LiteralPath $sourceIcon -PathType Leaf)) {
+        throw "Missing shared Ceratops icon: $sourceIcon"
+    }
+
+    $skillAssets = Join-Path $SkillRoot "assets"
+    $assetsItem = Get-Item -LiteralPath $skillAssets -Force -ErrorAction SilentlyContinue
+    if ($null -eq $assetsItem) {
+        New-Item -ItemType Directory -Path $skillAssets | Out-Null
+    } elseif (-not $assetsItem.PSIsContainer) {
+        throw "Skill assets path '$skillAssets' exists and is not a directory."
+    }
+
+    $targetIcon = Join-Path $skillAssets "ceratops-logo-500.png"
+    $shouldCopy = -not (Test-Path -LiteralPath $targetIcon -PathType Leaf)
+    if (-not $shouldCopy) {
+        $sourceHash = (Get-FileHash -LiteralPath $sourceIcon -Algorithm SHA256).Hash
+        $targetHash = (Get-FileHash -LiteralPath $targetIcon -Algorithm SHA256).Hash
+        $shouldCopy = $sourceHash -ne $targetHash
+    }
+
+    if ($shouldCopy) {
+        Copy-Item -LiteralPath $sourceIcon -Destination $targetIcon -Force
+    }
+}
+
 $resolvedRepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
 if (-not (Test-Path -LiteralPath $RuntimeRoot)) {
     New-Item -ItemType Directory -Path $RuntimeRoot | Out-Null
@@ -200,6 +232,7 @@ $skills = Get-ChildItem -LiteralPath $skillsRoot -Directory | Where-Object { Tes
 $expectedSkillNames = @{}
 foreach ($skill in $skills) {
     $expectedSkillNames[$skill.Name] = $true
+    Ensure-SkillIcon -RepoRoot $resolvedRepoRoot -SkillRoot $skill.FullName
     $link = Join-Path $RuntimeRoot $skill.Name
     Ensure-Junction -Path $link -Target $skill.FullName
 }
