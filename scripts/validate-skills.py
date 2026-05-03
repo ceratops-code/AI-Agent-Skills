@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Ceratops skill folders and generated shared sections."""
+"""Validate Ceratops skill source folders and runtime generation inputs."""
 
 from __future__ import annotations
 
@@ -13,7 +13,17 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKILLS_DIR = ROOT / "skills"
 README = ROOT / "README.md"
 SECTION_MANIFEST = ROOT / "templates" / "skill-sections.json"
-BASELINE_REFERENCE = pathlib.Path("references/best-practice-baseline.md")
+CONTRACTS_DIR = pathlib.Path("contracts")
+REQUIRED_CONTRACT_FILES = [
+    pathlib.Path("contracts/source-docs.json"),
+    pathlib.Path("contracts/code-comment-standards.json"),
+    pathlib.Path("contracts/github/github-org-contract.json"),
+    pathlib.Path("contracts/github/github-repo-contract.json"),
+    pathlib.Path("contracts/github/github-org-nondeterministic-checks.md"),
+    pathlib.Path("contracts/github/github-repo-nondeterministic-checks.md"),
+    pathlib.Path("contracts/artifacts/artifact-contract.json"),
+    pathlib.Path("contracts/artifacts/artifact-nondeterministic-checks.md"),
+]
 SECTIONS_START = "<!-- CERATOPS_SHARED_SECTIONS_START -->"
 SECTIONS_END = "<!-- CERATOPS_SHARED_SECTIONS_END -->"
 
@@ -90,6 +100,40 @@ STALE_ACTIVE_PATTERNS: list[tuple[re.Pattern[str], str, set[pathlib.Path]]] = [
     (
         re.compile(r"\bceratops-gh-runtime\b"),
         "stale GH helper package name",
+        {
+            pathlib.Path("CHANGELOG.md"),
+            pathlib.Path("scripts/install-skills.ps1"),
+            pathlib.Path("scripts/validate-skills.py"),
+        },
+    ),
+    (
+        re.compile(r"\bceratops_gh_current_state\b"),
+        "stale GH helper package name",
+        {pathlib.Path("scripts/validate-skills.py")},
+    ),
+    (
+        re.compile(r"\bgithub-artifact-contract\.json\b"),
+        "stale artifact contract filename",
+        {pathlib.Path("scripts/validate-skills.py")},
+    ),
+    (
+        re.compile(r"\bgithub-health-source-docs\.json\b"),
+        "stale source-doc registry filename",
+        {pathlib.Path("scripts/validate-skills.py")},
+    ),
+    (
+        re.compile(r"contracts/github/reviews/"),
+        "stale non-deterministic review folder",
+        {pathlib.Path("scripts/validate-skills.py")},
+    ),
+    (
+        re.compile(r"best-practice-baseline\.md"),
+        "retired GitHub health baseline file reference",
+        {pathlib.Path("CHANGELOG.md"), pathlib.Path("scripts/validate-skills.py")},
+    ),
+    (
+        re.compile(r"\bjunctions?\b", re.IGNORECASE),
+        "stale runtime junction install model",
         {
             pathlib.Path("CHANGELOG.md"),
             pathlib.Path("scripts/install-skills.ps1"),
@@ -193,6 +237,30 @@ def rendered_sections_block(skill_name: str, manifest: dict[str, object]) -> str
     return f"{SECTIONS_START}\n{joined}\n{SECTIONS_END}"
 
 
+def check_runtime_payloads(manifest: dict[str, object], skill_names: set[str]) -> list[str]:
+    errors: list[str] = []
+    payloads = manifest.get("runtime_payloads", {})
+    if not isinstance(payloads, dict):
+        errors.append("section manifest runtime_payloads must be an object")
+        return errors
+    for skill_name, values in payloads.items():
+        if skill_name != "*" and skill_name not in skill_names:
+            errors.append(f"runtime_payloads points to unknown skill {skill_name}")
+        if not isinstance(values, list) or not all(isinstance(item, str) for item in values):
+            errors.append(f"runtime_payloads.{skill_name} must be a list of strings")
+            continue
+        for rel_path in values:
+            if pathlib.PurePath(rel_path).is_absolute() or ".." in pathlib.PurePath(rel_path).parts:
+                errors.append(f"runtime_payloads.{skill_name} contains non-portable path {rel_path}")
+                continue
+            if any(token in rel_path for token in "*?["):
+                if not list(ROOT.glob(rel_path)):
+                    errors.append(f"runtime_payloads.{skill_name} glob has no matches: {rel_path}")
+            elif not (ROOT / rel_path).exists():
+                errors.append(f"runtime_payloads.{skill_name} path does not exist: {rel_path}")
+    return errors
+
+
 def readme_skill_rows(readme_text: str) -> set[str]:
     return {match.group("name") for match in README_SKILL_ROW_RE.finditer(readme_text)}
 
@@ -255,14 +323,13 @@ def check_stale_active_terms() -> list[str]:
     return errors
 
 
-def check_baseline_reference_ownership() -> list[str]:
+def check_retired_baseline_absent() -> list[str]:
     errors: list[str] = []
     for path in ROOT.rglob("best-practice-baseline.md"):
         if not path.is_file() or ".git" in path.parts:
             continue
         rel = path.relative_to(ROOT)
-        if rel != BASELINE_REFERENCE:
-            errors.append(f"{rel}: duplicate best-practice baseline; use {BASELINE_REFERENCE}")
+        errors.append(f"{rel}: retired best-practice baseline; use {CONTRACTS_DIR}")
     return errors
 
 
@@ -301,16 +368,13 @@ def check_skill(skill_dir: pathlib.Path, readme_rows: set[str], manifest: dict[s
     if "## Boundaries" not in skill_md.read_text(encoding="utf-8"):
         errors.append(f"{name}: missing Boundaries section")
     core_text = skill_md.read_text(encoding="utf-8")
-    start = core_text.find(SECTIONS_START)
-    end = core_text.find(SECTIONS_END)
-    if start == -1 or end == -1 or end < start:
-        errors.append(f"{name}: missing shared sections markers")
+    if SECTIONS_START in core_text or SECTIONS_END in core_text:
+        errors.append(f"{name}: source SKILL.md must be delta-only; shared sections are generated at install time")
     else:
-        end += len(SECTIONS_END)
-        actual = core_text[start:end]
-        expected = rendered_sections_block(name, manifest)
-        if actual != expected:
-            errors.append(f"{name}: generated shared sections block is out of sync with manifest")
+        try:
+            rendered_sections_block(name, manifest)
+        except Exception as exc:
+            errors.append(f"{name}: could not render runtime shared sections: {exc}")
 
     if not openai_yaml.is_file():
         errors.append(f"{name}: missing agents/openai.yaml")
@@ -369,6 +433,11 @@ def main() -> int:
         errors.append("missing README.md")
     if not SECTION_MANIFEST.is_file():
         errors.append("missing templates/skill-sections.json")
+    if not (ROOT / CONTRACTS_DIR).is_dir():
+        errors.append(f"missing contract directory: {CONTRACTS_DIR}")
+    for rel_path in REQUIRED_CONTRACT_FILES:
+        if not (ROOT / rel_path).is_file():
+            errors.append(f"missing required contract file: {rel_path}")
     if not CERATOPS_ICON_SOURCE.is_file():
         errors.append(f"missing shared Ceratops icon source: {CERATOPS_ICON_SOURCE.relative_to(ROOT)}")
 
@@ -391,6 +460,11 @@ def main() -> int:
             commands = workflow_hints.get(workflow_name)
             if not isinstance(commands, list) or not all(isinstance(item, str) for item in commands):
                 errors.append(f"section manifest maintenance_workflows.{workflow_name} must be a list of strings")
+        for workflow_name, commands in workflow_hints.items():
+            if workflow_name in required_workflows:
+                continue
+            if not isinstance(commands, list) or not all(isinstance(item, str) for item in commands):
+                errors.append(f"section manifest maintenance_workflows.{workflow_name} must be a list of strings")
     for section_name, rel_path in sections.items():
         if not (ROOT / rel_path).is_file():
             errors.append(f"missing section file for {section_name}: {rel_path}")
@@ -411,17 +485,11 @@ def main() -> int:
 
     skill_names = {skill_dir.name for skill_dir in skill_dirs}
     if isinstance(workflow_hints, dict):
-        required_workflows = {
-            "shared_source_changes",
-            "skill_local_or_metadata_changes",
-            "helper_runtime_changes",
-            "new_skill_local_availability",
-        }
-        for workflow_name in required_workflows:
-            commands = workflow_hints.get(workflow_name)
+        for workflow_name, commands in workflow_hints.items():
             if isinstance(commands, list) and all(isinstance(item, str) for item in commands):
                 for command in commands:
                     errors.extend(validate_workflow_target(command, skill_names))
+    errors.extend(check_runtime_payloads(manifest, skill_names))
     for skill_name in assignments:
         if skill_name not in skill_names:
             errors.append(f"{skill_name}: section assignment points to a missing skill directory")
@@ -436,7 +504,7 @@ def main() -> int:
         errors.extend(check_skill(skill_dir, readme_rows, manifest, skill_names))
     errors.extend(check_secrets())
     errors.extend(check_stale_active_terms())
-    errors.extend(check_baseline_reference_ownership())
+    errors.extend(check_retired_baseline_absent())
 
     if errors:
         print(f"errors: {len(errors)}", file=sys.stderr)

@@ -5,85 +5,13 @@ description: Ship local repository changes through GitHub and any relevant artif
 
 # Ceratops GH Ship Change
 
-Take an existing published repo from local changes to a verified merged result. Publish external artifacts only when the change affects a releasable package, image, module, binary, or other public artifact. Verify machine-checkable GitHub state through the bundled helper scripts before trusting prose or stale screenshots.
-
-<!-- CERATOPS_SHARED_SECTIONS_START -->
-<!-- SECTION SOURCE: templates/sections/minimal.md -->
-
-## Core Rules
-
-- Blocking: Everything in this section is part of the skill contract unless explicitly inapplicable to the current task.
-- Blocking: When this skill is invoked, follow this `SKILL.md` as the workflow contract for the task; if a higher-precedence instruction conflicts with a required skill step, report the conflict instead of silently skipping the step.
-- Blocking: Do not claim completion unless this skill's completion gate is satisfied, intentionally inapplicable, or reported as a blocker.
-- Blocking: Scope completion, current-state, root-cause, no-fix, unsupported, and durable-resolution claims to evidence actually checked, or to fresh same-task evidence that still applies.
-- Blocking: Reuse fresh sufficient same-run evidence unless state is uncertain, plausibly changed, materially broadened, externally mutable for the decision, or this skill explicitly requires a fresh check.
-- Blocking: Prefer direct local evidence and targeted diagnostics for the next skill decision; use current official sources only when local evidence leaves a concrete ambiguity or the task depends on unstable external behavior.
-- Blocking: Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine skill runs unless the user explicitly asks or a required decision remains ambiguous after targeted evidence.
-- Blocking: Ask before risky, destructive, irreversible, credential-dependent, externally mutating, complex, invasive, nonstandard, or high-maintenance steps unless the user already explicitly requested that tradeoff.
-- Blocking: Do not update this `SKILL.md` or other skill/control files during a routine run unless the user explicitly asked for skill maintenance or the task cannot be completed safely without a narrow in-scope fix.
-- Blocking: For skill runtime workflows, invoke shared helpers through installed console commands or `python -m <module>` entrypoints; do not locate shared helpers by absolute paths, by the repo's parent directory, or by per-skill `scripts` junctions.
-- Blocking: When a Ceratops skill-maintenance workflow explicitly needs a repo-maintenance script, treat `scripts/<name>` paths as relative to the active `AI-Agent-Skills` checkout root; resolve that root from the current worktree with `git rev-parse --show-toplevel` or from the installed skill junction under `$CODEX_HOME/skills/<skill-name>`, and stop as blocked if neither resolves to a checkout containing `skills/`, `templates/`, and `scripts/`.
-- Mandatory: When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
-- Mandatory: Follow this skill's output contract when present; otherwise report only the outcome, unresolved blockers, retained state with reasons, and important unverified items.
-
-<!-- SECTION SOURCE: templates/sections/credentials.md -->
-
-## Credential Handling
-
-- Blocking: Do not ask for credentials unless they are truly required after local checks.
-- Blocking: If credentials are truly required after local checks, report only:
-
-1. which credential or login is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
-- Blocking: If the user refuses a missing permission, credential, login, or scope, stop retrying and report the blocked action and exact entities still pending.
-
-<!-- SECTION SOURCE: templates/sections/gh-current-state.md -->
-
-## GH Current State
-
-- Use the shared helper package `ceratops_gh_current_state` for bundled GitHub current-state checks when it covers the next decision.
-- Use `gh`, GitHub API, and `ceratops_gh_current_state` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
-- Prefer current GitHub state over memory, prose summaries, or stale screenshots.
-- Start with the narrowest live check that answers the next decision: bundled helper script, targeted `gh` query, or focused API call.
-- Check current official GitHub docs or `gh` help only when the next decision remains concretely ambiguous after targeted live GitHub evidence, or when those sources materially conflict.
-- Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
-- Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
-
-<!-- SECTION SOURCE: templates/sections/gh-artifact-contract.md -->
-
-## GH Artifact Contract
-
-- Apply this contract only when the repo has an external artifact, the current change affects a releasable artifact, or the final answer makes an artifact or no-artifact claim.
-- Identify the real deliverable from the project instead of forcing Docker, PyPI, or any other registry by default.
-- Capture or verify the artifact identity, registry target, version source, release policy, tag style, changelog or release-note source, and post-publish consumer check.
-- In audit-only flows, verify and classify artifact state; do not publish or mutate registry artifacts unless the workflow explicitly moves into a ship or publish skill.
-- Build, package, install, pull, run, or consume local artifacts enough to catch packaging and runtime failures before publishing or before making a local artifact-health claim.
-- Publish external artifacts only when repo policy and the merged change require a release, tag, package, image, module, binary, or other public artifact.
-- Derive versions from trustworthy project metadata and tag history instead of inventing semantics.
-- Verify live release and registry endpoints after publishing or when auditing artifact state, including tags, digests, package pages, release pages, and published artifacts.
-- Prefer registry-supported trusted publishing, OIDC, or another short-lived identity path over repository-stored long-lived publish tokens when supported by the real registry; keep any token-based fallback explicit and scoped.
-- For PyPI publishes, prefer Trusted Publishing or another short-lived identity path over repository-stored long-lived tokens when supported, build the intended sdist and wheel, publish the intended version, verify the live PyPI version, install that exact version from PyPI locally, and run the smoke or documented consumer check against the published artifact instead of an editable checkout.
-- For PyPI publishes that emit attestations or provenance, verify the metadata through PyPI or the selected verifier instead of relying only on upload success.
-- For npm publishes, prefer trusted publishing when the package and runner meet current npm prerequisites, run the package's build and test path, publish the intended version, verify the live npm package and version, and verify provenance when npm generated it.
-- For Docker or OCI image publishes, build locally, run a smoke test, publish the intended tags or digests, verify the live registry state, pull or consume the published image when relevant, and verify provenance or SBOM attestations when the selected publish flow emits them.
-
-<!-- SECTION SOURCE: templates/sections/gh-findings.md -->
-
-## GH Findings
-
-- Classify only findings actually inspected in this run. Do not expand reporting to untouched queues unless they become the next actionable work or the user explicitly asked for full coverage.
-- For each inspected finding, decide whether it is safe, fix low-risk items directly when in scope, and for every finding left open report its name or id, whether it is blocking, why it remains open, and the concrete work needed to clear it.
-- Do not collapse retained findings into a generic healthy result.
-- Re-check findings whose status may have changed because of actions taken in this run.
-<!-- CERATOPS_SHARED_SECTIONS_END -->
+Take an existing published repo from local changes to a verified merged result. Publish external artifacts only when the change affects a releasable package, image, module, binary, or other public artifact. Verify machine-checkable GitHub state through the contract checker or PR-readiness helper before trusting prose or stale screenshots.
 
 ## Script Bundle
 
-- Repo settings check: `python -m ceratops_gh_current_state repo-health --repo OWNER/REPO`
-- PR readiness check: `python -m ceratops_gh_current_state pr-readiness --pr NUMBER_OR_URL`
+- Repo settings check when repo health is in scope: `python scripts/github_repo_artifact_contract.py --repo OWNER/REPO --scope repo --preset settings`
+- Artifact check when artifact publishing is in scope: `python scripts/github_repo_artifact_contract.py --repo OWNER/REPO --scope artifact --preset artifact`
+- PR readiness check: `python scripts/github_pr_readiness.py --pr NUMBER_OR_URL`
 
 ## Inputs To Capture
 
@@ -117,12 +45,12 @@ Infer missing inputs from local files and live repo state before asking.
 
 - Default to the narrowest evidence that answers the next shipping decision: local repo files and bundled live checks first, then touched-registry or GitHub docs only when needed.
 - Check current official docs for GitHub PR, Actions, security, release behavior, and any touched registry or package-manager workflow only when the next task decision remains concretely ambiguous after local state, `gh`, GitHub API, or script output, or when those sources materially conflict.
-- Compare at most 1-2 strong reference repos only for a concrete ambiguous docs, security, CI, release, or packaging question. Do not do broad GH-skill best-practice maintenance during routine shipping runs.
+- Compare at most 1-2 strong reference repos only for a concrete ambiguous docs, security, CI, release, or packaging question. Do not do broad GitHub health contract maintenance during routine shipping runs.
 
 ### 3. Prove live GitHub state with scripts
 
-- Run the bundled repo-health script only when the run changes or explicitly verifies repo posture surfaces such as branch protection or rulesets, review policy, Actions permissions or SHA pinning, security controls, moderation or community reporting, or other repo-health claims that the final answer will rely on.
-- Do not run the repo-health script for pure code, docs, tests, packaging, or artifact-publish work when those repo posture surfaces are untouched.
+- Run the repo contract checker only when the run changes or explicitly verifies repo posture surfaces such as branch protection or rulesets, review policy, Actions permissions or SHA pinning, security controls, moderation or community reporting, or other repo-health claims that the final answer will rely on.
+- Do not run the repo contract checker for pure code, docs, tests, packaging, or artifact-publish work when those repo posture surfaces are untouched.
 - Run the bundled PR-readiness script before merge or auto-merge decisions instead of relying on prose summaries of checks, reviews, or mergeability.
 - Re-run the relevant script after any live GitHub change that could affect a reported repo-health or PR-readiness result.
 
@@ -153,12 +81,12 @@ Infer missing inputs from local files and live repo state before asking.
 ### 7. Publish artifacts when relevant
 
 - Execute the publish and live-verification parts of the GH artifact contract.
-- Re-run the repo-health script after any live GitHub setting change and the PR-readiness script immediately before the final merge action.
+- Re-run the relevant contract check after any live GitHub setting change and the PR-readiness script immediately before the final merge action.
 
 ## Completion Gate
 
-- Verify the merge decision is backed by a fresh `python -m ceratops_gh_current_state pr-readiness` run.
-- Verify live GitHub state for the repo with `python -m ceratops_gh_current_state repo-health` when repo settings or process health were part of the run.
+- Verify the merge decision is backed by a fresh `python scripts/github_pr_readiness.py` run.
+- Verify live GitHub state for the repo with `scripts/github_repo_artifact_contract.py` when repo settings or process health were part of the run.
 - Verify changed workflow files still use the intended full-SHA action refs when the run touched GitHub Actions workflows or settings.
 - Verify local state: default branch, worktree, remotes, refs, generated files, artifacts, temp paths, caches, credential changes, and local consumer paths.
 - Verify any temporary branch or worktree created or used for the run was removed unless intentionally retained with an explicit active-workflow reason.

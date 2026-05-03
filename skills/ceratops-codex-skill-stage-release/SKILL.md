@@ -7,51 +7,6 @@ description: Stage committed Ceratops skill changes into the runtime checkout's 
 
 Stage committed skill branches into the runtime checkout's local release branch so Codex can use one coherent unpublished repo snapshot.
 
-<!-- CERATOPS_SHARED_SECTIONS_START -->
-<!-- SECTION SOURCE: templates/sections/minimal.md -->
-
-## Core Rules
-
-- Blocking: Everything in this section is part of the skill contract unless explicitly inapplicable to the current task.
-- Blocking: When this skill is invoked, follow this `SKILL.md` as the workflow contract for the task; if a higher-precedence instruction conflicts with a required skill step, report the conflict instead of silently skipping the step.
-- Blocking: Do not claim completion unless this skill's completion gate is satisfied, intentionally inapplicable, or reported as a blocker.
-- Blocking: Scope completion, current-state, root-cause, no-fix, unsupported, and durable-resolution claims to evidence actually checked, or to fresh same-task evidence that still applies.
-- Blocking: Reuse fresh sufficient same-run evidence unless state is uncertain, plausibly changed, materially broadened, externally mutable for the decision, or this skill explicitly requires a fresh check.
-- Blocking: Prefer direct local evidence and targeted diagnostics for the next skill decision; use current official sources only when local evidence leaves a concrete ambiguity or the task depends on unstable external behavior.
-- Blocking: Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine skill runs unless the user explicitly asks or a required decision remains ambiguous after targeted evidence.
-- Blocking: Ask before risky, destructive, irreversible, credential-dependent, externally mutating, complex, invasive, nonstandard, or high-maintenance steps unless the user already explicitly requested that tradeoff.
-- Blocking: Do not update this `SKILL.md` or other skill/control files during a routine run unless the user explicitly asked for skill maintenance or the task cannot be completed safely without a narrow in-scope fix.
-- Blocking: For skill runtime workflows, invoke shared helpers through installed console commands or `python -m <module>` entrypoints; do not locate shared helpers by absolute paths, by the repo's parent directory, or by per-skill `scripts` junctions.
-- Blocking: When a Ceratops skill-maintenance workflow explicitly needs a repo-maintenance script, treat `scripts/<name>` paths as relative to the active `AI-Agent-Skills` checkout root; resolve that root from the current worktree with `git rev-parse --show-toplevel` or from the installed skill junction under `$CODEX_HOME/skills/<skill-name>`, and stop as blocked if neither resolves to a checkout containing `skills/`, `templates/`, and `scripts/`.
-- Mandatory: When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
-- Mandatory: Follow this skill's output contract when present; otherwise report only the outcome, unresolved blockers, retained state with reasons, and important unverified items.
-
-<!-- SECTION SOURCE: templates/sections/credentials.md -->
-
-## Credential Handling
-
-- Blocking: Do not ask for credentials unless they are truly required after local checks.
-- Blocking: If credentials are truly required after local checks, report only:
-
-1. which credential or login is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
-- Blocking: If the user refuses a missing permission, credential, login, or scope, stop retrying and report the blocked action and exact entities still pending.
-
-<!-- SECTION SOURCE: templates/sections/release-branch-runtime.md -->
-
-## Release Branch Runtime
-
-- Treat the runtime checkout's active `release/*` branch as the single local preview source of truth for the staged repo snapshot.
-- Keep installed Ceratops skill junctions and the editable GH helper package pointed at the runtime checkout path, not at task worktrees.
-- Reuse the same `release/*` branch name locally and remotely by default. Do not rename or remap it unless the user explicitly chooses that tradeoff.
-- Refresh remote refs with `git fetch --prune origin` before judging whether a runtime `release/*` branch already exists remotely, should be reused, or was already cleaned up.
-- Rerun the runtime installer after switching the runtime checkout branch so installed skill junctions and the editable GH helper package match the active repo snapshot.
-- When the GH skill family was touched, confirm the editable GH helper package resolves from the runtime checkout after the installer or restore step.
-<!-- CERATOPS_SHARED_SECTIONS_END -->
-
 ## Defaults
 
 - Source repo: active `AI-Agent-Skills` checkout root
@@ -96,7 +51,7 @@ Infer missing inputs from local repo state before asking.
 
 ### 1. Inspect source and runtime state
 
-- Inspect the source worktree branches, runtime checkout branch, installed junction state, and any duplicated installed copies.
+- Inspect the source worktree branches, runtime checkout branch, installed managed skill-copy state, and any duplicated installed copies.
 - Blocking: Inspect remaining local worktrees and local branches before ship handoff so non-staged work is not silently left behind.
 - Confirm each branch to stage is intentionally committed and available to the shared repo.
 - Refresh remote refs with `git fetch --prune origin` before judging whether `origin/release/*` still exists or whether a prior staged branch or PR was already cleaned up.
@@ -112,12 +67,12 @@ Infer missing inputs from local repo state before asking.
 ### 3. Sync installed runtime state
 
 - Run `powershell -ExecutionPolicy Bypass -File .\\scripts\\install-skills.ps1` from the runtime checkout.
-- Confirm the installed skill paths resolve to the runtime checkout.
+- Confirm each installed Ceratops skill copy has `.ceratops-runtime-manifest.json` and was regenerated by the runtime installer.
 
 ### 4. Validate the staged batch locally
 
 - Run `python scripts/validate-skills.py`.
-- When the GH helper package or installer changed, run `python -m ceratops_gh_current_state --help`.
+- Mandatory: When the PR-readiness helper script or installer changed, run `python scripts/github_pr_readiness.py --help`.
 
 ### 5. Report the staged state
 
@@ -131,7 +86,7 @@ Infer missing inputs from local repo state before asking.
 - Verify the runtime checkout is on the intended local `release/*` branch.
 - Verify each requested task branch was staged and its source worktree and local branch were removed, or a blocker or explicit retention reason was reported precisely.
 - Blocking: Verify the pending local work check passed before ship handoff, or every reported non-staged branch or worktree is covered by an explicit user choice, retention reason, or blocker.
-- Verify the installed skill paths resolve to the runtime checkout.
+- Verify the installed skill copies are managed runtime outputs and include fresh runtime manifests.
 - Verify the local validation batch passed or the blocking failures were reported.
 
 ## Output Contract

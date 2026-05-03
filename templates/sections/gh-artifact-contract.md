@@ -1,6 +1,6 @@
 ## GH Artifact Contract
 
-- Apply this contract only when the repo has an external artifact, the current change affects a releasable artifact, or the final answer makes an artifact or no-artifact claim.
+- Mandatory: Apply `contracts/artifacts/artifact-contract.json` only when the repo has an external artifact, the current change affects a releasable artifact, or the final answer makes an artifact or no-artifact claim.
 - Identify the real deliverable from the project instead of forcing Docker, PyPI, or any other registry by default.
 - Capture or verify the artifact identity, registry target, version source, release policy, tag style, changelog or release-note source, and post-publish consumer check.
 - In audit-only flows, verify and classify artifact state; do not publish or mutate registry artifacts unless the workflow explicitly moves into a ship or publish skill.

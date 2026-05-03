@@ -1,3 +1,6 @@
+# Stage committed task branches into the runtime checkout's local release branch.
+# This script is intentionally limited to git worktree/branch mechanics; skill
+# rendering still belongs to scripts/install-skills.ps1 after staging completes.
 param(
     [Parameter(Mandatory = $true, Position = 0)]
     [string[]]$Branches,
@@ -6,6 +9,7 @@ param(
     [switch]$KeepMergedBranches
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 function Invoke-Git {
@@ -49,6 +53,9 @@ function Get-WorktreePathForBranch {
         [string]$Branch
     )
 
+    # `git worktree list --porcelain` emits records split across lines. Track
+    # the current record's path so the matching branch can be removed after a
+    # successful merge without guessing from folder names.
     $targetRef = "refs/heads/$Branch"
     $currentPath = $null
     foreach ($line in Get-GitOutput "worktree" "list" "--porcelain") {
@@ -69,6 +76,8 @@ Set-Location -LiteralPath $repoRoot
 
 $status = Get-GitOutput "status" "--porcelain"
 if ($status) {
+    # Refuse to merge task branches into a dirty runtime checkout because the
+    # release branch is supposed to represent only committed source branches.
     throw "Runtime checkout is dirty; commit, stash, or discard unrelated changes before staging a release branch."
 }
 
@@ -82,6 +91,8 @@ Invoke-Git "switch" "main"
 Invoke-Git "merge" "--ff-only" "origin/main"
 
 if ($Reset -and (Test-BranchExists $ReleaseBranch)) {
+    # `-Reset` is the explicit escape hatch for rebuilding the local preview
+    # branch from main instead of trying to untangle partial staged state.
     Invoke-Git "branch" "-D" $ReleaseBranch
 }
 
@@ -100,6 +111,9 @@ foreach ($branch in $Branches) {
     Invoke-Git "merge" "--no-edit" $branch
 
     if (-not $KeepMergedBranches) {
+        # After a successful merge, remove the source task worktree and branch
+        # so stale local state cannot be mistaken for work still outside the
+        # staged release batch.
         $worktreePath = Get-WorktreePathForBranch $branch
         if ($worktreePath) {
             $resolvedRepo = (Resolve-Path -LiteralPath $repoRoot).Path

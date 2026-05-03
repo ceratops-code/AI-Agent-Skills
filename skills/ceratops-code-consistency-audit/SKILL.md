@@ -1,49 +1,11 @@
 ---
 name: ceratops-code-consistency-audit
-description: Audit a repository after large refactors, branch merges, or parallel agent threads for contradictions between implementation, docs, configs, tests, examples, and control files. Use when the goal is post-merge validation, release-readiness consistency checking, documentation-drift detection, or merged-only edge-case hunting rather than style review.
+description: Audit a repository after large refactors, branch merges, or parallel agent threads for contradictions between implementation, docs, configs, tests, examples, comments, README guidance, and control files. Use when the goal is post-merge validation, release-readiness consistency checking, documentation-drift detection, comment-sufficiency review, or merged-only edge-case hunting rather than style review.
 ---
 
 # Ceratops Code Consistency Audit
 
 Audit repository coherence after combined changes. Across teams this work is usually split across post-merge validation, integration and regression testing, release-readiness review, documentation-drift checks, and architectural fitness functions. Use this skill to run the cross-cutting consistency pass those labels only partially cover.
-
-Use these references when helpful:
-
-- Reusable prompt templates: `references/prompt-template.md`
-
-<!-- CERATOPS_SHARED_SECTIONS_START -->
-<!-- SECTION SOURCE: templates/sections/minimal.md -->
-
-## Core Rules
-
-- Blocking: Everything in this section is part of the skill contract unless explicitly inapplicable to the current task.
-- Blocking: When this skill is invoked, follow this `SKILL.md` as the workflow contract for the task; if a higher-precedence instruction conflicts with a required skill step, report the conflict instead of silently skipping the step.
-- Blocking: Do not claim completion unless this skill's completion gate is satisfied, intentionally inapplicable, or reported as a blocker.
-- Blocking: Scope completion, current-state, root-cause, no-fix, unsupported, and durable-resolution claims to evidence actually checked, or to fresh same-task evidence that still applies.
-- Blocking: Reuse fresh sufficient same-run evidence unless state is uncertain, plausibly changed, materially broadened, externally mutable for the decision, or this skill explicitly requires a fresh check.
-- Blocking: Prefer direct local evidence and targeted diagnostics for the next skill decision; use current official sources only when local evidence leaves a concrete ambiguity or the task depends on unstable external behavior.
-- Blocking: Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine skill runs unless the user explicitly asks or a required decision remains ambiguous after targeted evidence.
-- Blocking: Ask before risky, destructive, irreversible, credential-dependent, externally mutating, complex, invasive, nonstandard, or high-maintenance steps unless the user already explicitly requested that tradeoff.
-- Blocking: Do not update this `SKILL.md` or other skill/control files during a routine run unless the user explicitly asked for skill maintenance or the task cannot be completed safely without a narrow in-scope fix.
-- Blocking: For skill runtime workflows, invoke shared helpers through installed console commands or `python -m <module>` entrypoints; do not locate shared helpers by absolute paths, by the repo's parent directory, or by per-skill `scripts` junctions.
-- Blocking: When a Ceratops skill-maintenance workflow explicitly needs a repo-maintenance script, treat `scripts/<name>` paths as relative to the active `AI-Agent-Skills` checkout root; resolve that root from the current worktree with `git rev-parse --show-toplevel` or from the installed skill junction under `$CODEX_HOME/skills/<skill-name>`, and stop as blocked if neither resolves to a checkout containing `skills/`, `templates/`, and `scripts/`.
-- Mandatory: When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
-- Mandatory: Follow this skill's output contract when present; otherwise report only the outcome, unresolved blockers, retained state with reasons, and important unverified items.
-
-<!-- SECTION SOURCE: templates/sections/credentials.md -->
-
-## Credential Handling
-
-- Blocking: Do not ask for credentials unless they are truly required after local checks.
-- Blocking: If credentials are truly required after local checks, report only:
-
-1. which credential or login is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
-- Blocking: If the user refuses a missing permission, credential, login, or scope, stop retrying and report the blocked action and exact entities still pending.
-<!-- CERATOPS_SHARED_SECTIONS_END -->
 
 ## Skill-Specific Rules
 
@@ -51,6 +13,8 @@ Use these references when helpful:
 - Start from declared behavior and sources of truth before judging implementation details.
 - Treat conflicts between two declared sources of truth as findings even when the code still happens to work.
 - Prefer concrete contradictions, stale follow-through, and merged-only interaction bugs over speculative architecture advice.
+- Mandatory: Check comment sufficiency as a maintainability consistency issue when scripts, public APIs, automation helpers, contract checkers, or non-obvious safety logic are in scope.
+- Blocking: Use local project conventions and `contracts/code-comment-standards.json` when present; do not research current language comment standards unless the user explicitly asks for a standards refresh.
 - When git history or recent merge context is available, judge the current merged result against the latest target-branch state, not each branch in isolation.
 - Do not ask for credentials for normal local repo audits.
 - If external systems are genuinely needed, first exhaust local repo state, local git history, and no-auth metadata.
@@ -60,6 +24,7 @@ Use these references when helpful:
 - Repo or subtree under audit and whether the task is audit-only or audit-and-fix.
 - Recent refactors, branches, PRs, or agent-thread outputs most likely to have interacted.
 - Expected sources of truth such as README files, docs, examples, configs, tests, manifests, generated metadata, automation, or control files.
+- Local comment standards such as `contracts/code-comment-standards.json`, README guidance, or language-specific conventions already present in the repo.
 - High-risk surfaces such as public APIs, migrations, feature flags, rename waves, packaging, install flows, or generated artifacts.
 
 Infer missing inputs from repo state before asking.
@@ -95,6 +60,7 @@ Check as many of these as the repo justifies:
 - tests vs current intended behavior
 - configs, manifests, automation, and control files vs implementation
 - public interfaces vs internal assumptions
+- comments vs non-obvious behavior, safety boundaries, external side effects, script usage, and README-maintained workflow expectations
 - merged-only edge cases that appear when features or refactors combine
 - stale artifacts, dead references, partial migrations, and unused compatibility shims
 
@@ -119,6 +85,7 @@ Check as many of these as the repo justifies:
 
 - Verify the audit inspected the repo's declared sources of truth, not only the implementation files.
 - Verify merged interaction surfaces and likely cross-thread integration seams were checked where evidence existed.
+- Verify comments and README coverage are sufficient for important scripts, public interfaces, automation helpers, and non-obvious safety or contract logic when those surfaces were part of the audit.
 - Verify every reported finding ties back to concrete conflicting artifacts or an explicitly stated verification gap.
 - Verify the final answer reports findings, important consistent areas, and important verification limits without drifting into generic review commentary.
 

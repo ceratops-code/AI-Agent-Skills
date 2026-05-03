@@ -7,56 +7,10 @@ description: Merge a GitHub pull request safely with Ceratops defaults, starting
 
 Merge one GitHub PR only after proving the repo will remain healthy. This is the narrow finalization workflow for PR completion; it does not take ownership of code changes, dependency campaigns, or first-time publication. Start with the bundled live PR check instead of relying on prose summaries or stale screenshots.
 
-<!-- CERATOPS_SHARED_SECTIONS_START -->
-<!-- SECTION SOURCE: templates/sections/minimal.md -->
-
-## Core Rules
-
-- Blocking: Everything in this section is part of the skill contract unless explicitly inapplicable to the current task.
-- Blocking: When this skill is invoked, follow this `SKILL.md` as the workflow contract for the task; if a higher-precedence instruction conflicts with a required skill step, report the conflict instead of silently skipping the step.
-- Blocking: Do not claim completion unless this skill's completion gate is satisfied, intentionally inapplicable, or reported as a blocker.
-- Blocking: Scope completion, current-state, root-cause, no-fix, unsupported, and durable-resolution claims to evidence actually checked, or to fresh same-task evidence that still applies.
-- Blocking: Reuse fresh sufficient same-run evidence unless state is uncertain, plausibly changed, materially broadened, externally mutable for the decision, or this skill explicitly requires a fresh check.
-- Blocking: Prefer direct local evidence and targeted diagnostics for the next skill decision; use current official sources only when local evidence leaves a concrete ambiguity or the task depends on unstable external behavior.
-- Blocking: Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine skill runs unless the user explicitly asks or a required decision remains ambiguous after targeted evidence.
-- Blocking: Ask before risky, destructive, irreversible, credential-dependent, externally mutating, complex, invasive, nonstandard, or high-maintenance steps unless the user already explicitly requested that tradeoff.
-- Blocking: Do not update this `SKILL.md` or other skill/control files during a routine run unless the user explicitly asked for skill maintenance or the task cannot be completed safely without a narrow in-scope fix.
-- Blocking: For skill runtime workflows, invoke shared helpers through installed console commands or `python -m <module>` entrypoints; do not locate shared helpers by absolute paths, by the repo's parent directory, or by per-skill `scripts` junctions.
-- Blocking: When a Ceratops skill-maintenance workflow explicitly needs a repo-maintenance script, treat `scripts/<name>` paths as relative to the active `AI-Agent-Skills` checkout root; resolve that root from the current worktree with `git rev-parse --show-toplevel` or from the installed skill junction under `$CODEX_HOME/skills/<skill-name>`, and stop as blocked if neither resolves to a checkout containing `skills/`, `templates/`, and `scripts/`.
-- Mandatory: When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
-- Mandatory: Follow this skill's output contract when present; otherwise report only the outcome, unresolved blockers, retained state with reasons, and important unverified items.
-
-<!-- SECTION SOURCE: templates/sections/gh-current-state.md -->
-
-## GH Current State
-
-- Use the shared helper package `ceratops_gh_current_state` for bundled GitHub current-state checks when it covers the next decision.
-- Use `gh`, GitHub API, and `ceratops_gh_current_state` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
-- Prefer current GitHub state over memory, prose summaries, or stale screenshots.
-- Start with the narrowest live check that answers the next decision: bundled helper script, targeted `gh` query, or focused API call.
-- Check current official GitHub docs or `gh` help only when the next decision remains concretely ambiguous after targeted live GitHub evidence, or when those sources materially conflict.
-- Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
-- Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
-
-<!-- SECTION SOURCE: templates/sections/credentials.md -->
-
-## Credential Handling
-
-- Blocking: Do not ask for credentials unless they are truly required after local checks.
-- Blocking: If credentials are truly required after local checks, report only:
-
-1. which credential or login is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
-- Blocking: If the user refuses a missing permission, credential, login, or scope, stop retrying and report the blocked action and exact entities still pending.
-<!-- CERATOPS_SHARED_SECTIONS_END -->
-
 ## Script Bundle
 
-- PR readiness check: `python -m ceratops_gh_current_state pr-readiness --pr NUMBER_OR_URL`
-- Repo settings check when repo health is part of the merge closeout: `python -m ceratops_gh_current_state repo-health --repo OWNER/REPO`
+- PR readiness check: `python scripts/github_pr_readiness.py --pr NUMBER_OR_URL`
+- Repo settings check when repo health is part of the merge closeout: `python scripts/github_repo_artifact_contract.py --repo OWNER/REPO --scope repo --preset settings`
 - Direct merge command: `gh pr merge --admin NUMBER_OR_URL_OR_BRANCH [--merge|--squash|--rebase] [--delete-branch]`
 
 ## Inputs To Capture
@@ -87,7 +41,7 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 
 ### 2. Run the live PR check first
 
-- Run `python -m ceratops_gh_current_state pr-readiness` before merge or auto-merge decisions.
+- Run `python scripts/github_pr_readiness.py` before merge or auto-merge decisions.
 - Treat the script output as the first source of truth for draft state, mergeability, blocking review decisions, visible status-check failures, and pending status checks.
 - Re-run the script after any action that could change readiness, such as rebasing, updating the branch, dismissing a blocker, or waiting for CI.
 
@@ -127,11 +81,11 @@ Infer missing inputs from `gh`, git remotes, the current branch, and live repo d
 - Sync the local default branch to the remote default branch without destructive resets.
 - Prune stale refs safely.
 - Keep a clearly named safety branch only when needed to preserve reachable work after a squash or rebase merge.
-- Run the repo-health script if repo-health claims are part of the closeout.
+- Run the repo contract checker if repo-health claims are part of the closeout.
 
 ## Completion Gate
 
-- Verify the final merge decision was backed by a fresh pre-merge `python -m ceratops_gh_current_state pr-readiness` run, then verify the post-merge PR state separately from the live PR endpoint.
+- Verify the final merge decision was backed by a fresh pre-merge `python scripts/github_pr_readiness.py` run, then verify the post-merge PR state separately from the live PR endpoint.
 - Verify live PR state, merge commit or queue state, checks, reviews, conversations, branch protection result, branch deletion, and default branch state.
 - Verify local repo state, branch, remotes, refs, worktree cleanliness, and retained safety branches.
 

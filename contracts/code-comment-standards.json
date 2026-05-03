@@ -1,0 +1,97 @@
+{
+  "contract_format_version": 1,
+  "kind": "code_comment_standards_contract",
+  "name": "ceratops_code_comment_standards",
+  "captured_on": "2026-05-02",
+  "purpose": "Stable local standards for deciding whether scripts and code have enough useful comments without researching current language guidance during routine skill runs.",
+  "scope_policy": {
+    "applies_to": [
+      "repo scripts",
+      "CLI entrypoints",
+      "automation helpers",
+      "contract checkers",
+      "nontrivial project code touched by a consistency audit"
+    ],
+    "does_not_require_live_research": true,
+    "prefer_project_conventions_when_present": true
+  },
+  "comment_quality_standard": {
+    "required_comment_roles": [
+      "public intent or usage contract",
+      "non-obvious safety boundary",
+      "external API or filesystem side-effect boundary",
+      "data-shape or contract interpretation that is not obvious from names",
+      "reason for intentionally unusual or conservative behavior"
+    ],
+    "discouraged_comment_roles": [
+      "line-by-line restatement of simple code",
+      "stale implementation history",
+      "TODO without an owner or next decision",
+      "commented-out code"
+    ],
+    "readme_expectation": "README or equivalent repo docs should describe how to run important scripts and what contract or workflow owns them when that is not obvious from filenames."
+  },
+  "language_defaults": {
+    "python": {
+      "file_level": "Module docstring for standalone scripts, reusable modules, and contract checkers.",
+      "public_api": "Docstrings for public classes, public functions, dataclasses, and CLI entrypoints when behavior is not trivial.",
+      "cli": "ArgumentParser description and help text for non-obvious options.",
+      "safety": "Short comments near destructive, mutating, credential, network, or filesystem-boundary logic."
+    },
+    "powershell": {
+      "file_level": "Top-level comment or self-explanatory parameter block for user-facing scripts.",
+      "public_api": "Parameter names and validation should make common usage clear; add comments for migration or safety logic.",
+      "safety": "Short comments near removal, move, reparse-point, branch, environment, or runtime-install logic."
+    },
+    "javascript_or_typescript": {
+      "file_level": "Header comment only when the file is a standalone script or non-obvious integration point.",
+      "public_api": "Comments or JSDoc for exported APIs whose behavior, side effects, or data shape is not obvious.",
+      "safety": "Short comments near filesystem, network, package-publish, or credential-sensitive behavior."
+    },
+    "shell": {
+      "file_level": "Header comment for user-facing scripts.",
+      "safety": "Comments near destructive commands, shell-option decisions, traps, and non-obvious quoting or path handling."
+    },
+    "json_contract": {
+      "file_level": "Top-level purpose, scope, parameters, and remediation fields should explain intent without separate prose.",
+      "checks": "Each check should carry enough id, description, expected value, source, and remediation data for deterministic scripts and reviewers to understand it."
+    }
+  },
+  "deterministic_checks": [
+    {
+      "id": "comments.python_script_module_docstring",
+      "target": "Python files under scripts/",
+      "expected": "file starts with shebang or module docstring and standalone scripts have a module docstring within the first non-shebang lines"
+    },
+    {
+      "id": "comments.python_public_docstrings",
+      "target": "Python public functions/classes in scripts/",
+      "expected": "nontrivial public functions and classes have docstrings or equivalent nearby explanatory comments"
+    },
+    {
+      "id": "comments.powershell_safety_comments",
+      "target": "PowerShell scripts under scripts/",
+      "expected": "mutation, cleanup, runtime install, branch, and reparse-point logic has a nearby intent/safety comment"
+    },
+    {
+      "id": "comments.no_low_value_comment_noise",
+      "target": "all code files",
+      "expected": "comments should not mostly restate simple assignments, loops, or obvious function calls"
+    },
+    {
+      "id": "comments.readme_script_coverage",
+      "target": "README.md and script inventory",
+      "expected": "important user-facing scripts are documented by command, purpose, and expected side effect"
+    }
+  ],
+  "non_deterministic_review": [
+    {
+      "id": "ND.comments.sufficiency_for_maintenance",
+      "question": "Do comments explain the repo's non-obvious behavior, invariants, safety boundaries, and public script usage well enough for a future maintainer to update the code without reconstructing intent from history?"
+    },
+    {
+      "id": "ND.comments.readme_alignment",
+      "question": "Does the README describe the scripts and contracts that users actually run, without documenting retired helpers or generated internals as active workflow?"
+    }
+  ]
+}

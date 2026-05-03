@@ -1,6 +1,6 @@
 ## GH Repo Health Contract
 
-- Apply this contract to repo creation, first-time hardening, repo-health audit, and repo-health repair. For normal ship, dependency-update, or merge runs, apply only the parts made stale by the current change or needed for a final repo-health claim.
+- Apply `contracts/github/github-repo-contract.json` to repo creation, first-time hardening, repo-health audit, and repo-health repair. For normal ship, dependency-update, or merge runs, apply only the checks made stale by the current change or needed for a final repo-health claim.
 - Capture or verify the repo identity and public contract: owner, name, default branch, visibility, topics, homepage, support route, CODEOWNERS owners, and local consumers tied to the repo path.
 - Execute or verify public repo files when relevant: `README`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, issue intake, pull request intake, support routing, CI, release workflows, dependency update automation, and code scanning config.
 - Execute or verify GitHub process settings when relevant: default-branch protection or rulesets, real required checks, strict status checks, pull-request flow, required reviews, stale review dismissal, conversation resolution, admin enforcement, force-push bans, deletion bans, auto-merge, and delete-branch-on-merge.
@@ -11,5 +11,5 @@
 - Mandatory: Surface optional paid or churn-prone security add-ons such as dependency graph automatic dependency submission, secret scanning non-provider patterns, validity checks, extended metadata, generic secret detection, delegated bypass or dismissal, dependency review enforcement, and grouped Dependabot security updates when relevant; do not require or silently enable them unless the feature is available at no extra cost or the user explicitly accepts the paid or workflow-churn tradeoff.
 - Execute or verify workflow hardening when repo workflows are present: every non-local action should use a verified full SHA with a same-line release comment, `sha_pinning_required` should be enabled once workflows are compliant, and reusable workflow tag refs should be classified deliberately.
 - When `.github/dependabot.yml` explicitly assigns `labels: dependencies`, create or verify the live repo label `dependencies`.
-- Run the bundled repo-health script after GitHub settings changes that could affect a reported check and whenever the final answer relies on repo-health settings.
+- Run `scripts/github_repo_artifact_contract.py` with the relevant check, bundle, or scope selection after GitHub settings changes that could affect a reported check and whenever the final answer relies on repo-health settings.
 - Verify or classify stale PRs, branches, tags, releases, generated files, local path references, old automation references, security alerts, code-scanning alerts, maturity findings, and process alerts when they are in scope.

@@ -35,6 +35,8 @@ function Get-GitLines {
 }
 
 function Get-WorktreeRecords {
+    # Parse porcelain output into records so the staged-release skill can detect
+    # other local worktrees that still carry dirty or unstaged work.
     $records = @()
     $current = @{}
 
@@ -77,6 +79,9 @@ function Test-IsExcludedBranch {
     if ([string]::IsNullOrWhiteSpace($BranchName)) {
         return $false
     }
+    # Main, the active release branch, and the branches explicitly staged into
+    # that release are expected. Every other branch is suspicious if it has
+    # commits that are not reachable from the release branch.
     if ($BranchName -eq $MainBranch -or $BranchName -eq $ReleaseBranch) {
         return $true
     }
@@ -100,6 +105,8 @@ foreach ($record in Get-WorktreeRecords) {
         $branchName = Convert-BranchRefToName $record.branch
     }
 
+    # Dirty worktrees outside the runtime checkout are reported before shipping
+    # so they are either staged, intentionally retained, or cleaned up.
     $status = @(& git -C $worktreePath status --porcelain)
     if ($LASTEXITCODE -ne 0) {
         throw "git failed: status --porcelain in $worktreePath"
@@ -119,6 +126,7 @@ foreach ($branchName in Get-GitLines @("for-each-ref", "--format=%(refname:short
         continue
     }
 
+    # Count commits that would be left behind if the release branch shipped now.
     $aheadText = (Get-GitLines @("rev-list", "--count", "$ReleaseBranch..$branchName") | Select-Object -First 1).Trim()
     $aheadCount = [int]$aheadText
     if ($aheadCount -gt 0) {

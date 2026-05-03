@@ -5,98 +5,7 @@ description: Create, fork, or production-harden a local software project as a pu
 
 # Ceratops GH Repo Create And Publish
 
-Turn a local project into a real public GitHub repository and the right published artifact with minimal back-and-forth. Use the free path by default, prefer public visibility only after verifying the project is safe to expose, and prove machine-checkable live GitHub settings with the bundled helper scripts before closing.
-
-<!-- CERATOPS_SHARED_SECTIONS_START -->
-<!-- SECTION SOURCE: templates/sections/minimal.md -->
-
-## Core Rules
-
-- Blocking: Everything in this section is part of the skill contract unless explicitly inapplicable to the current task.
-- Blocking: When this skill is invoked, follow this `SKILL.md` as the workflow contract for the task; if a higher-precedence instruction conflicts with a required skill step, report the conflict instead of silently skipping the step.
-- Blocking: Do not claim completion unless this skill's completion gate is satisfied, intentionally inapplicable, or reported as a blocker.
-- Blocking: Scope completion, current-state, root-cause, no-fix, unsupported, and durable-resolution claims to evidence actually checked, or to fresh same-task evidence that still applies.
-- Blocking: Reuse fresh sufficient same-run evidence unless state is uncertain, plausibly changed, materially broadened, externally mutable for the decision, or this skill explicitly requires a fresh check.
-- Blocking: Prefer direct local evidence and targeted diagnostics for the next skill decision; use current official sources only when local evidence leaves a concrete ambiguity or the task depends on unstable external behavior.
-- Blocking: Do not do generalized best-practice refresh, reference-repo comparison, or skill-maintenance work during routine skill runs unless the user explicitly asks or a required decision remains ambiguous after targeted evidence.
-- Blocking: Ask before risky, destructive, irreversible, credential-dependent, externally mutating, complex, invasive, nonstandard, or high-maintenance steps unless the user already explicitly requested that tradeoff.
-- Blocking: Do not update this `SKILL.md` or other skill/control files during a routine run unless the user explicitly asked for skill maintenance or the task cannot be completed safely without a narrow in-scope fix.
-- Blocking: For skill runtime workflows, invoke shared helpers through installed console commands or `python -m <module>` entrypoints; do not locate shared helpers by absolute paths, by the repo's parent directory, or by per-skill `scripts` junctions.
-- Blocking: When a Ceratops skill-maintenance workflow explicitly needs a repo-maintenance script, treat `scripts/<name>` paths as relative to the active `AI-Agent-Skills` checkout root; resolve that root from the current worktree with `git rev-parse --show-toplevel` or from the installed skill junction under `$CODEX_HOME/skills/<skill-name>`, and stop as blocked if neither resolves to a checkout containing `skills/`, `templates/`, and `scripts/`.
-- Mandatory: When editing an existing text file, preserve its current line-ending convention unless intentional normalization is part of the task.
-- Mandatory: Follow this skill's output contract when present; otherwise report only the outcome, unresolved blockers, retained state with reasons, and important unverified items.
-
-<!-- SECTION SOURCE: templates/sections/credentials.md -->
-
-## Credential Handling
-
-- Blocking: Do not ask for credentials unless they are truly required after local checks.
-- Blocking: If credentials are truly required after local checks, report only:
-
-1. which credential or login is missing
-2. why it is needed
-3. where it will be stored
-4. the exact command the user should run
-5. whether it goes into a local credential store, config file, keyring, CI secret, registry setting, connector, or another exact target
-- Blocking: If the user refuses a missing permission, credential, login, or scope, stop retrying and report the blocked action and exact entities still pending.
-
-<!-- SECTION SOURCE: templates/sections/gh-current-state.md -->
-
-## GH Current State
-
-- Use the shared helper package `ceratops_gh_current_state` for bundled GitHub current-state checks when it covers the next decision.
-- Use `gh`, GitHub API, and `ceratops_gh_current_state` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
-- Prefer current GitHub state over memory, prose summaries, or stale screenshots.
-- Start with the narrowest live check that answers the next decision: bundled helper script, targeted `gh` query, or focused API call.
-- Check current official GitHub docs or `gh` help only when the next decision remains concretely ambiguous after targeted live GitHub evidence, or when those sources materially conflict.
-- Compare at most 1-2 strong current reference repos only for concrete ambiguous GitHub workflow, security, release, or packaging patterns that official docs and current GitHub state do not settle.
-- Re-run the relevant live check after any GitHub change that could affect the specific result being relied on.
-
-<!-- SECTION SOURCE: templates/sections/gh-repo-health-contract.md -->
-
-## GH Repo Health Contract
-
-- Apply this contract to repo creation, first-time hardening, repo-health audit, and repo-health repair. For normal ship, dependency-update, or merge runs, apply only the parts made stale by the current change or needed for a final repo-health claim.
-- Capture or verify the repo identity and public contract: owner, name, default branch, visibility, topics, homepage, support route, CODEOWNERS owners, and local consumers tied to the repo path.
-- Execute or verify public repo files when relevant: `README`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, issue intake, pull request intake, support routing, CI, release workflows, dependency update automation, and code scanning config.
-- Execute or verify GitHub process settings when relevant: default-branch protection or rulesets, real required checks, strict status checks, pull-request flow, required reviews, stale review dismissal, conversation resolution, admin enforcement, force-push bans, deletion bans, auto-merge, and delete-branch-on-merge.
-- For private repos where GitHub returns a plan-limited branch-protection or rulesets response, classify the paid requirement explicitly instead of treating the repo as proven unprotected; do not make or imply a clean protection claim until an eligible paid plan, public visibility, or another live enforcement source verifies it.
-- Blocking: Execute or verify no-extra-cost dependency security for every non-archived repo when available: dependency graph, Dependabot alerts, Dependabot security updates, and any open dependency or security alerts that affect the repo.
-- Blocking: Execute or verify public-repo security and moderation when available at no extra cost: private vulnerability reporting or an explicit private reporting path, secret scanning, push protection, code scanning, community profile, and reported-content or moderation health.
-- Blocking: For org-wide or new-repo security posture, prefer current GitHub code security configurations and defaults over legacy all-repo enablement endpoints; classify missing `admin:org`, security-manager access, or paid GitHub Code Security or Secret Protection as blockers or retained paid requirements instead of treating them as repo-level drift.
-- Mandatory: Surface optional paid or churn-prone security add-ons such as dependency graph automatic dependency submission, secret scanning non-provider patterns, validity checks, extended metadata, generic secret detection, delegated bypass or dismissal, dependency review enforcement, and grouped Dependabot security updates when relevant; do not require or silently enable them unless the feature is available at no extra cost or the user explicitly accepts the paid or workflow-churn tradeoff.
-- Execute or verify workflow hardening when repo workflows are present: every non-local action should use a verified full SHA with a same-line release comment, `sha_pinning_required` should be enabled once workflows are compliant, and reusable workflow tag refs should be classified deliberately.
-- When `.github/dependabot.yml` explicitly assigns `labels: dependencies`, create or verify the live repo label `dependencies`.
-- Run the bundled repo-health script after GitHub settings changes that could affect a reported check and whenever the final answer relies on repo-health settings.
-- Verify or classify stale PRs, branches, tags, releases, generated files, local path references, old automation references, security alerts, code-scanning alerts, maturity findings, and process alerts when they are in scope.
-
-<!-- SECTION SOURCE: templates/sections/gh-artifact-contract.md -->
-
-## GH Artifact Contract
-
-- Apply this contract only when the repo has an external artifact, the current change affects a releasable artifact, or the final answer makes an artifact or no-artifact claim.
-- Identify the real deliverable from the project instead of forcing Docker, PyPI, or any other registry by default.
-- Capture or verify the artifact identity, registry target, version source, release policy, tag style, changelog or release-note source, and post-publish consumer check.
-- In audit-only flows, verify and classify artifact state; do not publish or mutate registry artifacts unless the workflow explicitly moves into a ship or publish skill.
-- Build, package, install, pull, run, or consume local artifacts enough to catch packaging and runtime failures before publishing or before making a local artifact-health claim.
-- Publish external artifacts only when repo policy and the merged change require a release, tag, package, image, module, binary, or other public artifact.
-- Derive versions from trustworthy project metadata and tag history instead of inventing semantics.
-- Verify live release and registry endpoints after publishing or when auditing artifact state, including tags, digests, package pages, release pages, and published artifacts.
-- Prefer registry-supported trusted publishing, OIDC, or another short-lived identity path over repository-stored long-lived publish tokens when supported by the real registry; keep any token-based fallback explicit and scoped.
-- For PyPI publishes, prefer Trusted Publishing or another short-lived identity path over repository-stored long-lived tokens when supported, build the intended sdist and wheel, publish the intended version, verify the live PyPI version, install that exact version from PyPI locally, and run the smoke or documented consumer check against the published artifact instead of an editable checkout.
-- For PyPI publishes that emit attestations or provenance, verify the metadata through PyPI or the selected verifier instead of relying only on upload success.
-- For npm publishes, prefer trusted publishing when the package and runner meet current npm prerequisites, run the package's build and test path, publish the intended version, verify the live npm package and version, and verify provenance when npm generated it.
-- For Docker or OCI image publishes, build locally, run a smoke test, publish the intended tags or digests, verify the live registry state, pull or consume the published image when relevant, and verify provenance or SBOM attestations when the selected publish flow emits them.
-
-<!-- SECTION SOURCE: templates/sections/gh-findings.md -->
-
-## GH Findings
-
-- Classify only findings actually inspected in this run. Do not expand reporting to untouched queues unless they become the next actionable work or the user explicitly asked for full coverage.
-- For each inspected finding, decide whether it is safe, fix low-risk items directly when in scope, and for every finding left open report its name or id, whether it is blocking, why it remains open, and the concrete work needed to clear it.
-- Do not collapse retained findings into a generic healthy result.
-- Re-check findings whose status may have changed because of actions taken in this run.
-<!-- CERATOPS_SHARED_SECTIONS_END -->
+Turn a local project into a real public GitHub repository and the right published artifact with minimal back-and-forth. Use the free path by default, prefer public visibility only after verifying the project is safe to expose, and prove machine-checkable live GitHub settings with the contract checker before closing.
 
 ## Skill-Specific Rules
 
@@ -104,7 +13,8 @@ Turn a local project into a real public GitHub repository and the right publishe
 
 ## Script Bundle
 
-- Repo settings check: `python -m ceratops_gh_current_state repo-health --repo OWNER/REPO`
+- Repo and artifact setup check: `python scripts/github_repo_artifact_contract.py --repo OWNER/REPO --scope all --preset create`
+- Optional org posture check: `python scripts/github_org_contract.py --org ORG`
 
 ## Inputs To Capture
 
@@ -135,7 +45,7 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 
 - Default to the narrowest evidence that answers the next publish or hardening decision: local project files first, then the selected registry or GitHub docs for the actual project type.
 - Check current official docs only where a repo-health or artifact-contract decision remains unresolved by local files and live state.
-- Compare at most 1-2 strong reference repos only for a concrete ambiguous repo-structure, security, release, or packaging question. Do not do broad GH-skill best-practice maintenance during routine publish runs.
+- Compare at most 1-2 strong reference repos only for a concrete ambiguous repo-structure, security, release, or packaging question. Do not do broad GitHub health contract maintenance during routine publish runs.
 - Do not choose paid features unless they are already available at no extra cost.
 
 ### 3. Execute repo and artifact contracts
@@ -163,7 +73,7 @@ Infer the safest practical default unless the choice is risky, destructive, ambi
 
 ## Completion Gate
 
-- Verify the final GitHub setting claims are backed by a fresh `python -m ceratops_gh_current_state repo-health` run.
+- Verify the final GitHub setting claims are backed by a fresh relevant `scripts/github_repo_artifact_contract.py` run.
 - Verify live review protection still shows `required_approving_review_count: 1` and the intended maintainer bypass actor unless the user explicitly chose a different merge policy.
 - Verify the maintainer bypass is implemented through a live pull-request-only ruleset when the platform supports it.
 - Verify live external state for every touched repo, protection rule, security setting, release, package, image, CI run, code scanning result, PR state, registry artifact, and docs endpoint.

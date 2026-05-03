@@ -1,3 +1,6 @@
+# Restore the runtime checkout to main after a staged skill release is shipped.
+# The script also reruns the copy-based installer so installed skills match the
+# restored runtime checkout instead of an unpublished release branch.
 param(
     [string]$MainBranch = "main",
     [string]$ReleaseBranch = "release/local",
@@ -5,6 +8,7 @@ param(
     [switch]$KeepReleaseBranch
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 function Invoke-Git {
@@ -47,6 +51,8 @@ Set-Location -LiteralPath $repoRoot
 
 $status = Get-GitOutput "status" "--porcelain"
 if ($status) {
+    # A dirty runtime checkout could contain unpublished edits. Stop before
+    # switching branches or deleting release-branch state.
     throw "Runtime checkout is dirty; commit, stash, or discard unrelated changes before restoring main."
 }
 
@@ -55,6 +61,9 @@ Invoke-Git "switch" $MainBranch
 Invoke-Git "merge" "--ff-only" "origin/$MainBranch"
 
 if (($DropReleaseBranch -or -not $KeepReleaseBranch) -and (Test-BranchExists $ReleaseBranch)) {
+    # A squash merge leaves the release branch not literally merged but often
+    # tree-identical to main. In either case the local preview branch is stale
+    # and can be removed unless the caller explicitly keeps it.
     & git merge-base --is-ancestor $ReleaseBranch $MainBranch
     $merged = $LASTEXITCODE -eq 0
 

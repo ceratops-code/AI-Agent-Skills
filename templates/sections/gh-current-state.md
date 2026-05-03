@@ -2,8 +2,8 @@
 
 ## GH Current State
 
-- Use the shared helper package `ceratops_gh_current_state` for bundled GitHub current-state checks when it covers the next decision.
-- Use `gh`, GitHub API, and `ceratops_gh_current_state` as first-pass evidence for current GitHub state before checking official docs or `gh` help.
+- Mandatory: Use copied repo-maintenance scripts, especially `scripts/github_pr_readiness.py` and the contract checkers, for bundled GitHub current-state checks when they cover the next decision.
+- Mandatory: Use `gh`, GitHub API, copied repo-maintenance scripts, and contract evidence bundles as first-pass evidence for current GitHub state before checking official docs or `gh` help.
 - Prefer current GitHub state over memory, prose summaries, or stale screenshots.
 - Start with the narrowest live check that answers the next decision: bundled helper script, targeted `gh` query, or focused API call.
 - Check current official GitHub docs or `gh` help only when the next decision remains concretely ambiguous after targeted live GitHub evidence, or when those sources materially conflict.
