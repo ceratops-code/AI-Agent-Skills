@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 jobs:
-  validate-skills:
-    name: validate-skills
+  validate-skills-consistency:
+    name: validate-skills-consistency
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
