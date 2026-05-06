@@ -13,10 +13,16 @@ Design notes for maintainers:
 * Read operations are bundled before comparison so one run can reuse the same
   evidence across many checks. Apply mode is intentionally narrow and only
   touches checks listed in the contract's `auto_apply_check_ids`.
-* Preset, check-id, and fetch-bundle filters let skill workflows check only the
+* Subset, check-id, and fetch-bundle filters let explicit audits check only the
   relevant org surface without invoking one command per setting.
 * Destructive, irreversible, paid, or identity-sensitive settings are never
   fixed automatically here; they are reported as drift or manual work.
+
+Called by org health audits, organization setup checks, and standards-governance
+reviews when the task needs current organization settings in one bundled run.
+It is not called after every successful `gh api` setting command; command
+success is already evidence for that exact mutation unless broader drift needs
+an audit.
 """
 
 from __future__ import annotations
@@ -68,7 +74,7 @@ def load_json(path: str) -> Any:
 def default_contract_path(filename: str) -> str:
     """Find bundled org contracts in source and installed skill layouts."""
 
-    script_root = pathlib.Path(__file__).resolve().parents[1]
+    script_root = pathlib.Path(__file__).resolve().parents[2]
     candidates = [
         pathlib.Path.cwd() / filename,
         pathlib.Path.cwd() / "contracts" / "github" / filename,
@@ -87,23 +93,23 @@ def all_check_ids(contract: dict[str, Any]) -> set[str]:
     return {str(check.get("id")) for check in contract.get("checks", []) if check.get("id")}
 
 
-def preset_check_ids(contract: dict[str, Any], preset: str) -> set[str] | None:
-    """Map workflow presets to org contract subsets.
+def subset_check_ids(contract: dict[str, Any], subset: str) -> set[str] | None:
+    """Map workflow subsets to org contract checks.
 
-    `None` means every org check. Presets are intentionally prefix-based so the
+    `None` means every org check. Subsets are intentionally prefix-based so the
     JSON contract remains the policy source of truth and Python only narrows the
     selected evidence surface.
     """
 
     ids = all_check_ids(contract)
-    if preset == "all":
+    if subset == "all":
         return None
     prefixes = {
         "settings": ("org.", "organization.", "custom_properties."),
         "actions": ("actions.",),
         "dependabot": ("dependabot.",),
         "security": ("code_security.", "dependabot.", "private_registries."),
-    }[preset]
+    }[subset]
     return {check_id for check_id in ids if check_id.startswith(prefixes)}
 
 
@@ -123,7 +129,7 @@ def selected_ids_for_report(contract: dict[str, Any], selected_ids: set[str] | N
 
 
 def apply_explicit_check_ids(contract: dict[str, Any], requested: list[str] | None, selected_ids: set[str] | None) -> set[str] | None:
-    """Restrict preset selection to explicit check IDs from `--check-id`."""
+    """Restrict subset selection to explicit check IDs from `--check-id`."""
 
     if not requested:
         return selected_ids
@@ -135,7 +141,7 @@ def apply_explicit_check_ids(contract: dict[str, Any], requested: list[str] | No
     filtered = requested_set if selected_ids is None else requested_set & selected_ids
     excluded = requested_set - filtered
     if excluded:
-        raise SystemExit(f"Check id(s) excluded by current --preset: {', '.join(sorted(excluded))}")
+        raise SystemExit(f"Check id(s) excluded by current --subset: {', '.join(sorted(excluded))}")
     return filtered
 
 
@@ -747,12 +753,12 @@ def build_params(args: argparse.Namespace, contract: dict[str, Any]) -> dict[str
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check and optionally remediate a GitHub org contract.")
-    parser.add_argument("--contract", default=default_contract_path("github-org-contract.json"))
+    parser.add_argument("--contract", default=default_contract_path("github-org-deterministic-contract.json"))
     parser.add_argument("--org", required=True)
     parser.add_argument("--billing-email")
     parser.add_argument("--owner-login")
     parser.add_argument("--param", action="append", help="Additional contract parameter as KEY=VALUE. VALUE may be JSON.")
-    parser.add_argument("--preset", choices=["all", "settings", "actions", "dependabot", "security"], default="all", help="Run a workflow-oriented subset of org checks.")
+    parser.add_argument("--subset", choices=["all", "settings", "actions", "dependabot", "security"], default="all", help="Run a workflow-oriented subset of org checks.")
     parser.add_argument("--check-id", action="append", help="Run one deterministic check ID. Can be repeated.")
     parser.add_argument("--bundle", action="append", help="Fetch only this contract fetch bundle ID. Can be repeated.")
     parser.add_argument("--apply", action="store_true", help="Apply contract-declared automatic remediations.")
@@ -762,7 +768,7 @@ def main() -> int:
 
     contract = load_json(args.contract)
     params = build_params(args, contract)
-    selected_check_ids = apply_explicit_check_ids(contract, args.check_id, preset_check_ids(contract, args.preset))
+    selected_check_ids = apply_explicit_check_ids(contract, args.check_id, subset_check_ids(contract, args.subset))
     selected_bundle_ids = set(args.bundle) if args.bundle else None
     if selected_bundle_ids is not None:
         known_bundles = {str(bundle.get("id")) for bundle in contract.get("fetch_bundles", []) if bundle.get("id")}
@@ -776,8 +782,12 @@ def main() -> int:
 
     if args.apply and drifts:
         applied = remediate({drift["check_id"] for drift in drifts}, contract, params)
-        fetched = fetch_contract(contract, params, selected_check_ids, selected_bundle_ids)
-        drifts, approved, skipped = compare_contract(contract, params, fetched, selected_check_ids)
+        applied_success_ids = {str(item["check_id"]) for item in applied if item.get("ok")}
+        # A successful mutation command is sufficient evidence for that exact
+        # applied check. Leave unrelated drift in the report, and do not spend a
+        # second API bundle just to read back fields that the command accepted.
+        if applied_success_ids:
+            drifts = [drift for drift in drifts if drift["check_id"] not in applied_success_ids]
 
     failed_fetches = [
         {"method": result.method, "endpoint": result.endpoint, "status": result.status, "message": result.message}
@@ -794,7 +804,7 @@ def main() -> int:
     report = {
         "org": params["org_login"],
         "contract": os.path.abspath(args.contract),
-        "preset": args.preset,
+        "subset": args.subset,
         "checks": len(selected_contract_checks(contract, selected_check_ids)),
         "total_checks": len(contract.get("checks", [])),
         "selected_check_ids": sorted(selected_ids_for_report(contract, selected_check_ids)),
@@ -815,7 +825,7 @@ def main() -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
         print(f"Org: {report['org']}")
-        print(f"Preset: {report['preset']}")
+        print(f"Subset: {report['subset']}")
         print(f"Checks: {report['checks']}; fetched endpoints: {report['fetched_endpoints']}")
         print(f"Unapproved drift: {report['unapproved_drift_count']}; approved drift: {report['approved_drift_count']}; skipped: {report['skipped_count']}")
         if applied:

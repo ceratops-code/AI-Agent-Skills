@@ -4,7 +4,7 @@
 
 ## Validation
 
-- [ ] `python .\scripts\validate-skills.py`
+- [ ] `powershell -ExecutionPolicy Bypass -File .\scripts\install-skills.ps1 -SkipInstall -Validate full`
 
 ## Release impact
 

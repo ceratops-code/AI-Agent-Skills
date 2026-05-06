@@ -1,13 +1,13 @@
 # GitHub Artifact Health Non-Deterministic Checks
 
-This file complements `artifact-contract.json`. The JSON contains deterministic artifact classification, metadata, workflow, registry, and smoke-check requirements. This file captures checks that need human judgment, domain-specific interpretation, current official-doc review, or browser/manual registry confirmation.
+This file complements `artifact-deterministic-contract.json`. The JSON contains deterministic artifact classification, metadata, workflow, registry, and smoke-check requirements. This file captures checks that need human judgment, domain-specific interpretation, current official-doc review, or browser/manual registry confirmation.
 
 ## Evidence Bundle
 
 Use one bundled evidence command for the artifact ND checks instead of running a command per check:
 
 ```powershell
-python scripts/github_nd_evidence.py --scope artifact --repo OWNER/REPO --local-repo-path PATH --json
+python scripts/validation/github-collect-nd-evidence.py --surface artifact --repo OWNER/REPO --local-repo-path PATH --json
 ```
 
 Pass artifact identities with `--param artifact_contracts=[...]` when the package, image, or registry name cannot be derived from local manifests. The report maps each ND check ID to evidence keys and includes detected artifact types, GitHub release metadata, local file signals, and available Docker Hub, PyPI, or npm latest-version metadata.

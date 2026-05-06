@@ -5,20 +5,13 @@ description: Create a copy-paste prompt for moving a whole task into a new threa
 
 # Ceratops Thread Full Handoff
 
+## Goal
+
 Produce one copy-paste prompt for continuing the whole task in a new thread.
 
-## Skill-Specific Rules
+## Context
 
-- Treat this as moving the whole task, not spinning off a side issue.
-- Produce a prompt, not a bundle and not instructions to use a follow-up handoff skill.
-- Do not broaden work just to make the prompt feel complete.
-- Prefer current state, current objective, and next step over chronology.
-- Exclude solved branches unless they materially constrain the next step.
-- Include only the refs the new thread is likely to need immediately.
-- If the user says `include the following questions`, `including the questions`, or equivalent wording, carry those questions into the prompt as next-thread asks instead of answering them here.
-- Do not ask for credentials unless verifying the handoff requires protected state that cannot be inferred locally.
-
-## Inputs To Capture
+### Inputs To Capture
 
 - The task goal and desired completion state.
 - The current confirmed state the new thread should trust.
@@ -28,7 +21,7 @@ Produce one copy-paste prompt for continuing the whole task in a new thread.
 
 Infer missing inputs from the current thread and local state before asking.
 
-## Required Prompt Content
+### Required Prompt Content
 
 - What we were trying to do
 - What has already been established or completed
@@ -39,36 +32,53 @@ Infer missing inputs from the current thread and local state before asking.
 - The next justified step
 - Deferred questions or next-thread asks, if any
 
-## Boundaries
+## Constraints
+
+### Skill-Specific Rules
+
+- Treat this as moving the whole task, not spinning off a side issue.
+- Produce a prompt, not a bundle and not instructions to use a follow-up handoff skill.
+- Do not broaden work just to make the prompt feel complete.
+- Prefer current state, current objective, and next step over chronology.
+- Reuse fresh state already established in the current thread by default.
+- Refresh only facts whose staleness would change or misdirect the first step in the new thread.
+- Keep refs exact but limited to the entities the next thread is likely to open first.
+- Exclude solved branches unless they materially constrain the next step.
+- Include only the refs the new thread is likely to need immediately.
+- If the user says `include the following questions`, `including the questions`, or equivalent wording, carry those questions into the prompt as next-thread asks instead of answering them here.
+- Do not ask for credentials unless verifying the handoff requires protected state that cannot be inferred locally.
+
+### Boundaries
 
 - Use this skill only when the user wants to move the whole task into a different thread.
-- If the task should continue in the same thread after a manual stop, restart, or crash, stop and use `$ceratops-thread-resume-manual-stop`.
-- If only a newly discovered sub-issue should move to a new thread, stop and use `$ceratops-thread-side-task-handoff`.
 
-## Workflow
+### Workflow
 
-### 1. Refresh only first-step-critical state
+#### 1. Refresh only first-step-critical state
 
-### 2. Compress to the current task state
+- Apply the first-step refresh rules from Skill-Specific Rules before drafting the prompt.
+
+#### 2. Compress to the current task state
 
 - Prefer direct facts over chronology.
 - Keep historical background to the minimum needed to avoid a wrong start.
-- Keep refs exact but minimal.
 
-### 3. Emit a paste-ready prompt
+#### 3. Emit a paste-ready prompt
 
 - Make the objective now and the next justified step explicit.
 - Write the prompt as direct instruction to the new thread, not as commentary about a handoff artifact.
 
-## Completion Gate
+## Done When
+
+### Completion Gate
 
 - Verify the prompt includes the required content and enough exact refs to start correctly.
 - Verify the prompt does not pretend a fresh re-check happened when it did not.
 
-## Output Contract
+### Output Contract
 
 Emit one copy-paste prompt for a new thread and nothing extra.
 
-## Example Invocation
+### Example Invocation
 
 `Use $ceratops-thread-full-handoff to create a copy-paste prompt for moving this whole task into a new thread.`

@@ -1,99 +1,88 @@
 ---
 name: ceratops-gh-codex-skill-ship
-description: Ship Ceratops or other local Codex skill changes from the runtime checkout's staged `release/*` branch through GitHub and back to the installed runtime on `main`. Use when Codex should validate staged skill changes, confirm the runtime checkout is on the intended release branch, publish the batch through GitHub, then restore the runtime checkout and installed skills to synced `main`.
+description: Ship the active staged Ceratops skills repo branch through GitHub, merge the PR after CI and PR readiness pass, then restore the skills repo checkout to main and rebuild installed skills from main.
 ---
 
 # Ceratops GH Codex Skill Ship
 
-Ship a staged Ceratops skill batch through GitHub, then restore the runtime checkout and installed skill state to clean `main`.
+## Goal
 
-## Defaults
+Ship an already-staged Ceratops skill batch from the skills repo checkout's active `release/*` branch, then restore the skills repo checkout and installed skills to synced `main`.
 
-- Source repo: active `AI-Agent-Skills` checkout root
-- Installed Ceratops skill path: `$CODEX_HOME/skills/<skill-name>`
+## Context
+
+### Defaults
+
 - Default release branch: `release/local`
-- Runtime installer: `powershell -ExecutionPolicy Bypass -File .\\scripts\\install-skills.ps1`
-- Installed Ceratops skills should be managed runtime copies with `.ceratops-runtime-manifest.json`.
+- Skill install/update entrypoint: `powershell -ExecutionPolicy Bypass -File .\\scripts\\install-skills.ps1`
+- Installed Ceratops skill path: `$CODEX_HOME/skills/<skill-name>`
 
-## Skill-Specific Rules
+### Inputs To Capture
 
-- Ship from the runtime checkout's active `release/*` branch, not directly from a task worktree.
-- If the runtime checkout is not on the intended release branch or the staged batch is not yet integrated there, stop and use `$ceratops-codex-skill-stage-release`.
-- Validate every changed skill folder before shipping.
-- Ensure `SKILL.md`, `agents/openai.yaml`, and any bundled resources stay aligned.
-- Mandatory: Prefer running the repo installer when GH skills, copied helper scripts, contracts, templates, or install metadata changed; otherwise rebuild only the affected managed runtime skill copies when needed.
-- Reuse the general GitHub ship flow rather than inventing a parallel release process.
-- Restore the runtime checkout to synced `main`, remove the local `release/*` branch automatically when it is merged or tree-identical to `main`, and rerun the installer after merge; retain the release branch only with an explicit active-workflow reason.
-- Remove low-risk stale task worktrees, task branches, unmanaged duplicate installed copies, stale release branches, or stale generated skill artifacts when safe.
+- Skills repo checkout path, active release branch, target `main` branch, PR title/body expectation, and merge method.
+- Whether to create a new PR or reuse an existing PR for the active release branch.
+- Whether the user requested cleanup beyond the automatic GitHub branch deletion allowed by the merge command.
 
-## Script Bundle
+Infer missing inputs from the skills repo checkout and live GitHub state before asking.
 
-- Runtime restore helper: `scripts/restore-runtime-main.ps1`
+## Constraints
 
-## Inputs To Capture
+### Skill-Specific Rules
 
-- Changed skill folders and whether each one is new, updated, metadata-only, or cleanup.
-- Runtime checkout branch, staged release branch, PR or merge expectations, and validation expectations.
-- Installed managed-copy expectations and any known exceptions.
+- Use this skill only from the skills repo checkout when it is already on the intended local `release/*` branch.
+- If the staged branch is not ready, stop because staging is outside this skill's scope.
+- Do not edit skill source here. This skill only pushes, opens or updates the GitHub PR, merges, restores `main`, and rebuilds installed skills from `main`.
+- Do not delete local task worktrees, source branches, release branches, packages, or artifacts unless the user explicitly requested cleanup.
 
-## Boundaries
+### Boundaries
 
-- Use this skill when working in the `AI-Agent-Skills` runtime checkout or another skill source repo with the same local runtime-install pattern.
-- If the task is creating a brand-new Ceratops skill and not yet staged or shipped, stop and use `$ceratops-skill-create`.
-- If the task is updating existing Ceratops skill contents and not yet staged or shipped, stop and use `$ceratops-skill-update`.
-- If the runtime checkout is not yet staged on the intended `release/*` branch, stop and use `$ceratops-codex-skill-stage-release`.
-- If the task is general repo shipping not focused on Codex skills and local skill installation, stop and use `$ceratops-gh-ship-change`.
+- Use this skill only for shipping a staged skills repo branch through GitHub.
+- If skill creation, skill update, or local staging work is still needed, stop because source preparation is outside this skill's scope.
+- If the task is general non-skill repo shipping, stop and use `$ceratops-gh-ship-change`.
 
-## Workflow
+### Workflow
 
-### 1. Inspect staged skill scope
+#### 1. Verify staged skills repo branch
 
-- Inspect the runtime checkout state, staged release branch, changed skill folders, installed managed-copy state, and any duplicated installed copies.
-- Identify whether the work is a new skill, a skill update, a rename, a removal, metadata-only work, or cleanup.
+- Confirm the skills repo checkout is clean and on the intended local `release/*` branch.
+- Confirm the release branch contains the intended staged skill commits.
 
-### 2. Validate the staged release batch
+#### 2. Push and open or update PR
 
-- Confirm the runtime checkout is on the intended `release/*` branch and clean aside from deliberate staged commits.
-- Run the skill validator for every changed skill.
-- Check that `agents/openai.yaml` still matches the intended user-facing name, short description, and default prompt.
-- Verify any referenced bundled resources exist and are actually needed.
-- Mandatory: When the PR-readiness helper script or installer changed, prove the copied helper still runs with `python scripts/github_pr_readiness.py --help`.
+- Push the local release branch to the same-named remote branch unless the user explicitly chose a different branch name.
+- Create or update the GitHub PR from the release branch into `main`.
+- Keep the PR body concise and let CI provide the required check result.
 
-### 3. Ship the staged repo change
+#### 3. Merge PR
 
-- Use `$ceratops-gh-ship-change` from the runtime checkout when the staged release branch needs to be committed, pushed, PR'd, merged, and cleaned up.
-- If GitHub deleted the remote `release/*` branch after a prior merge, recreate the same-named remote branch from the current local `release/*` branch instead of inventing a different remote branch name.
-- Reuse an existing branch or PR when the staged release branch already has one.
-- If the work is only validation or stale-state cleanup with no content changes, use `$ceratops-gh-repo-health-audit` instead.
+- Use `$ceratops-gh-merge-pr` for PR readiness, merge or auto-merge, and remote PR branch cleanup.
+- Verify the live PR endpoint reports the PR merged before restoring `main`.
 
-### 4. Restore runtime `main`
+#### 4. Restore skills repo main and rebuild installed skills
 
-- Run `scripts/restore-runtime-main.ps1` to switch the runtime checkout back to `main`, fast-forward from `origin/main`, drop the release branch when it is merged or tree-identical after a squash merge, and rerun the installer.
-- Confirm the installed skill copy was regenerated from the runtime checkout on `main`.
+- Run `git fetch --prune origin`, `git switch main`, and `git merge --ff-only origin/main` from the skills repo checkout.
+- Run `powershell -ExecutionPolicy Bypass -File .\\scripts\\install-skills.ps1` from `main` so `$CODEX_HOME/skills` is rebuilt from the merged main snapshot.
+- Verify the skills repo checkout is clean on `main` and expected installed skill folders have current `.ceratops-runtime-manifest.json` files.
 
-### 5. Verify final installed state
+## Done When
 
-- After merge, verify the runtime checkout is synced clean and the installed skill copy still has a current runtime manifest.
-- Report any intentionally retained installed exceptions or repo leftovers.
+### Completion Gate
 
-## Completion Gate
+- Verify PR merge readiness and merge were handled by `$ceratops-gh-merge-pr`.
+- Verify the PR is merged or report the exact blocker.
+- Verify the skills repo checkout is on `main`, fast-forwarded from `origin/main`, and clean.
+- Verify installed skills were rebuilt from `main`.
 
-- Verify every changed skill validates locally.
-- Verify the repo change is merged or correctly blocked.
-- Verify the runtime checkout ends on local `main` tracking `origin/main`, unless intentionally retained on a release branch.
-- Verify no source task branch, source task worktree, or release branch remains unless an explicit active-workflow reason is reported.
-- Verify each expected installed skill copy is managed by the runtime installer.
-- Mandatory: Verify the relevant copied scripts and contract payloads exist in installed GH skill folders when the GH skill family was part of the run.
-
-## Output Contract
+### Output Contract
 
 Report only:
 
-- changed skills
-- unresolved blockers or non-blocking debt
-- intentionally retained installed exceptions or repo leftovers with reasons
-- anything important not verified
+- PR URL and final merge outcome
+- PR readiness and CI result used
+- skills repo main restore and install result
+- retained local branches, worktrees, or release branches with reasons
+- blockers or anything important not verified
 
-## Example Invocation
+### Example Invocation
 
-`Use $ceratops-gh-codex-skill-ship to ship the staged Ceratops skill batch through GitHub, restore the runtime checkout to main, and verify the installed managed skill copies.`
+`Use $ceratops-gh-codex-skill-ship to push the staged skills repo release branch, merge the GitHub PR after CI and PR readiness pass, then fetch main and rebuild installed skills from main.`

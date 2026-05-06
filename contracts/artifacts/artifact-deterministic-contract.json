@@ -1,12 +1,12 @@
 {
   "contract_format_version": 1,
   "kind": "artifact_registry_contract",
-  "name": "ceratops_artifact_registry_contract",
+  "name": "ceratops_artifact_deterministic_contract",
   "captured_on": "2026-05-02",
   "source_files": [
     {
       "path": "$AI_AGENT_SKILLS_ROOT/templates/sections/gh-artifact-contract.md",
-      "lines": "1-15"
+      "lines": "1-6"
     }
   ],
   "parameters": {
@@ -692,7 +692,7 @@
     {
       "id": "common.artifact_scope_trigger",
       "source_lines": [
-        "gh-artifact-contract.md:3"
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "common",
       "kind": "classification",
@@ -706,8 +706,8 @@
     {
       "id": "common.real_deliverable_classification",
       "source_lines": [
-        "gh-artifact-contract.md:4",
-        "gh-artifact-contract.md:8"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "common",
       "kind": "tree_workflow_release_registry_scan",
@@ -722,7 +722,7 @@
     {
       "id": "common.identity_contract",
       "source_lines": [
-        "gh-artifact-contract.md:5"
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "common",
       "kind": "contract_and_metadata",
@@ -746,7 +746,7 @@
     {
       "id": "common.audit_only_no_publish",
       "source_lines": [
-        "gh-artifact-contract.md:6"
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "common",
       "kind": "mode_guard",
@@ -763,10 +763,10 @@
     {
       "id": "common.local_build_package_consume",
       "source_lines": [
-        "gh-artifact-contract.md:7",
-        "gh-artifact-contract.md:12",
-        "gh-artifact-contract.md:14",
-        "gh-artifact-contract.md:15"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "common",
       "kind": "local_command_evidence",
@@ -781,7 +781,7 @@
     {
       "id": "common.publish_guard",
       "source_lines": [
-        "gh-artifact-contract.md:8"
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "common",
       "kind": "policy_guard",
@@ -795,7 +795,7 @@
     {
       "id": "common.version_source",
       "source_lines": [
-        "gh-artifact-contract.md:9"
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "common",
       "kind": "metadata_and_tag_scan",
@@ -811,10 +811,10 @@
     {
       "id": "common.live_registry_verification",
       "source_lines": [
-        "gh-artifact-contract.md:10",
-        "gh-artifact-contract.md:12",
-        "gh-artifact-contract.md:14",
-        "gh-artifact-contract.md:15"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "common",
       "kind": "registry_api_or_cli",
@@ -830,9 +830,9 @@
     {
       "id": "common.short_lived_identity_policy",
       "source_lines": [
-        "gh-artifact-contract.md:11",
-        "gh-artifact-contract.md:12",
-        "gh-artifact-contract.md:14"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "common",
       "kind": "workflow_scan",
@@ -848,8 +848,8 @@
     {
       "id": "common.attestation_permissions",
       "source_lines": [
-        "gh-artifact-contract.md:13",
-        "gh-artifact-contract.md:15"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "common",
       "kind": "workflow_scan",
@@ -865,7 +865,7 @@
     {
       "id": "common.linked_artifact_metadata",
       "source_lines": [
-        "gh-artifact-contract.md:10"
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "common",
       "kind": "workflow_and_github_packages_scan",
@@ -879,8 +879,8 @@
     {
       "id": "common.no_artifact_consistency",
       "source_lines": [
-        "gh-artifact-contract.md:3",
-        "gh-artifact-contract.md:4"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "common",
       "kind": "tree_workflow_release_scan",
@@ -896,7 +896,7 @@
     {
       "id": "pypi.metadata_and_build",
       "source_lines": [
-        "gh-artifact-contract.md:12"
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "pypi_python_package",
       "kind": "manifest_and_build_scan",
@@ -920,9 +920,9 @@
     {
       "id": "pypi.trusted_publishing_and_attestations",
       "source_lines": [
-        "gh-artifact-contract.md:11",
-        "gh-artifact-contract.md:12",
-        "gh-artifact-contract.md:13"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "pypi_python_package",
       "kind": "workflow_and_registry_scan",
@@ -942,9 +942,9 @@
     {
       "id": "pypi.live_version_install_smoke",
       "source_lines": [
-        "gh-artifact-contract.md:10",
-        "gh-artifact-contract.md:12",
-        "gh-artifact-contract.md:13"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "pypi_python_package",
       "kind": "registry_api_and_local_command",
@@ -963,7 +963,7 @@
     {
       "id": "npm.metadata_and_package_contents",
       "source_lines": [
-        "gh-artifact-contract.md:14"
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "npm_package",
       "kind": "manifest_and_pack_scan",
@@ -985,8 +985,8 @@
     {
       "id": "npm.trusted_publishing_and_provenance",
       "source_lines": [
-        "gh-artifact-contract.md:11",
-        "gh-artifact-contract.md:14"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "npm_package",
       "kind": "workflow_and_registry_scan",
@@ -1005,8 +1005,8 @@
     {
       "id": "npm.live_package_version_smoke",
       "source_lines": [
-        "gh-artifact-contract.md:10",
-        "gh-artifact-contract.md:14"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "npm_package",
       "kind": "registry_api_and_local_command",
@@ -1024,7 +1024,7 @@
     {
       "id": "docker_oci.dockerfile_and_context",
       "source_lines": [
-        "gh-artifact-contract.md:15"
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "docker_oci_image",
       "kind": "tree_scan",
@@ -1046,8 +1046,8 @@
     {
       "id": "docker_oci.build_publish_and_pull",
       "source_lines": [
-        "gh-artifact-contract.md:10",
-        "gh-artifact-contract.md:15"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "docker_oci_image",
       "kind": "local_command_and_registry",
@@ -1066,8 +1066,8 @@
     {
       "id": "docker_oci.provenance_and_sbom",
       "source_lines": [
-        "gh-artifact-contract.md:11",
-        "gh-artifact-contract.md:15"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "docker_oci_image",
       "kind": "workflow_and_registry_scan",
@@ -1085,10 +1085,10 @@
     {
       "id": "maven.metadata_publish_and_verify",
       "source_lines": [
-        "gh-artifact-contract.md:5",
-        "gh-artifact-contract.md:7",
-        "gh-artifact-contract.md:10",
-        "gh-artifact-contract.md:11"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "maven_package",
       "kind": "manifest_build_registry",
@@ -1112,10 +1112,10 @@
     {
       "id": "nuget.metadata_pack_publish_and_verify",
       "source_lines": [
-        "gh-artifact-contract.md:5",
-        "gh-artifact-contract.md:7",
-        "gh-artifact-contract.md:10",
-        "gh-artifact-contract.md:11"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "nuget_package",
       "kind": "manifest_build_registry",
@@ -1137,10 +1137,10 @@
     {
       "id": "crates.metadata_package_publish_and_verify",
       "source_lines": [
-        "gh-artifact-contract.md:5",
-        "gh-artifact-contract.md:7",
-        "gh-artifact-contract.md:10",
-        "gh-artifact-contract.md:11"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "crates_package",
       "kind": "manifest_build_registry",
@@ -1162,10 +1162,10 @@
     {
       "id": "rubygems.metadata_build_publish_and_verify",
       "source_lines": [
-        "gh-artifact-contract.md:5",
-        "gh-artifact-contract.md:7",
-        "gh-artifact-contract.md:10",
-        "gh-artifact-contract.md:11"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "rubygems_package",
       "kind": "manifest_build_registry",
@@ -1187,10 +1187,10 @@
     {
       "id": "powershell_gallery.metadata_publish_and_verify",
       "source_lines": [
-        "gh-artifact-contract.md:5",
-        "gh-artifact-contract.md:7",
-        "gh-artifact-contract.md:10",
-        "gh-artifact-contract.md:11"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "powershell_gallery_module",
       "kind": "manifest_build_registry",
@@ -1212,8 +1212,8 @@
     {
       "id": "github_packages.live_package_metadata",
       "source_lines": [
-        "gh-artifact-contract.md:5",
-        "gh-artifact-contract.md:10"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "github_packages",
       "kind": "github_api",
@@ -1232,9 +1232,9 @@
     {
       "id": "github_packages.publish_guard",
       "source_lines": [
-        "gh-artifact-contract.md:6",
-        "gh-artifact-contract.md:8",
-        "gh-artifact-contract.md:11"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "github_packages",
       "kind": "workflow_scan",
@@ -1251,10 +1251,10 @@
     {
       "id": "github_release_assets.assets_and_tags",
       "source_lines": [
-        "gh-artifact-contract.md:5",
-        "gh-artifact-contract.md:8",
-        "gh-artifact-contract.md:9",
-        "gh-artifact-contract.md:10"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "github_release_binary",
       "kind": "github_api_and_tree",
@@ -1272,8 +1272,8 @@
     {
       "id": "github_release_assets.attestation_verification",
       "source_lines": [
-        "gh-artifact-contract.md:10",
-        "gh-artifact-contract.md:13"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "github_release_binary",
       "kind": "github_api_and_cli",
@@ -1288,9 +1288,9 @@
     {
       "id": "docs_site.publish_and_live_check",
       "source_lines": [
-        "gh-artifact-contract.md:5",
-        "gh-artifact-contract.md:7",
-        "gh-artifact-contract.md:10"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "documentation_and_sites",
       "kind": "workflow_and_http",
@@ -1307,10 +1307,10 @@
     {
       "id": "iac_modules.publish_and_verify",
       "source_lines": [
-        "gh-artifact-contract.md:5",
-        "gh-artifact-contract.md:7",
-        "gh-artifact-contract.md:10",
-        "gh-artifact-contract.md:11"
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6",
+        "gh-artifact-contract.md:3-6"
       ],
       "category": "iac_and_modules",
       "kind": "manifest_build_registry",
@@ -1327,5 +1327,5 @@
       }
     }
   ],
-  "non_deterministic_review_file": "artifact-nondeterministic-checks.md"
+  "non_deterministic_review_file": "artifact-nondeterministic-contract.md"
 }

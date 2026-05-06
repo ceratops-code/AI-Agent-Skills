@@ -1,6 +1,0 @@
-interface:
-  display_name: "Ceratops GH Skills Standards Update"
-  short_description: "Review GH contracts and propose updates"
-  icon_small: "./assets/ceratops-logo-500.png"
-  icon_large: "./assets/ceratops-logo-500.png"
-  default_prompt: "Use $ceratops-gh-skills-standards-update to review the GitHub health contracts against current GitHub and registry standards, then report proposed contract or checker updates for explicit approval."

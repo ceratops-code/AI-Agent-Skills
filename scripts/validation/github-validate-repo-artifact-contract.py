@@ -1,22 +1,30 @@
 #!/usr/bin/env python3
 """
-Check GitHub repository and artifact contracts.
+Check GitHub repository, repo-code, and artifact contracts.
 
 Design notes for maintainers:
 
-* `github-repo-contract.json` and `artifact-contract.json` are the
-  policy source of truth. Python should gather evidence and implement reusable
-  comparison mechanics, not hide policy in one-off conditionals.
+* `github-repo-deterministic-contract.json`, `code-repo-deterministic-contract.json`, and
+  `artifact-deterministic-contract.json` are the policy source of truth. Python should gather
+  evidence and implement reusable comparison mechanics, not hide policy in
+  one-off conditionals.
 * One run builds a shared evidence bundle: GitHub API responses, optional local
   checkout scan, repo type classification, and registry metadata. Individual
   checks consume that bundle so the user does not need one command per setting.
-* Scope, preset, check-id, and fetch-bundle filters narrow the evidence and
-  comparison set for normal skill workflows that only need a relevant slice.
+* Surface, subset, check-id, and fetch-bundle filters narrow the evidence and
+  comparison set for explicit audits that only need a relevant slice. The
+  `repo` surface means live GitHub repository state; use repeatable
+  `--select surface:subset` entries when one run needs multiple surfaces.
 * Apply mode is deliberately conservative. It only performs contract-listed
   reversible repository changes; destructive removals, registry publication,
   credential updates, branch/ruleset surgery, and unclear intent are report-only.
 * Artifact checks are audit-oriented. Local build/publish/consumer smoke checks
   are reported as manual unless the contract can verify them from metadata.
+
+Called by repo creation, repo health, dependency, and standards-review
+workflows when current GitHub repo state, repository contents, or artifact
+registry posture need a bundled deterministic audit. It is not a mandatory
+post-mutation readback for a single successful setting or file-write command.
 """
 
 from __future__ import annotations
@@ -42,6 +50,8 @@ PARAM_RE = re.compile(r"\$\{([^}]+)\}")
 USES_RE = re.compile(r"^\s*uses:\s*([^@\s]+)@([^\s#]+)", re.MULTILINE)
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SECRET_NAME_RE = re.compile(r"\b(ARG|ENV)\s+[A-Za-z0-9_]*(TOKEN|SECRET|PASSWORD|KEY)[A-Za-z0-9_]*\b", re.IGNORECASE)
+SURFACE_CHOICES = ("all", "repo", "code", "artifact")
+SUBSET_CHOICES = ("all", "health", "create", "settings", "dependency", "artifact", "content")
 DEPENDABOT_MANIFEST_PATTERNS = {
     "npm": ["package.json"],
     "pip": ["pyproject.toml", "setup.cfg", "setup.py", "requirements*.txt"],
@@ -219,19 +229,21 @@ def default_contract_path(filename: str, *aliases: str) -> str:
     """Find a bundled contract from common source and runtime locations.
 
     Source checkouts and installed skill copies both carry the `contracts/`
-    tree, but GitHub contracts and external artifact contracts live in
+    tree, but GitHub, repo-code, and external artifact contracts live in
     different subfolders. The CLI default therefore probes every supported
     contract root before falling back to the raw filename the caller supplied.
     """
 
-    script_root = pathlib.Path(__file__).resolve().parents[1]
+    script_root = pathlib.Path(__file__).resolve().parents[2]
     names = (filename, *aliases)
     bases = (
         pathlib.Path.cwd(),
         pathlib.Path.cwd() / "contracts" / "github",
+        pathlib.Path.cwd() / "contracts" / "code",
         pathlib.Path.cwd() / "contracts" / "artifacts",
         pathlib.Path.cwd() / "contracts",
         script_root / "contracts" / "github",
+        script_root / "contracts" / "code",
         script_root / "contracts" / "artifacts",
         script_root / "contracts",
         pathlib.Path(__file__).resolve().parent,
@@ -256,43 +268,58 @@ def prefixed(ids: set[str], *prefixes: str) -> set[str]:
     return {check_id for check_id in ids if check_id.startswith(prefixes)}
 
 
-def preset_check_ids(repo_contract: dict[str, Any], artifact_contract: dict[str, Any], preset: str) -> tuple[set[str] | None, set[str] | None]:
-    """Map operational presets to deterministic check-id subsets.
+def subset_check_ids(
+    github_contract: dict[str, Any],
+    code_contract: dict[str, Any],
+    artifact_contract: dict[str, Any],
+    subset: str,
+) -> tuple[set[str] | None, set[str] | None, set[str] | None]:
+    """Map operational subsets to deterministic check-id subsets.
 
     `None` means "all checks for that contract". Empty sets are intentional for
-    scopes where the preset only needs context, not findings. These presets are
+    surfaces where the subset only needs context, not findings. These subsets are
     deliberately broad enough for skill workflows while still avoiding a full
     audit when a normal ship, dependency, or artifact task only needs one slice.
     """
 
-    repo_ids = all_check_ids(repo_contract)
+    github_ids = all_check_ids(github_contract)
+    code_ids = all_check_ids(code_contract)
     artifact_ids = all_check_ids(artifact_contract)
-    if preset in {"all", "health"}:
-        return None, None
-    if preset == "settings":
-        return prefixed(repo_ids, "repo.", "process.", "actions.", "security.", "content."), set()
-    if preset == "dependency":
+    if subset in {"all", "health"}:
+        return None, None, None
+    if subset == "settings":
+        return prefixed(github_ids, "repo.", "process.", "actions.", "security.", "content."), set(), set()
+    if subset == "dependency":
         return {
             check_id
-            for check_id in repo_ids
+            for check_id in github_ids
             if check_id in {
                 "security.vulnerability_alerts_enabled",
                 "security.dependabot_security_updates_enabled",
-                "security.dependabot_config_file",
                 "security.open_dependabot_alert_queue",
                 "security.open_dependabot_pr_queue",
                 "security.dependency_review_availability",
                 "content.dependencies_label_when_dependabot_uses_it",
             }
-            or check_id.startswith("actions.workflow_sha_pinning")
+        }, {
+            check_id
+            for check_id in code_ids
+            if check_id in {
+                "security.dependabot_config_file",
+                "actions.workflow_sha_pinning",
+                "content.local_secret_pattern_scan",
+            }
         }, set()
-    if preset == "artifact":
-        return prefixed(repo_ids, "type.", "artifact."), None
-    if preset == "create":
-        repo_selected = repo_ids - prefixed(repo_ids, "stale_state.", "local.")
+    if subset == "artifact":
+        return set(), prefixed(code_ids, "type."), None
+    if subset == "content":
+        return set(), None, set()
+    if subset == "create":
+        github_selected = github_ids - prefixed(github_ids, "stale_state.")
+        code_selected = code_ids - prefixed(code_ids, "stale_state.", "local.")
         artifact_selected = artifact_ids
-        return repo_selected, artifact_selected
-    raise SystemExit(f"Unknown preset: {preset}")
+        return github_selected, code_selected, artifact_selected
+    raise SystemExit(f"Unknown subset: {subset}")
 
 
 def selected_contract_checks(contract: dict[str, Any], selected_ids: set[str] | None) -> list[dict[str, Any]]:
@@ -310,47 +337,148 @@ def selected_ids_for_report(contract: dict[str, Any], selected_ids: set[str] | N
     return all_check_ids(contract) if selected_ids is None else set(selected_ids)
 
 
-def filter_selected_by_scope(
-    repo_selected: set[str] | None,
-    artifact_selected: set[str] | None,
-    scope: str,
-) -> tuple[set[str] | None, set[str] | None]:
-    """Apply the high-level repo/artifact scope after preset selection."""
+def selection_ids_for_contract(contract: dict[str, Any], selected_ids: set[str] | None) -> set[str]:
+    """Convert one surface/subset selection into explicit check IDs.
 
-    if scope == "repo":
-        return repo_selected, set()
-    if scope == "artifact":
-        return set(), artifact_selected
-    return repo_selected, artifact_selected
+    The validator keeps `None` as "all checks" for the legacy single-selection
+    path. Multi-selection needs concrete sets so `repo:dependency` and
+    `code:dependency` can be unioned without accidentally expanding a later
+    empty surface into every check.
+    """
+
+    return all_check_ids(contract) if selected_ids is None else set(selected_ids)
+
+
+def filter_selected_by_surface(
+    github_selected: set[str] | None,
+    code_selected: set[str] | None,
+    artifact_selected: set[str] | None,
+    surface: str,
+) -> tuple[set[str] | None, set[str] | None, set[str] | None]:
+    """Apply the high-level repo/artifact surface after subset selection."""
+
+    if surface == "repo":
+        return github_selected, set(), set()
+    if surface == "code":
+        return set(), code_selected, set()
+    if surface == "artifact":
+        return set(), set(), artifact_selected
+    return github_selected, code_selected, artifact_selected
+
+
+def parse_select(raw: str) -> tuple[str, str]:
+    """Parse one repeatable `--select surface:subset` value."""
+
+    if ":" not in raw:
+        raise SystemExit(f"--select must be SURFACE:SUBSET, got {raw!r}")
+    surface, subset = (part.strip().lower() for part in raw.split(":", 1))
+    if surface not in SURFACE_CHOICES:
+        raise SystemExit(f"Unknown --select surface {surface!r}; expected one of {', '.join(SURFACE_CHOICES)}")
+    if subset not in SUBSET_CHOICES:
+        raise SystemExit(f"Unknown --select subset {subset!r}; expected one of {', '.join(SUBSET_CHOICES)}")
+    return surface, subset
+
+
+def select_check_ids(
+    github_contract: dict[str, Any],
+    code_contract: dict[str, Any],
+    artifact_contract: dict[str, Any],
+    surface: str,
+    subset: str,
+) -> tuple[set[str], set[str], set[str]]:
+    """Return explicit check IDs for one surface/subset pair."""
+
+    github_selected, code_selected, artifact_selected = subset_check_ids(github_contract, code_contract, artifact_contract, subset)
+    github_selected, code_selected, artifact_selected = filter_selected_by_surface(github_selected, code_selected, artifact_selected, surface)
+    return (
+        selection_ids_for_contract(github_contract, github_selected),
+        selection_ids_for_contract(code_contract, code_selected),
+        selection_ids_for_contract(artifact_contract, artifact_selected),
+    )
+
+
+def build_selection(
+    github_contract: dict[str, Any],
+    code_contract: dict[str, Any],
+    artifact_contract: dict[str, Any],
+    args: argparse.Namespace,
+) -> tuple[set[str] | None, set[str] | None, set[str] | None, list[dict[str, str]] | None]:
+    """Build the selected check IDs from shorthand or repeatable selection flags.
+
+    `--surface/--subset` is the simple single-selection shorthand. `--select`
+    is the multi-selection mode for one process that should check several
+    surfaces with different subsets, such as `repo:dependency` plus
+    `code:dependency`. Mixing both modes would make command intent ambiguous, so
+    non-default shorthand values are rejected when `--select` is present.
+    """
+
+    if not args.select:
+        github_selected, code_selected, artifact_selected = subset_check_ids(
+            github_contract,
+            code_contract,
+            artifact_contract,
+            args.subset,
+        )
+        github_selected, code_selected, artifact_selected = filter_selected_by_surface(
+            github_selected,
+            code_selected,
+            artifact_selected,
+            args.surface,
+        )
+        return github_selected, code_selected, artifact_selected, None
+
+    if args.surface != "all" or args.subset != "all":
+        raise SystemExit("--select cannot be combined with non-default --surface or --subset values")
+
+    github_union: set[str] = set()
+    code_union: set[str] = set()
+    artifact_union: set[str] = set()
+    selections: list[dict[str, str]] = []
+    for raw in args.select:
+        surface, subset = parse_select(raw)
+        selected = select_check_ids(github_contract, code_contract, artifact_contract, surface, subset)
+        if not any(selected):
+            raise SystemExit(f"--select {raw!r} selects no checks; choose a subset that applies to {surface!r}")
+        github_union.update(selected[0])
+        code_union.update(selected[1])
+        artifact_union.update(selected[2])
+        selections.append({"surface": surface, "subset": subset})
+    return github_union, code_union, artifact_union, selections
 
 
 def apply_explicit_check_ids(
-    repo_contract: dict[str, Any],
+    github_contract: dict[str, Any],
+    code_contract: dict[str, Any],
     artifact_contract: dict[str, Any],
     requested: list[str] | None,
-    repo_selected: set[str] | None,
+    github_selected: set[str] | None,
+    code_selected: set[str] | None,
     artifact_selected: set[str] | None,
-) -> tuple[set[str] | None, set[str] | None]:
-    """Restrict the preset/scope selection to explicitly named check IDs."""
+) -> tuple[set[str] | None, set[str] | None, set[str] | None]:
+    """Restrict the subset/surface selection to explicitly named check IDs."""
 
     if not requested:
-        return repo_selected, artifact_selected
-    repo_ids = all_check_ids(repo_contract)
+        return github_selected, code_selected, artifact_selected
+    github_ids = all_check_ids(github_contract)
+    code_ids = all_check_ids(code_contract)
     artifact_ids = all_check_ids(artifact_contract)
-    unknown = sorted(set(requested) - repo_ids - artifact_ids)
+    unknown = sorted(set(requested) - github_ids - code_ids - artifact_ids)
     if unknown:
         raise SystemExit(f"Unknown check id(s): {', '.join(unknown)}")
     requested_set = set(requested)
-    repo_requested = requested_set & repo_ids
+    github_requested = requested_set & github_ids
+    code_requested = requested_set & code_ids
     artifact_requested = requested_set & artifact_ids
-    if repo_selected is not None:
-        repo_requested &= repo_selected
+    if github_selected is not None:
+        github_requested &= github_selected
+    if code_selected is not None:
+        code_requested &= code_selected
     if artifact_selected is not None:
         artifact_requested &= artifact_selected
-    filtered_out = requested_set - repo_requested - artifact_requested
+    filtered_out = requested_set - github_requested - code_requested - artifact_requested
     if filtered_out:
-        raise SystemExit(f"Check id(s) excluded by current --scope/--preset: {', '.join(sorted(filtered_out))}")
-    return repo_requested, artifact_requested
+        raise SystemExit(f"Check id(s) excluded by current --surface/--subset: {', '.join(sorted(filtered_out))}")
+    return github_requested, code_requested, artifact_requested
 
 
 def as_list(data: Any) -> list[Any]:
@@ -480,7 +608,7 @@ def request_covers_selected(
 
     The contracts declare `covers_checks` on requests and local bundles. Filtering
     by those IDs lets one checker invocation reuse bundled evidence without
-    paying for endpoints unrelated to the selected preset or explicit check IDs.
+    paying for endpoints unrelated to the selected subset or explicit check IDs.
     """
 
     if selected_bundle_ids is not None and bundle.get("id") not in selected_bundle_ids:
@@ -496,6 +624,7 @@ def fetch_contract_requests(
     params: dict[str, Any],
     selected_check_ids: set[str] | None = None,
     selected_bundle_ids: set[str] | None = None,
+    fetched: dict[tuple[str, str], ApiResult] | None = None,
 ) -> dict[tuple[str, str], ApiResult]:
     """Fetch selected REST requests declared by repo contract bundles once."""
     requests: dict[tuple[str, str], dict[str, Any]] = {}
@@ -508,9 +637,88 @@ def fetch_contract_requests(
                 continue
             method = req.get("method", "GET").upper()
             requests[(method, endpoint_for(endpoint, params))] = req
-    fetched: dict[tuple[str, str], ApiResult] = {}
+    fetched = fetched if fetched is not None else {}
     for (method, endpoint), req in requests.items():
-        fetched[(method, endpoint)] = run_gh_api(method, endpoint, paginate=bool(req.get("paginate")))
+        if (method, endpoint) not in fetched:
+            fetched[(method, endpoint)] = run_gh_api(method, endpoint, paginate=bool(req.get("paginate")))
+    return fetched
+
+
+def artifact_bundle_covers_selected(bundle: dict[str, Any], selected_check_ids: set[str] | None) -> bool:
+    """Return whether an artifact fetch bundle can feed selected checks."""
+
+    if selected_check_ids is None:
+        return True
+    feeds = [str(item) for item in bundle.get("feeds_checks", [])]
+    return not feeds or any(fnmatch.fnmatch(check_id, pattern) for check_id in selected_check_ids for pattern in feeds)
+
+
+def owner_kind(params: dict[str, Any], repo_info: dict[str, Any] | None = None) -> str | None:
+    """Classify the repo owner for GitHub Packages org/user endpoint choice."""
+
+    explicit = str(params.get("owner_type") or "").lower()
+    if explicit in {"org", "organization"}:
+        return "org"
+    if explicit == "user":
+        return "user"
+    owner_type = str(((repo_info or {}).get("owner") or {}).get("type") or "").lower()
+    if owner_type == "organization":
+        return "org"
+    if owner_type == "user":
+        return "user"
+    return None
+
+
+def artifact_endpoint_matches_owner(endpoint: str, kind: str | None) -> bool:
+    """Skip the wrong GitHub Packages owner endpoint when the owner kind is known."""
+
+    if endpoint.startswith("/orgs/") and kind == "user":
+        return False
+    if endpoint.startswith("/users/") and kind == "org":
+        return False
+    return True
+
+
+def parse_endpoint_spec(raw: str) -> tuple[str, str]:
+    """Parse an artifact-contract endpoint string like `GET /repos/...`."""
+
+    parts = raw.strip().split(maxsplit=1)
+    if len(parts) == 2 and parts[0].upper() in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
+        return parts[0].upper(), parts[1]
+    return "GET", raw.strip()
+
+
+def fetch_artifact_contract_requests(
+    contract: dict[str, Any],
+    params: dict[str, Any],
+    selected_check_ids: set[str] | None,
+    selected_bundle_ids: set[str] | None,
+    fetched: dict[tuple[str, str], ApiResult],
+    repo_info: dict[str, Any],
+) -> dict[tuple[str, str], ApiResult]:
+    """Fetch selected GitHub API endpoints declared by the artifact contract."""
+
+    bundles = contract.get("fetch_bundles", {})
+    if isinstance(bundles, dict):
+        iterable = ((str(bundle_id), bundle) for bundle_id, bundle in bundles.items())
+    else:
+        iterable = ((str(bundle.get("id") or ""), bundle) for bundle in bundles if isinstance(bundle, dict))
+    kind = owner_kind(params, repo_info)
+    for bundle_id, bundle in iterable:
+        if not isinstance(bundle, dict):
+            continue
+        if selected_bundle_ids is not None and bundle_id not in selected_bundle_ids:
+            continue
+        if not artifact_bundle_covers_selected(bundle, selected_check_ids):
+            continue
+        for raw_endpoint in bundle.get("endpoints", []):
+            method, endpoint = parse_endpoint_spec(str(raw_endpoint))
+            if not endpoint.startswith("/") or not artifact_endpoint_matches_owner(endpoint, kind):
+                continue
+            expanded = endpoint_for(endpoint, params)
+            key = (method, expanded)
+            if key not in fetched:
+                fetched[key] = run_gh_api(method, expanded)
     return fetched
 
 
@@ -698,13 +906,6 @@ def evaluate_repo_check(
             if repo_info.get(field) is True:
                 drifts.append(finding(check_id, "WARN", f"{field} is enabled; verify it is intentionally used.", actual=True, expected="false unless used", path=f"$.{field}"))
         return drifts or [finding(check_id, "PASS", "Unused feature flags are not enabled.", actual={k: repo_info.get(k) for k in ("has_wiki", "has_projects", "has_discussions", "has_pages")})]
-
-    if check_id == "repo.release_posture":
-        releases = result(fetched, "/repos/${owner}/${repo}/releases?per_page=100", params)
-        has_assets = any((rel.get("assets") if isinstance(rel, dict) else []) for rel in as_list(releases.data))
-        if "no_artifact" in types["artifact_surface"] and has_assets:
-            return [finding(check_id, "FAIL", "Repo is classified as no-artifact but has release assets.", actual="release assets present", expected="no published artifacts")]
-        return [finding(check_id, "PASS", "Release posture has no deterministic mismatch.", actual={"has_release_assets": has_assets})]
 
     if check_id == "repo.merge_settings":
         expected = check.get("expected", {})
@@ -990,9 +1191,6 @@ def evaluate_repo_check(
             return [finding(check_id, "PASS", "dependencies label exists.")]
         return [finding(check_id, "FAIL", "dependabot.yml references dependencies label but live label is missing.", actual=label.message, expected="label dependencies")]
 
-    if check_id.startswith("artifact."):
-        return evaluate_repo_artifact_surface_check(check, paths, local, types)
-
     if check_id.startswith("stale_state."):
         if check_id == "stale_state.local_path_references":
             return regex_scan_check(check, local)
@@ -1033,89 +1231,6 @@ def regex_scan_check(check: dict[str, Any], local: dict[str, Any]) -> list[dict[
     if matches:
         return [finding(check_id, "FAIL", "Forbidden local pattern found.", actual=matches, expected="no matches")]
     return [finding(check_id, "PASS", "No forbidden local patterns found.")]
-
-
-def evaluate_repo_artifact_surface_check(check: dict[str, Any], paths: list[str], local: dict[str, Any], types: dict[str, Any]) -> list[dict[str, Any]]:
-    """Evaluate lightweight repo-level artifact signals.
-
-    Detailed registry and publishing checks live in the artifact contract. These
-    repo-level checks catch obvious missing manifests and unsafe local patterns
-    early, while preserving the artifact contract as the owner of publish logic.
-    """
-    check_id = check["id"]
-    if check_id == "artifact.docker_files":
-        if "docker_oci_image" not in types["artifact_surface"]:
-            return [finding(check_id, "SKIP", "No Docker/OCI artifact detected.")]
-        missing = []
-        dockerfiles = matching_paths(paths, ["Dockerfile", "**/Dockerfile"])
-        if not dockerfiles:
-            missing.append("Dockerfile")
-        if ".dockerignore" not in paths:
-            missing.append(".dockerignore")
-        drifts = [finding(check_id, "FAIL", "Docker artifact files are incomplete.", actual=missing, expected="Dockerfile and .dockerignore")] if missing else []
-        for path in dockerfiles:
-            text = local.get("texts", {}).get(path, "")
-            if not text:
-                continue
-            if re.search(r"(?im)^FROM\s+\S+:latest(?:\s|$)", text):
-                drifts.append(finding(check_id, "WARN", "Dockerfile uses a latest-tag base image.", actual=path, expected="pinned tag or digest", path=path))
-            if SECRET_NAME_RE.search(text):
-                drifts.append(finding(check_id, "FAIL", "Dockerfile declares secret-like ARG or ENV names.", actual=path, expected="secrets mounted or passed through CI secret mechanisms", path=path))
-            from_count = len(re.findall(r"(?im)^FROM\s+", text))
-            build_tooling = re.search(r"(?i)(npm|pnpm|yarn|pip|poetry|uv|go build|cargo|mvn|gradle|dotnet)\s+", text)
-            if build_tooling and from_count < 2:
-                drifts.append(finding(check_id, "WARN", "Build-toolchain Dockerfile is not multi-stage.", actual=path, expected="multi-stage build when practical", path=path))
-        return drifts or [finding(check_id, "PASS", "Docker artifact files and basic Dockerfile posture are present.")]
-    if check_id == "artifact.python_package_metadata":
-        if "pypi_python_package" not in types["artifact_surface"]:
-            return [finding(check_id, "SKIP", "No Python package artifact detected.")]
-        text = local.get("texts", {}).get("pyproject.toml", "")
-        missing = [token for token in ("[build-system]", "[project]") if token not in text]
-        required_keys = ["name", "requires-python"]
-        missing.extend([key for key in required_keys if not toml_key_present(text, key)])
-        if not toml_key_present(text, "version"):
-            missing.append("version_or_dynamic")
-        if not (toml_key_present(text, "license") or toml_key_present(text, "license-files")):
-            missing.append("license_or_license-files")
-        if not (toml_key_present(text, "readme") or toml_key_present(text, "description")):
-            missing.append("readme_or_description")
-        drifts = [finding(check_id, "FAIL", "Python package metadata incomplete.", actual=missing)] if missing else []
-        for key in ("description", "authors", "maintainers", "urls", "classifiers"):
-            if key in {"authors", "maintainers"}:
-                if toml_key_present(text, "authors") or toml_key_present(text, "maintainers"):
-                    continue
-                expected = "authors_or_maintainers"
-            else:
-                if toml_key_present(text, key):
-                    continue
-                expected = key
-            drifts.append(finding(check_id, "WARN", f"Recommended public PyPI metadata is missing: {expected}.", actual="missing", expected=expected, path="pyproject.toml"))
-        return drifts or [finding(check_id, "PASS", "Python package metadata covers build and public project metadata.")]
-    if check_id == "artifact.npm_package_metadata":
-        if "npm_package" not in types["artifact_surface"]:
-            return [finding(check_id, "SKIP", "No npm package artifact detected.")]
-        try:
-            data = json.loads(local.get("texts", {}).get("package.json", "{}"))
-        except json.JSONDecodeError as exc:
-            return [finding(check_id, "FAIL", "package.json is invalid JSON.", actual=str(exc))]
-        workspace_root = bool(data.get("private") and data.get("workspaces"))
-        required = ["name", "license"] if workspace_root else ["name", "version", "license"]
-        missing = [key for key in required if not data.get(key)]
-        drifts = [finding(check_id, "FAIL", "npm package metadata incomplete.", actual=missing)] if missing else []
-        if not data.get("repository"):
-            drifts.append(finding(check_id, "WARN", "package.json repository is missing.", actual=None, expected="repository", path="package.json"))
-        if not (data.get("packageManager") or path_matches(paths, ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"])):
-            drifts.append(finding(check_id, "WARN", "No packageManager or lockfile found for reproducible npm publishing.", actual=None, expected="packageManager or lockfile", path="package.json"))
-        if workspace_root:
-            drifts.append(finding(check_id, "INFO", "Root package.json is a private workspace; published package metadata must be checked per workspace package.", actual={"workspaces": data.get("workspaces")}, path="package.json"))
-        elif not (data.get("files") or ".npmignore" in paths):
-            drifts.append(finding(check_id, "WARN", "Published npm package contents are not constrained by files or .npmignore.", actual=None, expected="files or .npmignore", path="package.json"))
-        return drifts or [finding(check_id, "PASS", "npm package metadata has required identity, license, and reproducibility metadata.")]
-    if check_id == "artifact.other_manifest_presence":
-        return [finding(check_id, "PASS", "Artifact manifest presence classified.", actual=types["artifact_surface"])]
-    if check_id in {"artifact.github_release_assets", "artifact.attestation_permissions", "artifact.docker_publish_workflow"}:
-        return [finding(check_id, "MANUAL", "Artifact-specific workflow or release evidence fetched; detailed checks live in artifact-contract.json.")]
-    return [finding(check_id, "MANUAL", "Repo-level artifact check requires artifact contract evaluation.")]
 
 
 def apply_approved_drift(
@@ -1505,16 +1620,17 @@ def compare_repo_contract(
     local: dict[str, Any],
     selected_check_ids: set[str] | None = None,
     selected_bundle_ids: set[str] | None = None,
+    context: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Fetch repo evidence, classify surfaces, and evaluate selected repo checks."""
-    fetched: dict[tuple[str, str], ApiResult] = {}
+    fetched: dict[tuple[str, str], ApiResult] = context["fetched"] if context else {}
     if not params.get("default_branch"):
         repo_endpoint = endpoint_for("/repos/${owner}/${repo}", params)
         fetched[("GET", repo_endpoint)] = run_gh_api("GET", repo_endpoint)
         repo_seed = fetched[("GET", repo_endpoint)]
         if repo_seed.ok and isinstance(repo_seed.data, dict):
             params["default_branch"] = repo_seed.data.get("default_branch")
-    fetched.update(fetch_contract_requests(contract, params, selected_check_ids, selected_bundle_ids))
+    fetch_contract_requests(contract, params, selected_check_ids, selected_bundle_ids, fetched)
     repo_res = result(fetched, "/repos/${owner}/${repo}", params)
     if not repo_res.ok or not isinstance(repo_res.data, dict):
         raise SystemExit(f"Could not fetch repo: {repo_res.status} {repo_res.message}")
@@ -1536,10 +1652,12 @@ def compare_artifact_contract(
     local: dict[str, Any],
     repo_context: dict[str, Any],
     selected_check_ids: set[str] | None = None,
+    selected_bundle_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Evaluate selected artifact checks using the repo evidence bundle."""
     types = repo_context["types"]
     fetched = repo_context["fetched"]
+    fetch_artifact_contract_requests(contract, params, selected_check_ids, selected_bundle_ids, fetched, repo_context["repo"])
     releases = result(fetched, "/repos/${owner}/${repo}/releases?per_page=100", params).data or []
     registries = registry_metadata(params, contract, local)
     findings: list[dict[str, Any]] = []
@@ -1581,11 +1699,16 @@ def remediate_repo(check_ids: set[str], repo_contract: dict[str, Any], params: d
     return applied
 
 
-def build_params(args: argparse.Namespace, repo_contract: dict[str, Any], artifact_contract: dict[str, Any]) -> dict[str, Any]:
+def build_params(
+    args: argparse.Namespace,
+    github_contract: dict[str, Any],
+    code_contract: dict[str, Any],
+    artifact_contract: dict[str, Any],
+) -> dict[str, Any]:
     """Merge CLI args, JSON `--param` values, and contract defaults."""
     owner, repo = split_repo(args.repo)
     params: dict[str, Any] = {"owner": owner, "repo": repo}
-    for contract in (repo_contract, artifact_contract):
+    for contract in (github_contract, code_contract, artifact_contract):
         for key, spec in contract.get("parameters", {}).items():
             if "default" in spec and key not in params:
                 params[key] = spec["default"]
@@ -1613,8 +1736,15 @@ def summarize(findings: list[dict[str, Any]]) -> dict[str, int]:
 def print_human(report: dict[str, Any]) -> None:
     """Print a concise human-readable report; JSON remains the full output."""
     print(f"Repo: {report['repo']}")
-    print(f"Scope: {report['scope']}; preset: {report['preset']}")
-    print(f"Repo checks: {report['repo_check_count']}; artifact checks: {report['artifact_check_count']}; fetched endpoints: {report['fetched_endpoints']}")
+    if report.get("selections"):
+        selected = ", ".join(f"{item['surface']}:{item['subset']}" for item in report["selections"])
+        print(f"Selections: {selected}")
+    else:
+        print(f"Surface: {report['surface']}; subset: {report['subset']}")
+    print(
+        f"GitHub checks: {report['github_check_count']}; code checks: {report['code_check_count']}; "
+        f"artifact checks: {report['artifact_check_count']}; fetched endpoints: {report['fetched_endpoints']}"
+    )
     print(f"Result counts: {report['result_counts']}")
     if report["applied"]:
         print("Applied:")
@@ -1631,14 +1761,37 @@ def print_human(report: dict[str, Any]) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check GitHub repo and artifact health contracts.")
+    parser = argparse.ArgumentParser(
+        description="Check GitHub repo, repo-code, and artifact health contracts.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Surfaces:\n"
+            "  repo           live GitHub repository settings and hosted repo state\n"
+            "  code           repository contents and local checkout policy\n"
+            "  artifact       external deliverables and registry state\n"
+            "  all            every contract surface\n\n"
+            "Subsets:\n"
+            "  settings       GitHub repo/process settings subset\n"
+            "  dependency     Dependabot and dependency-security subset\n"
+            "  content        repository-content subset\n"
+            "  artifact       artifact and registry subset\n"
+            "  create         creation/hardening subset, excluding stale-state-only checks\n"
+            "  health         full health audit\n"
+            "  all            no subset narrowing\n"
+            "\nMulti-selection examples:\n"
+            "  --select repo:dependency --select code:dependency\n"
+            "  --select repo:settings --select artifact:artifact\n"
+        ),
+    )
     parser.add_argument("--repo", required=True, help="OWNER/REPO")
-    parser.add_argument("--repo-contract", default=default_contract_path("github-repo-contract.json"))
-    parser.add_argument("--artifact-contract", default=default_contract_path("artifact-contract.json"))
+    parser.add_argument("--github-contract", "--repo-contract", dest="github_contract", default=default_contract_path("github-repo-deterministic-contract.json"))
+    parser.add_argument("--code-contract", default=default_contract_path("code-repo-deterministic-contract.json"))
+    parser.add_argument("--artifact-contract", default=default_contract_path("artifact-deterministic-contract.json"))
     parser.add_argument("--local-repo-path")
     parser.add_argument("--param", action="append", help="Additional parameter as KEY=VALUE. VALUE may be JSON.")
-    parser.add_argument("--scope", choices=["all", "repo", "artifact"], default="all", help="Limit findings to repo checks, artifact checks, or both.")
-    parser.add_argument("--preset", choices=["all", "health", "create", "settings", "dependency", "artifact"], default="all", help="Run a workflow-oriented subset of checks.")
+    parser.add_argument("--surface", choices=SURFACE_CHOICES, default="all", help="Limit findings to live GitHub repo state, repo-code checks, or artifact checks.")
+    parser.add_argument("--subset", choices=SUBSET_CHOICES, default="all", help="Run one workflow-oriented subset of checks. Subsets select check IDs; surfaces select which contract area receives that subset.")
+    parser.add_argument("--select", action="append", metavar="SURFACE:SUBSET", help="Add one surface/subset pair to a multi-selection run. Can be repeated, and cannot be combined with non-default --surface or --subset.")
     parser.add_argument("--check-id", action="append", help="Run one deterministic check ID. Can be repeated.")
     parser.add_argument("--bundle", action="append", help="Fetch only this repo contract fetch bundle ID. Can be repeated.")
     parser.add_argument("--apply", action="store_true", help="Apply contract-declared reversible repo remediations only.")
@@ -1646,61 +1799,88 @@ def main() -> int:
     parser.add_argument("--no-fail", action="store_true", help="Exit 0 even when unapproved drift remains.")
     args = parser.parse_args()
 
-    repo_contract = load_json(args.repo_contract)
+    github_contract = load_json(args.github_contract)
+    code_contract = load_json(args.code_contract)
     artifact_contract = load_json(args.artifact_contract)
-    params = build_params(args, repo_contract, artifact_contract)
-    repo_selected, artifact_selected = preset_check_ids(repo_contract, artifact_contract, args.preset)
-    repo_selected, artifact_selected = filter_selected_by_scope(repo_selected, artifact_selected, args.scope)
-    repo_selected, artifact_selected = apply_explicit_check_ids(
-        repo_contract,
+    params = build_params(args, github_contract, code_contract, artifact_contract)
+    github_selected, code_selected, artifact_selected, selections = build_selection(
+        github_contract,
+        code_contract,
+        artifact_contract,
+        args,
+    )
+    github_selected, code_selected, artifact_selected = apply_explicit_check_ids(
+        github_contract,
+        code_contract,
         artifact_contract,
         args.check_id,
-        repo_selected,
+        github_selected,
+        code_selected,
         artifact_selected,
     )
     selected_bundle_ids = set(args.bundle) if args.bundle else None
     if selected_bundle_ids is not None:
-        known_bundles = {str(bundle.get("id")) for bundle in repo_contract.get("fetch_bundles", []) if bundle.get("id")}
+        known_bundles: set[str] = set()
+        for contract in (github_contract, code_contract):
+            known_bundles.update(str(bundle.get("id")) for bundle in contract.get("fetch_bundles", []) if bundle.get("id"))
+        artifact_bundles = artifact_contract.get("fetch_bundles", {})
+        if isinstance(artifact_bundles, dict):
+            known_bundles.update(str(bundle_id) for bundle_id in artifact_bundles)
+        else:
+            known_bundles.update(str(bundle.get("id")) for bundle in artifact_bundles if isinstance(bundle, dict) and bundle.get("id"))
         unknown_bundles = sorted(selected_bundle_ids - known_bundles)
         if unknown_bundles:
             raise SystemExit(f"Unknown fetch bundle id(s): {', '.join(unknown_bundles)}")
     local = scan_local(params.get("local_repo_path"))
-    repo_findings, repo_context = compare_repo_contract(repo_contract, params, local, repo_selected, selected_bundle_ids)
-    artifact_findings = compare_artifact_contract(artifact_contract, params, local, repo_context, artifact_selected)
+    github_findings, repo_context = compare_repo_contract(github_contract, params, local, github_selected, selected_bundle_ids)
+    code_findings, repo_context = compare_repo_contract(code_contract, params, local, code_selected, selected_bundle_ids, repo_context)
+    artifact_findings = compare_artifact_contract(artifact_contract, params, local, repo_context, artifact_selected, selected_bundle_ids)
     rule_context = approved_drift_context(params, repo_context, local)
-    repo_findings, repo_approved = apply_approved_drift(repo_findings, repo_contract, rule_context)
+    github_findings, github_approved = apply_approved_drift(github_findings, github_contract, rule_context)
+    code_findings, code_approved = apply_approved_drift(code_findings, code_contract, rule_context)
     artifact_findings, artifact_approved = apply_approved_drift(artifact_findings, artifact_contract, rule_context)
-    findings = repo_findings + artifact_findings
-    approved = repo_approved + artifact_approved
+    findings = github_findings + code_findings + artifact_findings
+    approved = github_approved + code_approved + artifact_approved
     applied: list[dict[str, Any]] = []
 
     if args.apply:
         drift_ids = {item["check_id"] for item in findings if item["level"] in {"FAIL", "WARN"}}
-        applied = remediate_repo(drift_ids, repo_contract, params, local)
-        if applied:
-            repo_findings, repo_context = compare_repo_contract(repo_contract, params, local, repo_selected, selected_bundle_ids)
-            artifact_findings = compare_artifact_contract(artifact_contract, params, local, repo_context, artifact_selected)
-            rule_context = approved_drift_context(params, repo_context, local)
-            repo_findings, repo_approved = apply_approved_drift(repo_findings, repo_contract, rule_context)
-            artifact_findings, artifact_approved = apply_approved_drift(artifact_findings, artifact_contract, rule_context)
-            findings = repo_findings + artifact_findings
-            approved = repo_approved + artifact_approved
+        applied = remediate_repo(drift_ids, github_contract, params, local)
+        applied_success_ids = {str(item["check_id"]) for item in applied if item.get("ok")}
+        # A successful mutation command is sufficient evidence for that exact
+        # applied check. Keep unrelated drift, and avoid a second bundled audit
+        # unless the caller explicitly runs one later for a broader claim.
+        if applied_success_ids:
+            findings = [
+                item
+                for item in findings
+                if not (item["level"] in {"FAIL", "WARN"} and item["check_id"] in applied_success_ids)
+            ]
 
-    selected_repo_count = len(selected_contract_checks(repo_contract, repo_selected))
+    selected_github_count = len(selected_contract_checks(github_contract, github_selected))
+    selected_code_count = len(selected_contract_checks(code_contract, code_selected))
     selected_artifact_count = len(selected_contract_checks(artifact_contract, artifact_selected))
     report = {
         "repo": repo_slug(params["owner"], params["repo"]),
-        "repo_contract": os.path.abspath(args.repo_contract),
+        "github_contract": os.path.abspath(args.github_contract),
+        "code_contract": os.path.abspath(args.code_contract),
         "artifact_contract": os.path.abspath(args.artifact_contract),
-        "scope": args.scope,
-        "preset": args.preset,
+        "selection_mode": "multi" if selections else "single",
+        "surface": "multi" if selections else args.surface,
+        "subset": "multi" if selections else args.subset,
+        "selections": selections,
         "selected_check_ids": sorted(
-            selected_ids_for_report(repo_contract, repo_selected)
+            selected_ids_for_report(github_contract, github_selected)
+            | selected_ids_for_report(code_contract, code_selected)
             | selected_ids_for_report(artifact_contract, artifact_selected)
         ),
-        "repo_check_count": selected_repo_count,
+        "github_check_count": selected_github_count,
+        "code_check_count": selected_code_count,
+        "repo_check_count": selected_github_count,
         "artifact_check_count": selected_artifact_count,
-        "total_repo_check_count": len(repo_contract.get("checks", [])),
+        "total_github_check_count": len(github_contract.get("checks", [])),
+        "total_code_check_count": len(code_contract.get("checks", [])),
+        "total_repo_check_count": len(github_contract.get("checks", [])),
         "total_artifact_check_count": len(artifact_contract.get("checks", [])),
         "selected_bundles": sorted(selected_bundle_ids) if selected_bundle_ids else None,
         "fetched_endpoints": len(repo_context["fetched"]),

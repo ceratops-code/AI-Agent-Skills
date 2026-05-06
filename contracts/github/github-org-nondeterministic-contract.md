@@ -1,13 +1,13 @@
 # GitHub Organization Health Non-Deterministic Checks
 
-This file complements `github-org-contract.json`. The organization JSON covers API-checkable settings and screen-parity surfaces. This file covers organization checks where GitHub exposes names or toggles but the real pass/fail decision depends on intent, least privilege, security ownership, manual browser confirmation, or whether a paid feature is intentionally unavailable.
+This file complements `github-org-deterministic-contract.json`. The organization JSON covers API-checkable settings and screen-parity surfaces. This file covers organization checks where GitHub exposes names or toggles but the real pass/fail decision depends on intent, least privilege, security ownership, manual browser confirmation, or whether a paid feature is intentionally unavailable.
 
 ## Evidence Bundle
 
 Use one bundled evidence command for the ND checks instead of running a command per check:
 
 ```powershell
-python scripts/github_nd_evidence.py --scope org --org ORG --json
+python scripts/validation/github-collect-nd-evidence.py --surface org --org ORG --json
 ```
 
 The report groups fetched endpoints under each ND check ID. Browser confirmation is still required only when API evidence is missing, ambiguous, plan-limited, or screen parity is disputed.

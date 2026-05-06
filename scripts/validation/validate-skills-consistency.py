@@ -1,28 +1,40 @@
 #!/usr/bin/env python3
-"""Validate Ceratops skill source folders and runtime generation inputs."""
+"""Validate Ceratops skill source folders and runtime generation inputs.
+
+Called by CI, governance validation, explicit skill-maintenance validation, and
+runtime smoke paths. The default mode is a full repository validation. `--mode
+sections` is the lightweight replacement for the retired section-sync script:
+it checks shared section assignments and source skill delta-only status without
+running unrelated README, metadata, secret, or contract checks.
+"""
 
 from __future__ import annotations
 
+import argparse
 import json
 import pathlib
 import re
 import sys
 
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 SKILLS_DIR = ROOT / "skills"
 README = ROOT / "README.md"
 SECTION_MANIFEST = ROOT / "templates" / "skill-sections.json"
 CONTRACTS_DIR = pathlib.Path("contracts")
 REQUIRED_CONTRACT_FILES = [
     pathlib.Path("contracts/source-docs.json"),
-    pathlib.Path("contracts/code-comment-standards.json"),
-    pathlib.Path("contracts/github/github-org-contract.json"),
-    pathlib.Path("contracts/github/github-repo-contract.json"),
-    pathlib.Path("contracts/github/github-org-nondeterministic-checks.md"),
-    pathlib.Path("contracts/github/github-repo-nondeterministic-checks.md"),
-    pathlib.Path("contracts/artifacts/artifact-contract.json"),
-    pathlib.Path("contracts/artifacts/artifact-nondeterministic-checks.md"),
+    pathlib.Path("contracts/code/code-comment-nondeterministic-contract.md"),
+    pathlib.Path("contracts/github/github-org-deterministic-contract.json"),
+    pathlib.Path("contracts/github/github-repo-deterministic-contract.json"),
+    pathlib.Path("contracts/github/github-pr-readiness-deterministic-contract.json"),
+    pathlib.Path("contracts/github/github-org-nondeterministic-contract.md"),
+    pathlib.Path("contracts/github/github-repo-nondeterministic-contract.md"),
+    pathlib.Path("contracts/github/github-pr-readiness-nondeterministic-contract.md"),
+    pathlib.Path("contracts/code/code-repo-deterministic-contract.json"),
+    pathlib.Path("contracts/code/code-repo-nondeterministic-contract.md"),
+    pathlib.Path("contracts/artifacts/artifact-deterministic-contract.json"),
+    pathlib.Path("contracts/artifacts/artifact-nondeterministic-contract.md"),
 ]
 SECTIONS_START = "<!-- CERATOPS_SHARED_SECTIONS_START -->"
 SECTIONS_END = "<!-- CERATOPS_SHARED_SECTIONS_END -->"
@@ -61,86 +73,6 @@ SHORT_DESC_STOPWORDS = {
     "when",
     "with",
 }
-STALE_ACTIVE_PATTERNS: list[tuple[re.Pattern[str], str, set[pathlib.Path]]] = [
-    (
-        re.compile(r"templates/fragments/"),
-        "stale fragments path",
-        {pathlib.Path("CHANGELOG.md"), pathlib.Path("scripts/validate-skills.py")},
-    ),
-    (
-        re.compile(r"templates/skill-fragments\.json"),
-        "stale section-manifest name",
-        {pathlib.Path("CHANGELOG.md"), pathlib.Path("scripts/validate-skills.py")},
-    ),
-    (
-        re.compile(r"scripts/sync-skill-core\.py"),
-        "stale sync-script name",
-        {pathlib.Path("CHANGELOG.md"), pathlib.Path("scripts/validate-skills.py")},
-    ),
-    (re.compile(r"CERATOPS_COMMON_CORE"), "stale common-core marker", {pathlib.Path("scripts/validate-skills.py")}),
-    (
-        re.compile(r"\bgh_live\b"),
-        "stale gh_live helper name",
-        {pathlib.Path("CHANGELOG.md"), pathlib.Path("scripts/validate-skills.py")},
-    ),
-    (
-        re.compile(r"\bgh-live\b"),
-        "stale gh-live helper name",
-        {pathlib.Path("CHANGELOG.md"), pathlib.Path("scripts/validate-skills.py")},
-    ),
-    (
-        re.compile(r"\bceratops_gh_runtime\b"),
-        "stale GH helper module name",
-        {
-            pathlib.Path("CHANGELOG.md"),
-            pathlib.Path("scripts/install-skills.ps1"),
-            pathlib.Path("scripts/validate-skills.py"),
-        },
-    ),
-    (
-        re.compile(r"\bceratops-gh-runtime\b"),
-        "stale GH helper package name",
-        {
-            pathlib.Path("CHANGELOG.md"),
-            pathlib.Path("scripts/install-skills.ps1"),
-            pathlib.Path("scripts/validate-skills.py"),
-        },
-    ),
-    (
-        re.compile(r"\bceratops_gh_current_state\b"),
-        "stale GH helper package name",
-        {pathlib.Path("scripts/validate-skills.py")},
-    ),
-    (
-        re.compile(r"\bgithub-artifact-contract\.json\b"),
-        "stale artifact contract filename",
-        {pathlib.Path("scripts/validate-skills.py")},
-    ),
-    (
-        re.compile(r"\bgithub-health-source-docs\.json\b"),
-        "stale source-doc registry filename",
-        {pathlib.Path("scripts/validate-skills.py")},
-    ),
-    (
-        re.compile(r"contracts/github/reviews/"),
-        "stale non-deterministic review folder",
-        {pathlib.Path("scripts/validate-skills.py")},
-    ),
-    (
-        re.compile(r"best-practice-baseline\.md"),
-        "retired GitHub health baseline file reference",
-        {pathlib.Path("CHANGELOG.md"), pathlib.Path("scripts/validate-skills.py")},
-    ),
-    (
-        re.compile(r"\bjunctions?\b", re.IGNORECASE),
-        "stale runtime junction install model",
-        {
-            pathlib.Path("CHANGELOG.md"),
-            pathlib.Path("scripts/install-skills.ps1"),
-            pathlib.Path("scripts/validate-skills.py"),
-        },
-    ),
-]
 SECRET_PATTERNS = [
     re.compile(r"AKIA[0-9A-Z]{16}"),
     re.compile(r"gh[pousr]_[A-Za-z0-9_]{20,}"),
@@ -284,6 +216,20 @@ def validate_workflow_target(command: str, skill_names: set[str]) -> list[str]:
             errors.append(f"section manifest maintenance workflow points to missing script {parts[1]}")
         return errors
 
+    if len(parts) >= 4 and parts[0].lower() in {"powershell", "pwsh"} and "-file" in {part.lower() for part in parts}:
+        file_index = next(index for index, part in enumerate(parts) if part.lower() == "-file")
+        if file_index + 1 >= len(parts):
+            errors.append("section manifest maintenance workflow has -File without a script path")
+            return errors
+        script_rel = pathlib.Path(parts[file_index + 1])
+        if script_rel.is_absolute() or ".." in script_rel.parts:
+            errors.append(f"section manifest maintenance workflow uses a non-portable script path: {parts[file_index + 1]}")
+            return errors
+        script_path = ROOT / script_rel
+        if not script_path.is_file():
+            errors.append(f"section manifest maintenance workflow points to missing script {parts[file_index + 1]}")
+        return errors
+
     if len(parts) >= 3 and parts[0] in {"python", "py"} and parts[1] == "-m":
         module = parts[2]
         module_path = ROOT / "src" / pathlib.Path(module.replace(".", "/"))
@@ -305,24 +251,6 @@ def check_skill_refs(path: pathlib.Path, text: str, skill_names: set[str]) -> li
     return errors
 
 
-def check_stale_active_terms() -> list[str]:
-    errors: list[str] = []
-    for path in ROOT.rglob("*"):
-        if not path.is_file() or ".git" in path.parts:
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
-        rel = path.relative_to(ROOT)
-        for pattern, label, allowed_paths in STALE_ACTIVE_PATTERNS:
-            if rel in allowed_paths:
-                continue
-            if pattern.search(text):
-                errors.append(f"{rel}: {label}")
-    return errors
-
-
 def check_retired_baseline_absent() -> list[str]:
     errors: list[str] = []
     for path in ROOT.rglob("best-practice-baseline.md"):
@@ -330,6 +258,58 @@ def check_retired_baseline_absent() -> list[str]:
             continue
         rel = path.relative_to(ROOT)
         errors.append(f"{rel}: retired best-practice baseline; use {CONTRACTS_DIR}")
+    return errors
+
+
+def check_section_sources(manifest: dict[str, object], skill_dirs: list[pathlib.Path]) -> list[str]:
+    """Run only shared-section checks needed after template or manifest edits."""
+
+    errors: list[str] = []
+    sections = manifest.get("sections", {})
+    assignments = manifest.get("skills", {})
+    skill_names = {skill_dir.name for skill_dir in skill_dirs}
+    if "minimal" not in sections:
+        errors.append("section manifest must define minimal")
+    if not isinstance(sections, dict):
+        errors.append("section manifest sections must be an object")
+        return errors
+    if not isinstance(assignments, dict):
+        errors.append("section manifest skills must be an object")
+        return errors
+    for section_name, rel_path in sections.items():
+        if not isinstance(rel_path, str):
+            errors.append(f"section manifest section {section_name} must map to a path string")
+            continue
+        if not (ROOT / rel_path).is_file():
+            errors.append(f"missing section file for {section_name}: {rel_path}")
+    for skill_name, section_names in assignments.items():
+        if skill_name not in skill_names:
+            errors.append(f"{skill_name}: section assignment points to a missing skill directory")
+            continue
+        if not isinstance(section_names, list) or not all(isinstance(item, str) for item in section_names):
+            errors.append(f"{skill_name}: section assignment must be a list of section names")
+            continue
+        if "minimal" not in section_names:
+            errors.append(f"{skill_name}: section assignment must include minimal")
+        for section_name in section_names:
+            if section_name not in sections:
+                errors.append(f"{skill_name}: unknown section assignment {section_name}")
+    for skill_dir in skill_dirs:
+        skill_md = skill_dir / "SKILL.md"
+        if skill_dir.name not in assignments:
+            errors.append(f"{skill_dir.name}: missing section assignment in manifest")
+            continue
+        if not skill_md.is_file():
+            errors.append(f"{skill_dir.name}: missing SKILL.md")
+            continue
+        text = skill_md.read_text(encoding="utf-8")
+        if SECTIONS_START in text or SECTIONS_END in text:
+            errors.append(f"{skill_dir.name}: source SKILL.md must be delta-only; shared sections are generated at install time")
+            continue
+        try:
+            rendered_sections_block(skill_dir.name, manifest)
+        except Exception as exc:
+            errors.append(f"{skill_dir.name}: could not render runtime shared sections: {exc}")
     return errors
 
 
@@ -365,9 +345,12 @@ def check_skill(skill_dir: pathlib.Path, readme_rows: set[str], manifest: dict[s
         errors.append(f"{name}: missing body")
     if name not in readme_rows:
         errors.append(f"{name}: missing README skill table row")
-    if "## Boundaries" not in skill_md.read_text(encoding="utf-8"):
-        errors.append(f"{name}: missing Boundaries section")
     core_text = skill_md.read_text(encoding="utf-8")
+    h2_headings = re.findall(r"^## (.+)$", core_text, flags=re.MULTILINE)
+    if h2_headings != ["Goal", "Context", "Constraints", "Done When"]:
+        errors.append(f"{name}: H2 sections must be Goal, Context, Constraints, Done When")
+    if "### Boundaries" not in core_text:
+        errors.append(f"{name}: missing Boundaries section")
     if SECTIONS_START in core_text or SECTIONS_END in core_text:
         errors.append(f"{name}: source SKILL.md must be delta-only; shared sections are generated at install time")
     else:
@@ -426,13 +409,30 @@ def check_secrets() -> list[str]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Validate Ceratops skill source and runtime-generation inputs.")
+    parser.add_argument("--mode", choices=["full", "sections"], default="full", help="Use sections for the lightweight shared-section check.")
+    args = parser.parse_args()
+
     errors: list[str] = []
     if not SKILLS_DIR.is_dir():
         errors.append("missing skills/ directory")
-    if not README.is_file():
-        errors.append("missing README.md")
     if not SECTION_MANIFEST.is_file():
         errors.append("missing templates/skill-sections.json")
+
+    manifest = load_section_manifest() if SECTION_MANIFEST.is_file() else {"sections": {}, "skills": {}}
+    skill_dirs = sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir()) if SKILLS_DIR.is_dir() else []
+    if args.mode == "sections":
+        errors.extend(check_section_sources(manifest, skill_dirs))
+        if errors:
+            print(f"errors: {len(errors)}", file=sys.stderr)
+            for error in errors:
+                print(error, file=sys.stderr)
+            return 1
+        print(f"ok: sections {len(skill_dirs)}")
+        return 0
+
+    if not README.is_file():
+        errors.append("missing README.md")
     if not (ROOT / CONTRACTS_DIR).is_dir():
         errors.append(f"missing contract directory: {CONTRACTS_DIR}")
     for rel_path in REQUIRED_CONTRACT_FILES:
@@ -441,7 +441,6 @@ def main() -> int:
     if not CERATOPS_ICON_SOURCE.is_file():
         errors.append(f"missing shared Ceratops icon source: {CERATOPS_ICON_SOURCE.relative_to(ROOT)}")
 
-    manifest = load_section_manifest() if SECTION_MANIFEST.is_file() else {"sections": {}, "skills": {}}
     sections = manifest.get("sections", {})
     workflow_hints = manifest.get("maintenance_workflows", {})
     assignments = manifest.get("skills", {})
@@ -474,12 +473,9 @@ def main() -> int:
         for section_name in section_names:
             if section_name not in sections:
                 errors.append(f"{skill_name}: unknown section assignment {section_name}")
-        if "gh-findings" in section_names and "gh-current-state" not in section_names:
-            errors.append(f"{skill_name}: gh-findings requires gh-current-state")
 
     readme_text = README.read_text(encoding="utf-8") if README.is_file() else ""
     readme_rows = readme_skill_rows(readme_text)
-    skill_dirs = sorted(p for p in SKILLS_DIR.iterdir() if p.is_dir()) if SKILLS_DIR.is_dir() else []
     if not skill_dirs:
         errors.append("no skill directories found")
 
@@ -503,7 +499,6 @@ def main() -> int:
             continue
         errors.extend(check_skill(skill_dir, readme_rows, manifest, skill_names))
     errors.extend(check_secrets())
-    errors.extend(check_stale_active_terms())
     errors.extend(check_retired_baseline_absent())
 
     if errors:

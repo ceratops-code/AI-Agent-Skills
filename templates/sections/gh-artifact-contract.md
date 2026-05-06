@@ -1,15 +1,6 @@
-## GH Artifact Contract
+## Artifact Contract
 
-- Mandatory: Apply `contracts/artifacts/artifact-contract.json` only when the repo has an external artifact, the current change affects a releasable artifact, or the final answer makes an artifact or no-artifact claim.
-- Identify the real deliverable from the project instead of forcing Docker, PyPI, or any other registry by default.
-- Capture or verify the artifact identity, registry target, version source, release policy, tag style, changelog or release-note source, and post-publish consumer check.
-- In audit-only flows, verify and classify artifact state; do not publish or mutate registry artifacts unless the workflow explicitly moves into a ship or publish skill.
-- Build, package, install, pull, run, or consume local artifacts enough to catch packaging and runtime failures before publishing or before making a local artifact-health claim.
-- Publish external artifacts only when repo policy and the merged change require a release, tag, package, image, module, binary, or other public artifact.
-- Derive versions from trustworthy project metadata and tag history instead of inventing semantics.
-- Verify live release and registry endpoints after publishing or when auditing artifact state, including tags, digests, package pages, release pages, and published artifacts.
-- Prefer registry-supported trusted publishing, OIDC, or another short-lived identity path over repository-stored long-lived publish tokens when supported by the real registry; keep any token-based fallback explicit and scoped.
-- For PyPI publishes, prefer Trusted Publishing or another short-lived identity path over repository-stored long-lived tokens when supported, build the intended sdist and wheel, publish the intended version, verify the live PyPI version, install that exact version from PyPI locally, and run the smoke or documented consumer check against the published artifact instead of an editable checkout.
-- For PyPI publishes that emit attestations or provenance, verify the metadata through PyPI or the selected verifier instead of relying only on upload success.
-- For npm publishes, prefer trusted publishing when the package and runner meet current npm prerequisites, run the package's build and test path, publish the intended version, verify the live npm package and version, and verify provenance when npm generated it.
-- For Docker or OCI image publishes, build locally, run a smoke test, publish the intended tags or digests, verify the live registry state, pull or consume the published image when relevant, and verify provenance or SBOM attestations when the selected publish flow emits them.
+- Treat `contracts/artifacts/artifact-deterministic-contract.json` as the source of truth for external deliverables, registry identity, package or image metadata, trusted publishing, provenance, live registry verification, and consumer smoke expectations.
+- (D) Run artifact checks only when the repo has an external artifact, the current change affects a releasable artifact, or the final answer makes an artifact or no-artifact claim.
+- (D) Use `scripts/validation/github-validate-repo-artifact-contract.py --surface artifact --subset artifact` for artifact audits, uncertain registry state, or broad artifact claims; do not run it solely to read back an exact publish, tag, or file-write command that already succeeded.
+- Do not publish, tag, mutate registry state, delete packages, or change artifact credentials from an audit-only contract run; move into the publish or ship workflow when registry mutation is actually required.

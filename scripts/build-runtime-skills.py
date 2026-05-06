@@ -6,6 +6,11 @@ Source skill folders intentionally contain only the skill-specific delta in
 `SKILL.md`, copies the skill folder plus declared runtime payload files, and
 installs the result under a runtime skills directory such as
 `$CODEX_HOME/skills`.
+
+Called by `scripts/install-skills.ps1` during local installs and runtime branch
+preview rebuilds. It can also be run directly for smoke tests with a temporary
+runtime root. The builder is the only script that writes installed skill
+contents; PowerShell wrappers only choose paths and Python execution.
 """
 
 from __future__ import annotations
@@ -67,9 +72,6 @@ def validate_manifest(manifest: Mapping[str, object], skill_names: set[str]) -> 
         for section_name in section_names:
             if section_name not in sections:
                 errors.append(f"{skill_name}: unknown section assignment {section_name}")
-        if "gh-findings" in section_names and "gh-current-state" not in section_names:
-            errors.append(f"{skill_name}: gh-findings requires gh-current-state")
-
     for skill_name in skill_names:
         if skill_name not in assignments:
             errors.append(f"{skill_name}: missing section assignment")

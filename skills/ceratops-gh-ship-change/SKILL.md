@@ -1,38 +1,38 @@
 ---
 name: ceratops-gh-ship-change
-description: Ship local repository changes through GitHub and any relevant artifact registry with Ceratops defaults, using scripted live repo and PR checks before merge decisions.
+description: Ship local repository changes through GitHub and any relevant artifact registry with Ceratops defaults, using PR readiness checks before merge decisions.
 ---
 
 # Ceratops GH Ship Change
 
-Take an existing published repo from local changes to a verified merged result. Publish external artifacts only when the change affects a releasable package, image, module, binary, or other public artifact. Verify machine-checkable GitHub state through the contract checker or PR-readiness helper before trusting prose or stale screenshots.
+## Goal
 
-## Script Bundle
+Take an existing published repo from local changes to a verified merged result. Publish external artifacts only when the change affects a releasable package, image, module, binary, or other public artifact. Use the PR merge skill for final PR readiness and merge.
 
-- Repo settings check when repo health is in scope: `python scripts/github_repo_artifact_contract.py --repo OWNER/REPO --scope repo --preset settings`
-- Artifact check when artifact publishing is in scope: `python scripts/github_repo_artifact_contract.py --repo OWNER/REPO --scope artifact --preset artifact`
-- PR readiness check: `python scripts/github_pr_readiness.py --pr NUMBER_OR_URL`
+## Context
 
-## Inputs To Capture
+### Inputs To Capture
 
 - Intended change scope, issue or PR reference, target branch, repo owner and name, and merge preference.
-- Any missing inputs required by the GH artifact contract.
 - Required local checks, CI checks, security gates, branch protection, release workflow, and package verification commands.
 - Whether the run touches GitHub Actions workflows or repo Actions permissions, and whether the repo already enforces SHA pinning.
 - Topics, CODEOWNERS, SECURITY instructions, README examples, and local consumer paths affected by the change.
 
 Infer missing inputs from local files and live repo state before asking.
 
-## Boundaries
+## Constraints
+
+### Boundaries
 
 - Use this skill when the repo already exists and there are actual local changes to complete, merge, and optionally release.
-- If the repo is not yet published or lacks a usable remote, stop and use `$ceratops-gh-repo-create-and-publish`.
-- If the task is only repo validation or stale-state cleanup with no content changes, stop and use `$ceratops-gh-repo-health-audit`.
+- For the skills repo or another skill-source repo, use this skill only after skill-source changes are committed or intentionally staged for GitHub shipping.
+- If the repo is not yet published or lacks a usable remote, stop because first-time publication is outside this skill's scope.
+- If the task is only repo validation or stale-state cleanup with no content changes, stop because that work is outside this shipping skill's scope.
 - If only PR finalization remains, no content changes are needed, and no release or artifact publish is required after merge, stop this workflow immediately and continue with `$ceratops-gh-merge-pr`, even when this workflow created or updated the PR.
 
-## Workflow
+### Workflow
 
-### 1. Inspect state and scope
+#### 1. Inspect state and scope
 
 - Inspect git status, diff, untracked files, remotes, current branch, upstream, open PRs, tags, releases, CI config, manifests, lockfiles, docs, generated files, and registry metadata.
 - Refresh remote refs with `git fetch --prune origin` before relying on remote-tracking branch presence, cleanup status, or branch-reuse decisions.
@@ -41,57 +41,46 @@ Infer missing inputs from local files and live repo state before asking.
 - Confirm no secrets, private data, machine-local paths, or internal-only references are being introduced.
 - Reuse an existing branch or PR when appropriate instead of creating duplicates.
 
-### 2. Research only when the next decision needs it
+#### 2. Research only when the next decision needs it
 
-- Default to the narrowest evidence that answers the next shipping decision: local repo files and bundled live checks first, then touched-registry or GitHub docs only when needed.
+- Default to the narrowest evidence that answers the next shipping decision: local repo files, targeted `gh` or GitHub API calls, and touched-registry evidence before checking docs.
 - Check current official docs for GitHub PR, Actions, security, release behavior, and any touched registry or package-manager workflow only when the next task decision remains concretely ambiguous after local state, `gh`, GitHub API, or script output, or when those sources materially conflict.
-- Compare at most 1-2 strong reference repos only for a concrete ambiguous docs, security, CI, release, or packaging question. Do not do broad GitHub health contract maintenance during routine shipping runs.
+- Compare at most 1-2 strong reference repos only for a concrete ambiguous docs, security, CI, release, or packaging question.
 
-### 3. Prove live GitHub state with scripts
-
-- Run the repo contract checker only when the run changes or explicitly verifies repo posture surfaces such as branch protection or rulesets, review policy, Actions permissions or SHA pinning, security controls, moderation or community reporting, or other repo-health claims that the final answer will rely on.
-- Do not run the repo contract checker for pure code, docs, tests, packaging, or artifact-publish work when those repo posture surfaces are untouched.
-- Run the bundled PR-readiness script before merge or auto-merge decisions instead of relying on prose summaries of checks, reviews, or mergeability.
-- Re-run the relevant script after any live GitHub change that could affect a reported repo-health or PR-readiness result.
-
-### 4. Complete the change
+#### 3. Complete the change
 
 - Finish in-scope code, docs, tests, generated files, and packaging metadata.
 - If the run touches workflow files or GitHub Actions settings, pin every non-local action in the changed workflows to a verified full SHA with a same-line version comment and do not introduce new mutable refs.
 - Add regression tests or regression checks for meaningful behavior fixes or behavior changes.
 - Update README, examples, install or run commands, SECURITY, CONTRIBUTING, changelog, release notes, package metadata, topics, CODEOWNERS, CI, and artifact metadata only when the change makes them stale.
 
-### 5. Validate locally
+#### 4. Validate locally
 
 - Run the relevant local checks: format, lint, tests, smoke tests, build, packaging, generated-file checks, container build, or security checks.
-- Execute the local-verification parts of the GH artifact contract when artifact publishing might be required.
 - Fix in-scope failures instead of stopping at the first error.
 
-### 6. PR, CI, and merge
+#### 5. PR, CI, and merge
 
 - Create or update a branch and commit intentionally.
 - Push the branch and create or update a PR with concise change and validation evidence.
-- If the push or PR update leaves no remaining code, docs, CI, packaging, or generated-file edits, stop this workflow and continue with `$ceratops-gh-merge-pr` for review, CI, merge, and cleanup instead of continuing to finalization here.
 - Wait for required CI, code scanning, and branch protection checks, and fix in-scope failures.
-- Use the live script findings plus current GitHub state to decide whether to merge now, enable auto-merge, or stop on a blocker.
-- When this skill merges the PR directly, use `gh pr merge --admin` with the allowed merge-method flag and `--delete-branch` when cleanup is intended and allowed.
-- Use `gh pr merge --auto` only when GitHub should wait for remaining requirements instead of closing the PR immediately.
-- Delete the local and remote branch when safe, remove any temporary worktree created or used for the run as soon as its branch is no longer needed, sync the local default branch, prune stale refs, and keep a safety branch or worktree only when needed with an explicit reason.
+- When only PR finalization remains, continue with `$ceratops-gh-merge-pr` for PR readiness, merge or auto-merge, and remote PR branch cleanup.
+- After the PR is merged, sync the local default branch, prune stale refs, remove any temporary worktree created or used for the run as soon as its branch is no longer needed, and keep a safety branch or worktree only when needed with an explicit reason.
 
-### 7. Publish artifacts when relevant
+#### 6. Publish artifacts when relevant
 
-- Execute the publish and live-verification parts of the GH artifact contract.
-- Re-run the relevant contract check after any live GitHub setting change and the PR-readiness script immediately before the final merge action.
+- Publish and verify touched artifacts through the package manager, registry CLI, or registry API that owns the artifact surface.
 
-## Completion Gate
+## Done When
 
-- Verify the merge decision is backed by a fresh `python scripts/github_pr_readiness.py` run.
-- Verify live GitHub state for the repo with `scripts/github_repo_artifact_contract.py` when repo settings or process health were part of the run.
+### Completion Gate
+
+- Verify PR readiness and merge were handled by `$ceratops-gh-merge-pr`.
 - Verify changed workflow files still use the intended full-SHA action refs when the run touched GitHub Actions workflows or settings.
 - Verify local state: default branch, worktree, remotes, refs, generated files, artifacts, temp paths, caches, credential changes, and local consumer paths.
 - Verify any temporary branch or worktree created or used for the run was removed unless intentionally retained with an explicit active-workflow reason.
 
-## Output Contract
+### Output Contract
 
 Report only:
 
@@ -102,6 +91,6 @@ Report only:
 - anything important not verified
 - exact credential step or paid requirement if blocked
 
-## Example Invocation
+### Example Invocation
 
-`Use $ceratops-gh-ship-change to ship these local changes through GitHub with the bundled live checks, publish any relevant artifacts, verify them locally, and clean up state.`
+`Use $ceratops-gh-ship-change to ship these local changes through GitHub, publish any relevant artifacts, verify them locally, and clean up state.`

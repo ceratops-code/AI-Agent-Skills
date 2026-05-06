@@ -1,7 +1,7 @@
 {
   "contract_format_version": 1,
   "kind": "github_repository_contract",
-  "name": "ceratops_github_repo_health_contract",
+  "name": "ceratops_github_repo_deterministic_contract",
   "captured_on": "2026-05-02",
   "source_files": [
     {
@@ -10,15 +10,7 @@
     },
     {
       "path": "$AI_AGENT_SKILLS_ROOT/templates/sections/gh-repo-health-contract.md",
-      "lines": "1-15"
-    },
-    {
-      "path": "$CODEX_HOME/automations/daily-dependabot-alert-review/automation.toml",
-      "lines": "task-specific Dependabot queue contract"
-    },
-    {
-      "path": "$CODEX_HOME/automations/daily-dependabot-alert-review/dependabot-org-queue-snapshot.py",
-      "lines": "snapshot schema and queue fields"
+      "lines": "contract owner"
     }
   ],
   "parameters": {
@@ -80,8 +72,7 @@
   ],
   "source_docs_ref": "../source-docs.json",
   "source_doc_scopes": [
-    "repo",
-    "artifact"
+    "repo"
   ],
   "approved_drift": {
     "exclusions": [],
@@ -121,11 +112,7 @@
       "repo.identity_public_contract",
       "process.default_branch_enforcement_present",
       "process.branch_protection_or_ruleset_posture",
-      "actions.workflow_sha_pinning",
-      "security.dependabot_config_file",
       "security.open_dependabot_pr_queue",
-      "content.required_files_presence",
-      "artifact.*",
       "stale_state.*"
     ],
     "destructive_or_irreversible": "always_report_only"
@@ -557,33 +544,9 @@
         },
         {
           "method": "GET",
-          "endpoint": "/repos/${owner}/${repo}/languages",
-          "covers_checks": [
-            "type.language_signals"
-          ]
-        },
-        {
-          "method": "GET",
           "endpoint": "/repos/${owner}/${repo}/community/profile",
           "covers_checks": [
-            "content.community_profile_public",
-            "content.required_files_presence"
-          ]
-        },
-        {
-          "method": "GET",
-          "endpoint": "/repos/${owner}/${repo}/git/trees/${default_branch}?recursive=1",
-          "covers_checks": [
-            "type.path_signals",
-            "content.required_files_presence",
-            "actions.workflow_sha_pinning",
-            "security.dependabot_config_file",
-            "artifact.docker_files",
-            "artifact.python_package_metadata",
-            "artifact.npm_package_metadata",
-            "artifact.other_manifest_presence",
-            "content.local_secret_pattern_scan",
-            "stale_state.local_path_references"
+            "content.community_profile_public"
           ]
         }
       ]
@@ -594,12 +557,8 @@
         "${local_repo_path}"
       ],
       "covers_checks": [
-        "type.path_signals",
-        "actions.workflow_sha_pinning",
-        "security.dependabot_config_file",
-        "local.git_state",
-        "content.local_secret_pattern_scan",
-        "stale_state.local_path_references"
+        "actions.permissions_policy",
+        "content.dependencies_label_when_dependabot_uses_it"
       ],
       "applies_when": "local_repo_path is provided"
     },
@@ -619,22 +578,22 @@
           "method": "GET",
           "endpoint": "/repos/${owner}/${repo}/branches/${default_branch}/protection",
           "covers_checks": [
+            "process.default_branch_name_and_protection_indicator",
             "process.default_branch_enforcement_present",
-            "process.branch_protection_or_ruleset_posture",
-            "process.maintainer_bypass_ruleset"
+            "process.branch_protection_or_ruleset_posture"
           ]
         },
         {
           "method": "GET",
-          "endpoint": "/repos/${owner}/${repo}/branches/${default_branch}",
+          "endpoint": "/repos/${owner}/${repo}/collaborators/${actor}/permission",
           "covers_checks": [
-            "process.default_branch_name_and_protection_indicator"
+            "process.maintainer_bypass_ruleset"
           ]
         }
       ]
     },
     {
-      "id": "actions_bundle",
+      "id": "actions_policy_bundle",
       "requests": [
         {
           "method": "GET",
@@ -686,36 +645,9 @@
         {
           "method": "GET",
           "endpoint": "/repos/${owner}/${repo}/dependabot/alerts?state=open&per_page=100",
+          "paginate": true,
           "covers_checks": [
             "security.open_dependabot_alert_queue"
-          ]
-        },
-        {
-          "method": "CLI",
-          "command": "gh search prs --repo ${owner}/${repo} --state open --app dependabot --limit 1000 --json author,createdAt,id,isDraft,labels,number,repository,state,title,updatedAt,url",
-          "covers_checks": [
-            "security.open_dependabot_pr_queue"
-          ]
-        },
-        {
-          "method": "GET",
-          "endpoint": "/repos/${owner}/${repo}/code-scanning/alerts?state=open&per_page=100",
-          "covers_checks": [
-            "security.open_code_scanning_alert_queue"
-          ]
-        },
-        {
-          "method": "GET",
-          "endpoint": "/repos/${owner}/${repo}/secret-scanning/alerts?state=open&per_page=100",
-          "covers_checks": [
-            "security.open_secret_scanning_alert_queue"
-          ]
-        },
-        {
-          "method": "GET",
-          "endpoint": "/repos/${owner}/${repo}/code-security-configuration",
-          "covers_checks": [
-            "security.code_security_configuration_attached"
           ]
         },
         {
@@ -723,6 +655,23 @@
           "endpoint": "/repos/${owner}/${repo}/code-scanning/default-setup",
           "covers_checks": [
             "security.code_scanning_default_setup_or_custom"
+          ]
+        },
+        {
+          "method": "GET",
+          "endpoint": "/repos/${owner}/${repo}/code-scanning/alerts?state=open&per_page=100",
+          "paginate": true,
+          "covers_checks": [
+            "security.open_code_scanning_alert_queue",
+            "security.code_scanning_default_setup_or_custom"
+          ]
+        },
+        {
+          "method": "GET",
+          "endpoint": "/repos/${owner}/${repo}/secret-scanning/alerts?state=open&per_page=100",
+          "paginate": true,
+          "covers_checks": [
+            "security.open_secret_scanning_alert_queue"
           ]
         },
         {
@@ -738,17 +687,12 @@
           "covers_checks": [
             "security.dependency_review_availability"
           ]
-        }
-      ]
-    },
-    {
-      "id": "content_intake_bundle",
-      "requests": [
+        },
         {
           "method": "GET",
-          "endpoint": "/repos/${owner}/${repo}/codeowners/errors",
+          "endpoint": "/repos/${owner}/${repo}/code-security-configuration",
           "covers_checks": [
-            "content.codeowners_valid"
+            "security.code_security_configuration_attached"
           ]
         },
         {
@@ -767,8 +711,6 @@
           "method": "GET",
           "endpoint": "/repos/${owner}/${repo}/releases?per_page=100",
           "covers_checks": [
-            "repo.release_posture",
-            "artifact.github_release_assets",
             "stale_state.releases"
           ]
         },
@@ -801,9 +743,9 @@
       "id": "type.visibility_origin_lifecycle",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:3",
-        "gh-repo-health-contract.md:4",
-        "gh-repo-health-contract.md:7"
+        "gh-repo-health-contract.md:3-8",
+        "gh-repo-health-contract.md:3-8",
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "classification",
       "comparison": "derive_types",
@@ -814,19 +756,6 @@
           "origin",
           "lifecycle"
         ]
-      }
-    },
-    {
-      "id": "type.path_signals",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:5"
-      ],
-      "kind": "classification",
-      "comparison": "derive_types_from_tree",
-      "applies_when": "always",
-      "expected": {
-        "must_record_matching_type_rules": true
       }
     },
     {
@@ -842,22 +771,10 @@
       }
     },
     {
-      "id": "type.language_signals",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards"
-      ],
-      "kind": "classification",
-      "comparison": "derive_types_from_languages",
-      "applies_when": "always",
-      "expected": {
-        "must_not_override_manifest_signals": true
-      }
-    },
-    {
       "id": "repo.identity_public_contract",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:4"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}",
@@ -883,7 +800,7 @@
       "id": "repo.topics_required",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:4"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}/topics",
@@ -892,21 +809,6 @@
       "expected": {
         "names.min_count": 1,
         "names.must_reflect_detected_artifact_types": true
-      }
-    },
-    {
-      "id": "repo.release_posture",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:15"
-      ],
-      "kind": "api_and_tree",
-      "comparison": "policy",
-      "applies_when": "repo.archived == false",
-      "expected": {
-        "if_artifact_surface_no_artifact": "docs_must_not_claim_publish_release",
-        "if_release_assets_exist": "artifact.github_release_assets applies",
-        "if_release_workflow_exists": "artifact.publish_workflow_identity applies"
       }
     },
     {
@@ -930,7 +832,7 @@
       "id": "repo.merge_settings",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:6"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}",
@@ -953,7 +855,7 @@
       "id": "process.default_branch_name_and_protection_indicator",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:6-7"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}/branches/${default_branch}",
@@ -970,7 +872,7 @@
       "id": "process.default_branch_enforcement_present",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:6-7"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api_composite",
       "endpoints": [
@@ -991,7 +893,7 @@
       "id": "process.branch_protection_or_ruleset_posture",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:6-7"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api_composite",
       "comparison": "policy",
@@ -1039,7 +941,7 @@
       "id": "actions.permissions_policy",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:12"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}/actions/permissions",
@@ -1058,7 +960,7 @@
       "id": "actions.workflow_token_permissions",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:12"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api_and_tree",
       "endpoint": "/repos/${owner}/${repo}/actions/permissions/workflow",
@@ -1076,7 +978,7 @@
       "id": "actions.private_fork_pr_workflows",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:6"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}/actions/permissions/fork-pr-workflows-private-repos",
@@ -1087,22 +989,6 @@
         "send_write_tokens_to_workflows": false,
         "send_secrets_and_variables": false,
         "require_approval_for_fork_pr_workflows": true
-      }
-    },
-    {
-      "id": "actions.workflow_sha_pinning",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:12"
-      ],
-      "kind": "tree_scan",
-      "comparison": "workflow_uses_policy",
-      "applies_when": "type.workflow_surface has has_workflows",
-      "expected": {
-        "local_actions_allowed_unpinned": true,
-        "external_actions_ref_pattern": "^[0-9a-f]{40}$",
-        "same_line_release_comment_required": true,
-        "reusable_workflow_tag_refs": "classify_deliberately"
       }
     },
     {
@@ -1125,7 +1011,7 @@
       "id": "security.security_and_analysis_status",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:8-11"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}",
@@ -1145,7 +1031,7 @@
       "id": "security.vulnerability_alerts_enabled",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:8"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api_status",
       "endpoint": "/repos/${owner}/${repo}/vulnerability-alerts",
@@ -1160,7 +1046,7 @@
       "id": "security.dependabot_security_updates_enabled",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:8"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api_status",
       "endpoint": "/repos/${owner}/${repo}/automated-security-fixes",
@@ -1172,31 +1058,11 @@
       }
     },
     {
-      "id": "security.dependabot_config_file",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:8",
-        "gh-repo-health-contract.md:13"
-      ],
-      "kind": "tree_scan",
-      "comparison": "dependabot_manifest_policy",
-      "applies_when": "repo.archived == false && repo.fork == false && package_manifests_present == true",
-      "expected": {
-        "dependabot_yml_present": true,
-        "updates_entries_cover_detected_package_ecosystems": true,
-        "schedule_interval_present_for_each_updates_entry": true,
-        "open_pull_requests_limit_classified": true,
-        "groups_classified_when_used": true,
-        "private_registries_classified_when_used": true,
-        "labels_referenced_by_dependabot_exist": true
-      }
-    },
-    {
       "id": "security.open_dependabot_alert_queue",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:8",
-        "gh-repo-health-contract.md:15"
+        "gh-repo-health-contract.md:3-8",
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}/dependabot/alerts?state=open&per_page=100",
@@ -1236,7 +1102,7 @@
       "id": "security.code_security_configuration_attached",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:10"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}/code-security-configuration",
@@ -1252,7 +1118,7 @@
       "id": "security.code_scanning_default_setup_or_custom",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:9"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api_and_tree",
       "endpoint": "/repos/${owner}/${repo}/code-scanning/default-setup",
@@ -1271,8 +1137,8 @@
       "id": "security.open_code_scanning_alert_queue",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:9",
-        "gh-repo-health-contract.md:15"
+        "gh-repo-health-contract.md:3-8",
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}/code-scanning/alerts?state=open&per_page=100",
@@ -1289,8 +1155,8 @@
       "id": "security.open_secret_scanning_alert_queue",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:9",
-        "gh-repo-health-contract.md:15"
+        "gh-repo-health-contract.md:3-8",
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}/secret-scanning/alerts?state=open&per_page=100",
@@ -1305,7 +1171,7 @@
       "id": "security.private_vulnerability_reporting_public",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:9"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api_status",
       "endpoint": "/repos/${owner}/${repo}/private-vulnerability-reporting",
@@ -1320,7 +1186,7 @@
       "id": "security.dependency_review_availability",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:11"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api_status",
       "endpoint": "/repos/${owner}/${repo}/dependency-graph/compare/${default_branch}...${default_branch}",
@@ -1334,48 +1200,11 @@
       }
     },
     {
-      "id": "content.required_files_presence",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:5"
-      ],
-      "kind": "api_and_tree",
-      "comparison": "file_presence_policy",
-      "applies_when": "repo.archived == false",
-      "expected": {
-        "all_repos": [
-          "README.md"
-        ],
-        "public_source_repos": [
-          "LICENSE",
-          "SECURITY.md",
-          "CONTRIBUTING.md",
-          "CODE_OF_CONDUCT.md",
-          ".github/CODEOWNERS"
-        ],
-        "when_has_issues": [
-          ".github/ISSUE_TEMPLATE/**",
-          ".github/ISSUE_TEMPLATE.md"
-        ],
-        "when_has_pull_requests": [
-          ".github/PULL_REQUEST_TEMPLATE.md",
-          ".github/pull_request_template.md",
-          ".github/PULL_REQUEST_TEMPLATE/**"
-        ],
-        "when_artifact_surface_present": [
-          "CHANGELOG.md",
-          "docs/**",
-          "examples/**"
-        ],
-        "contextual_expectations": true
-      }
-    },
-    {
       "id": "content.community_profile_public",
       "source_lines": [
         "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:5",
-        "gh-repo-health-contract.md:9"
+        "gh-repo-health-contract.md:3-8",
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}/community/profile",
@@ -1395,23 +1224,9 @@
       }
     },
     {
-      "id": "content.codeowners_valid",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:4-5"
-      ],
-      "kind": "api",
-      "endpoint": "/repos/${owner}/${repo}/codeowners/errors",
-      "comparison": "empty_errors",
-      "applies_when": "tree contains .github/CODEOWNERS || tree contains CODEOWNERS || tree contains docs/CODEOWNERS",
-      "expected": {
-        "errors": []
-      }
-    },
-    {
       "id": "content.dependencies_label_when_dependabot_uses_it",
       "source_lines": [
-        "gh-repo-health-contract.md:13"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "tree_and_api",
       "comparison": "label_exists_when_referenced",
@@ -1421,142 +1236,9 @@
       }
     },
     {
-      "id": "artifact.docker_files",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards"
-      ],
-      "kind": "tree_scan",
-      "comparison": "docker_policy",
-      "applies_when": "type.artifact_surface has docker_oci_image",
-      "expected": {
-        "dockerfile_present": true,
-        ".dockerignore_present": true,
-        "build_context_not_repo_root_unless_approved": true,
-        "base_image_reference_present": true,
-        "base_image_pin_strategy_documented": true,
-        "avoid_latest_tag_for_base_image_unless_approved": true,
-        "multi_stage_build_used_when_build_toolchain_needed": true,
-        "dependency_lockfiles_copied_before_install_when_present": true,
-        "no_plaintext_secret_args_or_env": true,
-        "user_instruction_present_when_runtime_image": true,
-        "healthcheck_or_exposed_ports_only_when_runtime_service": true
-      }
-    },
-    {
-      "id": "artifact.docker_publish_workflow",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:15"
-      ],
-      "kind": "tree_and_release_scan",
-      "comparison": "publish_workflow_policy",
-      "applies_when": "type.artifact_surface has docker_oci_image && type.workflow_surface has has_release_workflow",
-      "expected": {
-        "registry_target_documented": true,
-        "tags_documented": true,
-        "local_build_or_smoke_check_documented": true,
-        "if_attestation_emitted_verify_permissions": true,
-        "if_sbom_emitted_verify_subject_digest": true
-      }
-    },
-    {
-      "id": "artifact.python_package_metadata",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards"
-      ],
-      "kind": "tree_scan",
-      "comparison": "python_package_policy",
-      "applies_when": "type.artifact_surface has pypi_python_package",
-      "expected": {
-        "pyproject_toml_present": true,
-        "build_system_present": true,
-        "project_metadata_name_present": true,
-        "project_metadata_version_or_dynamic_present": true,
-        "license_or_license_files_present": true,
-        "requires_python_present": true,
-        "readme_or_description_present": true,
-        "project_description_present": true,
-        "authors_or_maintainers_present_when_public": true,
-        "project_urls_present_when_public": true,
-        "classifiers_present_when_public": "recommended_or_approved_absent",
-        "sdist_and_wheel_build_path_documented": true,
-        "trusted_publishing_preferred_over_long_lived_token": true
-      }
-    },
-    {
-      "id": "artifact.npm_package_metadata",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards"
-      ],
-      "kind": "tree_scan",
-      "comparison": "npm_package_policy",
-      "applies_when": "type.artifact_surface has npm_package",
-      "expected": {
-        "package_json_present": true,
-        "name_present": true,
-        "version_present": true,
-        "repository_url_matches_github_repo_when_publishing": true,
-        "license_present": true,
-        "files_or_npmignore_policy_present": true,
-        "package_manager_or_lockfile_present_for_reproducible_publish": true,
-        "workspace_publish_surface_classified": true,
-        "lockfile_present_when_build_or_test_dependencies": true,
-        "build_or_test_script_present_when_package_has_build_surface": true,
-        "trusted_publishing_preferred_over_long_lived_token": true
-      }
-    },
-    {
-      "id": "artifact.other_manifest_presence",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards"
-      ],
-      "kind": "tree_scan",
-      "comparison": "artifact_manifest_policy",
-      "applies_when": "type.artifact_surface intersects maven_package,nuget_package,crates_package,rubygems_package,powershell_gallery_module,github_packages_other",
-      "expected": {
-        "ecosystem_manifest_present": true,
-        "metadata_owner_file_identified": true,
-        "publish_workflow_or_no_publish_posture_consistent": true
-      }
-    },
-    {
-      "id": "artifact.github_release_assets",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards",
-        "gh-repo-health-contract.md:15"
-      ],
-      "kind": "api_and_tree",
-      "endpoint": "/repos/${owner}/${repo}/releases?per_page=100",
-      "comparison": "release_asset_policy",
-      "applies_when": "release_assets_count > 0",
-      "expected": {
-        "release_notes_present": true,
-        "tag_policy_documented": true,
-        "post_publish_consumer_check_documented": true,
-        "restore_or_rollback_state_documented_when_relevant": true
-      }
-    },
-    {
-      "id": "artifact.attestation_permissions",
-      "source_lines": [
-        "source-docs.json:repo-and-artifact-standards"
-      ],
-      "kind": "workflow_scan",
-      "comparison": "attestation_policy",
-      "applies_when": "type.workflow_surface has has_attestation_workflow",
-      "expected": {
-        "id_token_write_only_in_attestation_job": true,
-        "contents_read_present": true,
-        "attestations_write_present": true,
-        "packages_write_only_for_container_registry_push": true,
-        "artifact_metadata_write_only_when_linked_metadata_intended": true,
-        "build_args_do_not_carry_secrets_for_provenance": true
-      }
-    },
-    {
       "id": "stale_state.pull_requests",
       "source_lines": [
-        "gh-repo-health-contract.md:15"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}/pulls?state=open&per_page=100",
@@ -1570,7 +1252,7 @@
     {
       "id": "stale_state.branches",
       "source_lines": [
-        "gh-repo-health-contract.md:15"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}/branches?per_page=100",
@@ -1584,7 +1266,7 @@
     {
       "id": "stale_state.tags",
       "source_lines": [
-        "gh-repo-health-contract.md:15"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}/tags?per_page=100",
@@ -1598,7 +1280,7 @@
     {
       "id": "stale_state.releases",
       "source_lines": [
-        "gh-repo-health-contract.md:15"
+        "gh-repo-health-contract.md:3-8"
       ],
       "kind": "api",
       "endpoint": "/repos/${owner}/${repo}/releases?per_page=100",
@@ -1609,61 +1291,7 @@
         "release_assets_match_artifact_contract": true,
         "do_not_delete_automatically": true
       }
-    },
-    {
-      "id": "local.git_state",
-      "source_lines": [
-        "ceratops-gh-repo-health-audit/SKILL.md:125",
-        "ceratops-gh-repo-create-and-publish/SKILL.md:171"
-      ],
-      "kind": "local_git",
-      "comparison": "git_state_policy",
-      "applies_when": "local_repo_path is provided",
-      "expected": {
-        "worktree_clean": true,
-        "current_branch": "${default_branch}",
-        "tracks_remote_default_branch": true,
-        "unmerged_local_branches_classified": true
-      }
-    },
-    {
-      "id": "stale_state.local_path_references",
-      "source_lines": [
-        "gh-repo-health-contract.md:15"
-      ],
-      "kind": "tree_scan",
-      "comparison": "regex_absence_or_approved",
-      "applies_when": "repo.archived == false",
-      "expected": {
-        "forbidden_patterns": [
-          "[A-Za-z]:\\\\",
-          "/Users/",
-          "/home/[^/]+/"
-        ],
-        "allow_when": "external_runtime_requires_absolute_path_and_documented"
-      }
-    },
-    {
-      "id": "content.local_secret_pattern_scan",
-      "source_lines": [
-        "scripts/validate-skills.py:100-108",
-        "gh-repo-health-contract.md:15"
-      ],
-      "kind": "tree_scan",
-      "comparison": "regex_absence_or_approved",
-      "applies_when": "local_repo_path is provided && repo.archived == false",
-      "expected": {
-        "forbidden_patterns": [
-          "AKIA[0-9A-Z]{16}",
-          "gh[pousr]_[A-Za-z0-9_]{20,}",
-          "github_pat_[A-Za-z0-9_]{20,}",
-          "sk-[A-Za-z0-9_-]{20,}",
-          "xox[baprs]-[A-Za-z0-9-]{10,}",
-          "BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY"
-        ],
-        "allow_when": "known_test_fixture_or_placeholder_and_documented"
-      }
     }
   ],
-  "non_deterministic_review_file": "github-repo-nondeterministic-checks.md"
+  "non_deterministic_review_file": "github-repo-nondeterministic-contract.md"
 }

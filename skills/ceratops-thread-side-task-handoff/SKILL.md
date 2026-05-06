@@ -5,23 +5,13 @@ description: Create a minimal copy-paste prompt for spinning a newly discovered 
 
 # Ceratops Thread Side-Task Handoff
 
+## Goal
+
 Produce one minimal copy-paste prompt for starting a side task in a new thread.
 
-## Skill-Specific Rules
+## Context
 
-- Treat the original task as background. Include it in one short line only when needed.
-- Optimize for the side task only. Ignore most of the original task unless it directly constrains the new thread.
-- Produce a prompt, not a bundle and not instructions to use a follow-up handoff skill.
-- Prefer the discovered conclusion and current objective over chronology.
-- Include what stays in the current thread only when it matters for scope control.
-- Keep refs exact but minimal.
-- Treat `source-of-truth refs` as the minimum exact entities the new thread is likely to open immediately because they directly govern, define, or evidence the side task itself.
-- Do not list general process instructions, generic runtime constraints, or merely helpful background artifacts as `source-of-truth refs` unless the side task is specifically about them or the first next step depends on opening them.
-- Put active instructions or process constraints under constraints, not under `source-of-truth refs`, unless those instruction files are themselves part of the side task.
-- If the user says `include the following questions`, `including the questions`, or equivalent wording, carry those questions into the prompt as next-thread asks instead of answering them here.
-- Do not ask for credentials unless verifying the handoff requires protected state that cannot be inferred locally.
-
-## Inputs To Capture
+### Inputs To Capture
 
 - The original task in one line, if it matters.
 - What was discovered or concluded that created the side task.
@@ -33,7 +23,7 @@ Produce one minimal copy-paste prompt for starting a side task in a new thread.
 
 Infer missing inputs from the current thread and local state before asking.
 
-## Required Prompt Content
+### Required Prompt Content
 
 - What we were trying to do, in one short line if relevant
 - What we came to eventually or discovered that created the side task
@@ -43,37 +33,57 @@ Infer missing inputs from the current thread and local state before asking.
 - Active constraints or instructions that materially affect the work
 - The first next step or question for the new thread
 
-## Boundaries
+## Constraints
+
+### Skill-Specific Rules
+
+- Treat the original task as background. Include it in one short line only when needed.
+- Optimize for the side task only. Ignore most of the original task unless it directly constrains the new thread.
+- Produce a prompt, not a bundle and not instructions to use a follow-up handoff skill.
+- Prefer the discovered conclusion and current objective over chronology.
+- Reuse fresh state already established in the current thread by default.
+- Refresh only facts whose staleness would change or misdirect the first step in the new thread.
+- Keep refs exact but limited to the entities the next thread is likely to open first.
+- Include what stays in the current thread only when it matters for scope control.
+- Treat `source-of-truth refs` as the minimum exact entities the new thread is likely to open immediately because they directly govern, define, or evidence the side task itself.
+- Do not list general process instructions, generic runtime constraints, or merely helpful background artifacts as `source-of-truth refs` unless the side task is specifically about them or the first next step depends on opening them.
+- Put active instructions or process constraints under constraints, not under `source-of-truth refs`, unless those instruction files are themselves part of the side task.
+- If the user says `include the following questions`, `including the questions`, or equivalent wording, carry those questions into the prompt as next-thread asks instead of answering them here.
+- Do not ask for credentials unless verifying the handoff requires protected state that cannot be inferred locally.
+
+### Boundaries
 
 - Use this skill only when the user wants to spin off a newly discovered sub-issue into a different thread.
-- If the whole task should move to a new thread, stop and use `$ceratops-thread-full-handoff`.
-- If the task should continue in the same thread after a manual stop, restart, or crash, stop and use `$ceratops-thread-resume-manual-stop`.
 
-## Workflow
+### Workflow
 
-### 1. Isolate the side task
+#### 1. Isolate the side task
 
 - Separate the side task from the original task.
 - Keep only the original-task context needed to explain why the side task exists.
 
-### 2. Refresh only first-step-critical state
+#### 2. Refresh only first-step-critical state
 
-### 3. Emit a paste-ready prompt
+- Apply the first-step refresh rules from Skill-Specific Rules before drafting the prompt.
+
+#### 3. Emit a paste-ready prompt
 
 - Make the current objective and first next step explicit.
 - Write the prompt as direct instruction to the new thread, not as commentary about a handoff artifact.
 
-## Completion Gate
+## Done When
+
+### Completion Gate
 
 - Verify the prompt includes the required content and enough exact refs to start correctly.
 - Verify the prompt excludes irrelevant branches of the original task unless they materially constrain the side task.
 - Verify each listed `source-of-truth ref` is first-step-relevant and authoritative for the side task itself, not just a generic constraint or a maybe-useful artifact.
 - Verify the prompt does not pretend a fresh re-check happened when it did not.
 
-## Output Contract
+### Output Contract
 
 Emit one copy-paste prompt for a new thread and nothing extra.
 
-## Example Invocation
+### Example Invocation
 
 `Use $ceratops-thread-side-task-handoff to create a copy-paste prompt for spinning this side issue into a new thread and keep the main task out unless it directly matters.`

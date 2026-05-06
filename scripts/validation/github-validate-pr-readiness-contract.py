@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Check current GitHub pull-request readiness for Ceratops merge workflows.
+"""Validate the deterministic GitHub pull-request readiness contract.
 
-This script is intentionally narrow. Repository health and artifact posture are
-owned by the JSON contract checkers; this helper only answers the merge decision
-question that still needs live PR state close to the final action.
+This script is intentionally narrow. Repository health, repo contents, and
+artifact posture are owned by the other contract validators; this validator
+answers the merge-decision contract that needs fresh PR state close to the final
+action.
+
+Called by merge, ship, dependency-maintenance, and create/publish workflows when a PR
+merge decision is in scope. It reads GitHub PR metadata and local branch state;
+it does not mutate the repository or GitHub.
 """
 
 from __future__ import annotations
@@ -15,6 +20,9 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from typing import Any
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 class CommandError(RuntimeError):
@@ -79,6 +87,33 @@ def gh_pr_view(selector: str | None, cwd: pathlib.Path) -> dict[str, Any]:
     return json.loads(require_command(args, cwd))
 
 
+def default_contract_path() -> pathlib.Path:
+    """Find the bundled PR readiness contract in source or installed copies."""
+
+    candidates = [
+        pathlib.Path.cwd() / "contracts" / "github" / "github-pr-readiness-deterministic-contract.json",
+        ROOT / "contracts" / "github" / "github-pr-readiness-deterministic-contract.json",
+        pathlib.Path(__file__).resolve().parent / "github-pr-readiness-deterministic-contract.json",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return ROOT / "contracts" / "github" / "github-pr-readiness-deterministic-contract.json"
+
+
+def load_contract(path: pathlib.Path) -> dict[str, Any]:
+    """Load the PR readiness contract so finding IDs stay contract-backed."""
+
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def contract_check_ids(contract: dict[str, Any]) -> set[str]:
+    """Return deterministic check IDs declared by the PR contract."""
+
+    return {str(check.get("id")) for check in contract.get("checks", []) if check.get("id")}
+
+
 def add(
     findings: list[Finding],
     level: str,
@@ -98,10 +133,10 @@ def status_rollup_findings(pr_data: dict[str, Any], findings: list[Finding]) -> 
 
     raw_rollup = pr_data.get("statusCheckRollup") or []
     if not isinstance(raw_rollup, list):
-        add(findings, "WARN", "status_checks", "Could not parse status-check rollup.", actual=type(raw_rollup).__name__)
+        add(findings, "WARN", "pr.status_checks", "Could not parse status-check rollup.", actual=type(raw_rollup).__name__)
         return
     if not raw_rollup:
-        add(findings, "WARN", "status_checks", "No status checks are attached to this PR.")
+        add(findings, "WARN", "pr.status_checks", "No status checks are attached to this PR.")
         return
 
     failed: list[str] = []
@@ -121,11 +156,11 @@ def status_rollup_findings(pr_data: dict[str, Any], findings: list[Finding]) -> 
             passed.append(name)
 
     if failed:
-        add(findings, "FAIL", "status_checks", "One or more status checks are failing.", actual=failed)
+        add(findings, "FAIL", "pr.status_checks", "One or more status checks are failing.", actual=failed)
     elif pending:
-        add(findings, "WARN", "status_checks", "Status checks are still pending.", actual=pending)
+        add(findings, "WARN", "pr.status_checks", "Status checks are still pending.", actual=pending)
     else:
-        add(findings, "PASS", "status_checks", "All visible status checks are passing.", actual=passed)
+        add(findings, "PASS", "pr.status_checks", "All visible status checks are passing.", actual=passed)
 
 
 def pr_readiness(selector: str | None, cwd: pathlib.Path) -> tuple[dict[str, object], list[Finding]]:
@@ -135,37 +170,37 @@ def pr_readiness(selector: str | None, cwd: pathlib.Path) -> tuple[dict[str, obj
     findings: list[Finding] = []
 
     if pr_data.get("state") == "OPEN":
-        add(findings, "PASS", "state", "PR is open.")
+        add(findings, "PASS", "pr.state_open", "PR is open.")
     else:
-        add(findings, "FAIL", "state", "PR is not open.", actual=pr_data.get("state"), expected="OPEN")
+        add(findings, "FAIL", "pr.state_open", "PR is not open.", actual=pr_data.get("state"), expected="OPEN")
 
     if pr_data.get("isDraft") is True:
-        add(findings, "FAIL", "draft", "PR is still marked draft.", actual=True, expected=False)
+        add(findings, "FAIL", "pr.not_draft", "PR is still marked draft.", actual=True, expected=False)
     else:
-        add(findings, "PASS", "draft", "PR is ready for review.")
+        add(findings, "PASS", "pr.not_draft", "PR is ready for review.")
 
     mergeable = pr_data.get("mergeable")
     if mergeable == "CONFLICTING":
-        add(findings, "FAIL", "mergeable", "PR has merge conflicts.", actual=mergeable)
+        add(findings, "FAIL", "pr.mergeable", "PR has merge conflicts.", actual=mergeable)
     elif mergeable == "MERGEABLE":
-        add(findings, "PASS", "mergeable", "PR is mergeable.", actual=mergeable)
+        add(findings, "PASS", "pr.mergeable", "PR is mergeable.", actual=mergeable)
     else:
-        add(findings, "WARN", "mergeable", "PR mergeability needs a live re-check.", actual=mergeable)
+        add(findings, "WARN", "pr.mergeable", "PR mergeability needs a live re-check.", actual=mergeable)
 
     review_decision = pr_data.get("reviewDecision")
     if review_decision in {"APPROVED", None, ""}:
-        add(findings, "PASS", "review_decision", "No blocking review decision is present.", actual=review_decision)
+        add(findings, "PASS", "pr.review_decision", "No blocking review decision is present.", actual=review_decision)
     elif review_decision == "REVIEW_REQUIRED":
-        add(findings, "FAIL", "review_decision", "PR still requires review before merge.", actual=review_decision, expected="APPROVED")
+        add(findings, "FAIL", "pr.review_decision", "PR still requires review before merge.", actual=review_decision, expected="APPROVED")
     else:
-        add(findings, "FAIL", "review_decision", "PR has a blocking review decision.", actual=review_decision, expected="APPROVED")
+        add(findings, "FAIL", "pr.review_decision", "PR has a blocking review decision.", actual=review_decision, expected="APPROVED")
 
     status_rollup_findings(pr_data, findings)
 
     if pr_data.get("autoMergeRequest"):
-        add(findings, "PASS", "auto_merge_request", "Auto-merge is already configured.", actual=True)
+        add(findings, "PASS", "pr.auto_merge_request", "Auto-merge is already configured.", actual=True)
     else:
-        add(findings, "WARN", "auto_merge_request", "Auto-merge is not configured.", actual=False)
+        add(findings, "WARN", "pr.auto_merge_request", "Auto-merge is not configured.", actual=False)
 
     summary = {
         "number": pr_data.get("number"),
@@ -176,14 +211,19 @@ def pr_readiness(selector: str | None, cwd: pathlib.Path) -> tuple[dict[str, obj
     return summary, findings
 
 
-def emit(summary: dict[str, object], findings: list[Finding], *, as_json: bool) -> int:
+def emit(summary: dict[str, object], findings: list[Finding], *, as_json: bool, contract_path: pathlib.Path) -> int:
     """Print JSON or compact text and return a failing status only on FAIL."""
 
     counts = {"FAIL": 0, "WARN": 0, "INFO": 0, "PASS": 0, "SKIP": 0}
     for finding in findings:
         counts[finding.level] = counts.get(finding.level, 0) + 1
 
-    payload = {"summary": summary, "counts": counts, "findings": [asdict(finding) for finding in findings]}
+    payload = {
+        "contract": str(contract_path),
+        "summary": summary,
+        "counts": counts,
+        "findings": [asdict(finding) for finding in findings],
+    }
     if as_json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
@@ -201,7 +241,8 @@ def emit(summary: dict[str, object], findings: list[Finding], *, as_json: bool) 
 def build_parser() -> argparse.ArgumentParser:
     """Create the command-line parser."""
 
-    parser = argparse.ArgumentParser(description="Check live GitHub PR readiness for merge.")
+    parser = argparse.ArgumentParser(description="Validate the live GitHub PR readiness contract before merge.")
+    parser.add_argument("--contract", type=pathlib.Path, default=default_contract_path(), help="PR readiness deterministic contract JSON.")
     parser.add_argument("--cwd", type=pathlib.Path, default=pathlib.Path.cwd(), help="Repo working directory used for git and gh context.")
     parser.add_argument("--pr", help="PR number, URL, or branch. Defaults to the PR attached to the current branch.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
@@ -213,11 +254,16 @@ def main() -> int:
     args = parser.parse_args()
     cwd = args.cwd.resolve()
     try:
+        contract_path = args.contract.resolve()
+        contract = load_contract(contract_path)
         selector = args.pr
         if selector is None:
             selector = current_branch(cwd)
         summary, findings = pr_readiness(selector, cwd)
-        return emit(summary, findings, as_json=args.json)
+        unknown = sorted({finding.check for finding in findings} - contract_check_ids(contract))
+        if unknown:
+            add(findings, "FAIL", "contract.unknown_check_ids", "Validator emitted checks missing from the PR readiness contract.", actual=unknown)
+        return emit(summary, findings, as_json=args.json, contract_path=contract_path)
     except CommandError as exc:
         if args.json:
             print(json.dumps({"error": str(exc)}, sort_keys=True))

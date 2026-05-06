@@ -1,7 +1,7 @@
 {
   "contract_format_version": 2,
   "kind": "github_organization_contract",
-  "name": "ceratops_github_org_contract",
+  "name": "ceratops_github_org_deterministic_contract",
   "captured_from": "Ceratops-Code",
   "captured_on": "2026-05-01",
   "parameters": {
@@ -46,7 +46,7 @@
     "exclusions": [],
     "allowances": []
   },
-  "non_deterministic_review_file": "github-org-nondeterministic-checks.md",
+  "non_deterministic_review_file": "github-org-nondeterministic-contract.md",
   "remediation_policy": {
     "default": "report_only",
     "apply_flag": "--apply",
