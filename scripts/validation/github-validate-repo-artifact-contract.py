@@ -1361,7 +1361,7 @@ def registry_metadata(params: dict[str, Any], artifact_contract: dict[str, Any],
             metadata["pypi"][package] = fetch_pypi(str(package))
         elif artifact_type == "npm_package" and package:
             metadata["npm"][package] = fetch_npm(str(package))
-        elif "docker" in artifact_type or "docker" in registry or "hub.docker.com" in registry:
+        elif "docker" in artifact_type or registry_is_docker_like(registry):
             namespace, repo_name = dockerhub_name(str(package or ""))
             if namespace and repo_name:
                 metadata["dockerhub"][f"{namespace}/{repo_name}"] = fetch_dockerhub(namespace, repo_name)
@@ -1380,6 +1380,17 @@ def registry_metadata(params: dict[str, Any], artifact_contract: dict[str, Any],
         except json.JSONDecodeError:
             pass
     return metadata
+
+
+def registry_is_docker_like(registry: str) -> bool:
+    """Detect supported Docker registry names without arbitrary URL substrings."""
+
+    normalized = registry.strip().lower()
+    if normalized in {"docker", "dockerhub", "docker-hub", "docker hub", "docker.io", "registry-1.docker.io"}:
+        return True
+    parsed = urllib.parse.urlparse(normalized if "://" in normalized else f"https://{normalized}")
+    hostname = parsed.hostname or ""
+    return hostname in {"hub.docker.com", "docker.io", "registry-1.docker.io", "ghcr.io"}
 
 
 def fetch_pypi(package: str) -> dict[str, Any]:
