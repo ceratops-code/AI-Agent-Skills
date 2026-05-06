@@ -2,8 +2,22 @@
 param(
     [string]$RepoRoot,
     [string]$RuntimeRoot,
-    [string]$PythonCommand
+    [string]$PythonCommand,
+    [string[]]$Skill,
+    [ValidateSet("none", "sections", "full")]
+    [string]$Validate = "none",
+    [switch]$SkipInstall
 )
+
+# Single public entrypoint for Ceratops skill install/update checks.
+#
+# This PowerShell layer owns user-facing orchestration: resolving the source
+# repo, choosing Python, validating requested skill names, optionally rebuilding
+# installed skill copies, and optionally running consistency validation. The
+# Python files remain narrow implementation modules: build-runtime-skills.py
+# renders/copies runtime skills, and validate-skills-consistency.py checks the
+# source model. Keeping those modules separate avoids one large script while
+# preserving one command for humans and skills.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -12,13 +26,27 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
     $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 }
 
-if ([string]::IsNullOrWhiteSpace($RuntimeRoot)) {
-    $RuntimeRoot = Join-Path $env:USERPROFILE ".codex\skills"
+if (-not $SkipInstall -and [string]::IsNullOrWhiteSpace($RuntimeRoot)) {
+    $codexHome = $env:CODEX_HOME
+    if ([string]::IsNullOrWhiteSpace($codexHome)) {
+        $homeRoot = $env:USERPROFILE
+        if ([string]::IsNullOrWhiteSpace($homeRoot)) {
+            $homeRoot = $env:HOME
+        }
+        if ([string]::IsNullOrWhiteSpace($homeRoot)) {
+            throw "Could not resolve a home directory. Set CODEX_HOME or pass -RuntimeRoot."
+        }
+        $codexHome = Join-Path $homeRoot ".codex"
+    }
+    $RuntimeRoot = Join-Path $codexHome "skills"
 }
 
 function Resolve-PythonCommand {
     param([string]$Preferred)
 
+    # Prefer a caller-provided interpreter, then normal launcher names. The
+    # skill installer intentionally avoids environment activation so the runtime
+    # copy can be rebuilt from a plain shell or automation task.
     if (-not [string]::IsNullOrWhiteSpace($Preferred) -and (Test-Path -LiteralPath $Preferred)) {
         return (Resolve-Path -LiteralPath $Preferred).Path
     }
@@ -27,7 +55,6 @@ function Resolve-PythonCommand {
         if ([string]::IsNullOrWhiteSpace($candidate)) {
             continue
         }
-
         $command = Get-Command $candidate -ErrorAction SilentlyContinue
         if ($null -ne $command) {
             if ($command.Source) {
@@ -43,230 +70,83 @@ function Resolve-PythonCommand {
     throw "Could not find a usable Python command. Install Python or pass -PythonCommand."
 }
 
-function Is-ReparsePoint {
-    param([System.IO.FileSystemInfo]$Item)
-
-    return [bool]($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
-}
-
-function Resolve-LinkTarget {
-    param([System.IO.FileSystemInfo]$Item)
-
-    $target = $Item.Target
-    if ($target -is [System.Array]) {
-        return [string]$target[0]
-    }
-    return [string]$target
-}
-
-function Remove-ReparsePoint {
-    param([string]$Path)
-
-    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
-    if ($null -eq $item) {
-        return
-    }
-
-    $looksLikeBrokenDirectoryLink = $item.PSIsContainer -and $item.Exists -eq $false
-    if (-not (Is-ReparsePoint $item) -and -not $looksLikeBrokenDirectoryLink) {
-        throw "Path '$Path' exists and is not a junction."
-    }
-
-    if ($item.PSIsContainer) {
-        [System.IO.Directory]::Delete($Path)
-        return
-    }
-
-    [System.IO.File]::Delete($Path)
-}
-
-function Remove-GeneratedEggInfo {
-    param([string]$RepoRoot)
-
-    foreach ($searchRoot in @($RepoRoot, (Join-Path $RepoRoot "src"))) {
-        if (-not (Test-Path -LiteralPath $searchRoot)) {
-            continue
-        }
-
-        Get-ChildItem -LiteralPath $searchRoot -Directory -Filter *.egg-info -Force -ErrorAction SilentlyContinue |
-            ForEach-Object {
-                Remove-Item -LiteralPath $_.FullName -Recurse -Force
-            }
-    }
-}
-
-function Ensure-Junction {
-    param(
-        [string]$Path,
-        [string]$Target
-    )
-
-    $resolvedTarget = (Resolve-Path -LiteralPath $Target).Path
-    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
-    if ($null -ne $item) {
-        if (-not (Is-ReparsePoint $item)) {
-            throw "Install path '$Path' already exists and is not a junction."
-        }
-
-        $existingTarget = Resolve-LinkTarget $item
-        if ($existingTarget) {
-            try {
-                $resolvedExistingTarget = (Resolve-Path -LiteralPath $existingTarget).Path
-                if ($resolvedExistingTarget -eq $resolvedTarget) {
-                    return
-                }
-            } catch {
-            }
-        }
-
-        Remove-ReparsePoint -Path $Path
-    }
-
-    New-Item -ItemType Junction -Path $Path -Target $resolvedTarget | Out-Null
-}
-
-function Ensure-SkillIcon {
-    param(
-        [string]$RepoRoot,
-        [string]$SkillRoot
-    )
-
-    $sourceIcon = Join-Path $RepoRoot "assets\ceratops-logo-500.png"
-    if (-not (Test-Path -LiteralPath $sourceIcon -PathType Leaf)) {
-        throw "Missing shared Ceratops icon: $sourceIcon"
-    }
-
-    $skillAssets = Join-Path $SkillRoot "assets"
-    $assetsItem = Get-Item -LiteralPath $skillAssets -Force -ErrorAction SilentlyContinue
-    if ($null -eq $assetsItem) {
-        New-Item -ItemType Directory -Path $skillAssets | Out-Null
-    } elseif (-not $assetsItem.PSIsContainer) {
-        throw "Skill assets path '$skillAssets' exists and is not a directory."
-    }
-
-    $targetIcon = Join-Path $skillAssets "ceratops-logo-500.png"
-    $shouldCopy = -not (Test-Path -LiteralPath $targetIcon -PathType Leaf)
-    if (-not $shouldCopy) {
-        $sourceHash = (Get-FileHash -LiteralPath $sourceIcon -Algorithm SHA256).Hash
-        $targetHash = (Get-FileHash -LiteralPath $targetIcon -Algorithm SHA256).Hash
-        $shouldCopy = $sourceHash -ne $targetHash
-    }
-
-    if ($shouldCopy) {
-        Copy-Item -LiteralPath $sourceIcon -Destination $targetIcon -Force
-    }
-}
-
 $resolvedRepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
-if (-not (Test-Path -LiteralPath $RuntimeRoot)) {
-    New-Item -ItemType Directory -Path $RuntimeRoot | Out-Null
+$skillsRoot = Join-Path $resolvedRepoRoot "skills"
+$builder = Join-Path $resolvedRepoRoot "scripts\build-runtime-skills.py"
+$validator = Join-Path $resolvedRepoRoot "scripts\validation\validate-skills-consistency.py"
+if (-not (Test-Path -LiteralPath $skillsRoot -PathType Container)) {
+    throw "Missing skills directory: $skillsRoot"
+}
+if (-not (Test-Path -LiteralPath $builder -PathType Leaf)) {
+    throw "Missing runtime skill builder: $builder"
+}
+if ($Validate -ne "none" -and -not (Test-Path -LiteralPath $validator -PathType Leaf)) {
+    throw "Missing skill consistency validator: $validator"
 }
 
 $python = Resolve-PythonCommand $PythonCommand
-$previousPipDisableVersionCheck = $env:PIP_DISABLE_PIP_VERSION_CHECK
-$env:PIP_DISABLE_PIP_VERSION_CHECK = "1"
-$helperPackageNames = @("ceratops-gh-current-state", "ceratops-gh-runtime")
-try {
-    $installedPackagesJson = & $python -m pip list --format=json 2>$null
+$sourceSkillNames = Get-ChildItem -LiteralPath $skillsRoot -Directory |
+    Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "SKILL.md") } |
+    Sort-Object Name |
+    ForEach-Object { $_.Name }
+
+$buildSkillNames = @()
+if ($null -ne $Skill -and $Skill.Count -gt 0) {
+    $known = @{}
+    foreach ($skillName in $sourceSkillNames) {
+        $known[$skillName] = $true
+    }
+    foreach ($skillName in $Skill) {
+        if (-not $known.ContainsKey($skillName)) {
+            throw "Unknown skill: $skillName"
+        }
+        $buildSkillNames += $skillName
+    }
+} else {
+    $buildSkillNames = $sourceSkillNames
+}
+
+if (-not $SkipInstall) {
+    if (-not (Test-Path -LiteralPath $RuntimeRoot)) {
+        New-Item -ItemType Directory -Path $RuntimeRoot | Out-Null
+    }
+
+    $builderArgs = @($builder, "--runtime-root", $RuntimeRoot)
+    foreach ($skillName in $buildSkillNames) {
+        $builderArgs += @("--skill", $skillName)
+    }
+    if ($buildSkillNames.Count -eq $sourceSkillNames.Count) {
+        # Full installs can remove stale folders previously generated by the builder.
+        # Targeted installs leave unrelated managed skills alone for active previews.
+        $builderArgs += "--remove-stale"
+    }
+
+    $buildOutput = & $python @builderArgs 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw "Could not list currently installed Python packages."
-    }
-    $installedPackages = $installedPackagesJson | ConvertFrom-Json
-    $installedPackageNames = @{}
-    foreach ($package in $installedPackages) {
-        if ($null -ne $package.name) {
-            $installedPackageNames[[string]$package.name] = $true
+        if ($buildOutput) {
+            $buildOutput | ForEach-Object { Write-Error $_ }
         }
+        throw "Runtime skill build failed."
     }
-    foreach ($helperPackage in $helperPackageNames) {
-        if ($installedPackageNames.ContainsKey($helperPackage)) {
-            & $python -m pip uninstall --yes $helperPackage *> $null
-        }
+
+    Write-Output "installed"
+}
+
+if ($Validate -ne "none") {
+    $validatorArgs = @($validator)
+    if ($Validate -eq "sections") {
+        $validatorArgs += @("--mode", "sections")
     }
-    $installOutput = & $python -m pip install --editable $resolvedRepoRoot 2>&1
+
+    $validationOutput = & $python @validatorArgs 2>&1
     if ($LASTEXITCODE -ne 0) {
-        if ($installOutput) {
-            $installOutput | ForEach-Object { Write-Error $_ }
+        if ($validationOutput) {
+            $validationOutput | ForEach-Object { Write-Error $_ }
         }
-        throw "Editable helper-package install failed."
+        throw "Skill consistency validation failed."
     }
-
-    $editablePackageShow = & $python -m pip show ceratops-gh-current-state 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not inspect the installed GH helper package."
+    if ($validationOutput) {
+        $validationOutput | ForEach-Object { Write-Output $_ }
     }
-    $editableProjectLocationLine = $editablePackageShow | Where-Object { $_ -like "Editable project location:*" } | Select-Object -First 1
-    if ([string]::IsNullOrWhiteSpace($editableProjectLocationLine)) {
-        throw "Installed GH helper package is not registered as editable."
-    }
-    $editableProjectLocation = $editableProjectLocationLine.Substring("Editable project location:".Length).Trim()
-    if ($editableProjectLocation -ne $resolvedRepoRoot) {
-        throw "Installed GH helper package does not point at the requested checkout."
-    }
+    Write-Output "validated:$Validate"
 }
-finally {
-    if ($null -eq $previousPipDisableVersionCheck) {
-        Remove-Item Env:\PIP_DISABLE_PIP_VERSION_CHECK -ErrorAction SilentlyContinue
-    } else {
-        $env:PIP_DISABLE_PIP_VERSION_CHECK = $previousPipDisableVersionCheck
-    }
-    Remove-GeneratedEggInfo -RepoRoot $resolvedRepoRoot
-}
-
-foreach ($staleRuntimeSkillName in @("ceratops-gh-current-state", "ceratops-gh-runtime")) {
-    $staleRuntimeSkill = Join-Path $RuntimeRoot $staleRuntimeSkillName
-    $staleItem = Get-Item -LiteralPath $staleRuntimeSkill -Force -ErrorAction SilentlyContinue
-    if ($null -ne $staleItem) {
-        $looksLikeBrokenDirectoryLink = $staleItem.PSIsContainer -and $staleItem.Exists -eq $false
-        if (-not (Is-ReparsePoint $staleItem)) {
-            if (-not $looksLikeBrokenDirectoryLink) {
-                throw "Stale runtime skill path '$staleRuntimeSkill' exists and is not a junction."
-            }
-        }
-        Remove-ReparsePoint -Path $staleRuntimeSkill
-    }
-}
-
-$skillsRoot = Join-Path $resolvedRepoRoot "skills"
-$skills = Get-ChildItem -LiteralPath $skillsRoot -Directory | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "SKILL.md") } | Sort-Object Name
-$expectedSkillNames = @{}
-foreach ($skill in $skills) {
-    $expectedSkillNames[$skill.Name] = $true
-    Ensure-SkillIcon -RepoRoot $resolvedRepoRoot -SkillRoot $skill.FullName
-    $link = Join-Path $RuntimeRoot $skill.Name
-    Ensure-Junction -Path $link -Target $skill.FullName
-}
-
-$installedItems = Get-ChildItem -LiteralPath $RuntimeRoot -Force -ErrorAction SilentlyContinue |
-    Where-Object { $_.PSIsContainer -and $_.Name -like "ceratops-*" }
-foreach ($item in $installedItems) {
-    if ($expectedSkillNames.ContainsKey($item.Name)) {
-        continue
-    }
-
-    $looksLikeBrokenDirectoryLink = $item.PSIsContainer -and $item.Exists -eq $false
-    if (-not (Is-ReparsePoint $item) -and -not $looksLikeBrokenDirectoryLink) {
-        continue
-    }
-
-    $rawTarget = Resolve-LinkTarget $item
-    $repoManagedTarget = $false
-    if (-not [string]::IsNullOrWhiteSpace($rawTarget)) {
-        try {
-            $resolvedTarget = (Resolve-Path -LiteralPath $rawTarget).Path
-            if ($resolvedTarget.StartsWith($skillsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-                $repoManagedTarget = $true
-            }
-        } catch {
-            if ($rawTarget.StartsWith($skillsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-                $repoManagedTarget = $true
-            }
-        }
-    }
-
-    if ($repoManagedTarget) {
-        Remove-ReparsePoint -Path $item.FullName
-    }
-}
-
-Write-Output "installed"

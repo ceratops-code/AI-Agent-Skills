@@ -1,112 +1,152 @@
 {
   "sections": {
     "minimal": "templates/sections/minimal.md",
-    "credentials": "templates/sections/credentials.md",
     "gh-current-state": "templates/sections/gh-current-state.md",
     "gh-repo-health-contract": "templates/sections/gh-repo-health-contract.md",
     "gh-artifact-contract": "templates/sections/gh-artifact-contract.md",
-    "gh-findings": "templates/sections/gh-findings.md",
-    "release-branch-runtime": "templates/sections/release-branch-runtime.md",
-    "thread-first-step": "templates/sections/thread-first-step.md"
+    "release-branch-runtime": "templates/sections/release-branch-runtime.md"
   },
   "maintenance_workflows": {
     "shared_source_changes": [
-      "python scripts/sync-skill-sections.py",
-      "python scripts/validate-skills.py"
+      "powershell -ExecutionPolicy Bypass -File scripts/install-skills.ps1 -SkipInstall -Validate sections"
     ],
-    "skill_local_or_metadata_changes": [
-      "python scripts/validate-skills.py"
+    "skill_local_or_metadata_changes": [],
+    "helper_runtime_changes": [],
+    "runtime_generation_changes": [
+      "powershell -ExecutionPolicy Bypass -File scripts/install-skills.ps1 -RuntimeRoot <temp-runtime-root> -Validate sections"
     ],
-    "helper_runtime_changes": [
-      "python -m ceratops_gh_current_state --help"
+    "contract_checker_changes": [],
+    "governance_full_validation": [
+      "powershell -ExecutionPolicy Bypass -File scripts/install-skills.ps1 -RuntimeRoot <temp-runtime-root> -Validate full"
     ],
     "new_skill_local_availability": [
       "$ceratops-codex-skill-stage-release"
     ]
   },
-  "skills": {
-    "ceratops-automation-run": [
-      "minimal",
-      "credentials"
+  "runtime_payloads": {
+    "*": [
+      "assets/ceratops-logo-500.png"
+    ],
+    "ceratops-codex-skill-stage-release": [
+      "scripts/build-runtime-skills.py",
+      "scripts/install-skills.ps1",
+      "scripts/validation/validate-skills-consistency.py",
+      "templates"
+    ],
+    "ceratops-gh-codex-skill-ship": [
+      "scripts/build-runtime-skills.py",
+      "scripts/install-skills.ps1",
+      "scripts/validation/validate-skills-consistency.py",
+      "templates"
+    ],
+    "ceratops-gh-merge-pr": [
+      "scripts/validation/github-validate-pr-readiness-contract.py",
+      "contracts/github/github-pr-readiness-deterministic-contract.json",
+      "contracts/github/github-pr-readiness-nondeterministic-contract.md"
+    ],
+    "ceratops-gh-repo-create-and-publish": [
+      "scripts/validation/github-collect-nd-evidence.py",
+      "scripts/validation/github-validate-org-contract.py",
+      "scripts/validation/github-validate-repo-artifact-contract.py",
+      "scripts/validation/github-validate-pr-readiness-contract.py",
+      "contracts"
+    ],
+    "ceratops-gh-repo-dependencies-maintenance": [
+      "scripts/validation/github-collect-nd-evidence.py",
+      "scripts/validation/github-validate-repo-artifact-contract.py",
+      "scripts/validation/github-validate-pr-readiness-contract.py",
+      "contracts"
+    ],
+    "ceratops-gh-repo-health-audit": [
+      "scripts/validation/github-collect-nd-evidence.py",
+      "scripts/validation/github-validate-org-contract.py",
+      "scripts/validation/github-validate-repo-artifact-contract.py",
+      "scripts/validation/github-validate-pr-readiness-contract.py",
+      "contracts"
+    ],
+    "ceratops-contract-review": [
+      "scripts/validation/github-collect-nd-evidence.py",
+      "scripts/validation/github-validate-org-contract.py",
+      "scripts/validation/github-validate-repo-artifact-contract.py",
+      "scripts/validation/github-validate-pr-readiness-contract.py",
+      "contracts"
+    ],
+    "ceratops-skill-create": [
+      "scripts/build-runtime-skills.py",
+      "scripts/install-skills.ps1",
+      "scripts/validation/validate-skills-consistency.py",
+      "templates"
+    ],
+    "ceratops-skill-update": [
+      "scripts/build-runtime-skills.py",
+      "scripts/install-skills.ps1",
+      "scripts/validation/validate-skills-consistency.py",
+      "templates",
+      "contracts"
     ],
     "ceratops-code-consistency-audit": [
-      "minimal",
-      "credentials"
+      "contracts/code/code-comment-nondeterministic-contract.md"
+    ]
+  },
+  "skills": {
+    "ceratops-automation-run": [
+      "minimal"
+    ],
+    "ceratops-code-consistency-audit": [
+      "minimal"
     ],
     "ceratops-codex-skill-stage-release": [
       "minimal",
-      "credentials",
       "release-branch-runtime"
     ],
     "ceratops-skill-create": [
-      "minimal",
-      "credentials"
+      "minimal"
     ],
     "ceratops-skill-update": [
-      "minimal",
-      "credentials"
+      "minimal"
     ],
     "ceratops-gh-codex-skill-ship": [
       "minimal",
-      "credentials",
       "release-branch-runtime"
     ],
     "ceratops-gh-merge-pr": [
       "minimal",
-      "gh-current-state",
-      "credentials"
+      "gh-current-state"
     ],
     "ceratops-gh-repo-create-and-publish": [
       "minimal",
-      "credentials",
       "gh-current-state",
       "gh-repo-health-contract",
-      "gh-artifact-contract",
-      "gh-findings"
+      "gh-artifact-contract"
     ],
-    "ceratops-gh-repo-dependency-update": [
+    "ceratops-gh-repo-dependencies-maintenance": [
       "minimal",
-      "credentials",
       "gh-current-state",
-      "gh-artifact-contract",
-      "gh-findings"
+      "gh-repo-health-contract"
     ],
     "ceratops-gh-repo-health-audit": [
       "minimal",
-      "credentials",
       "gh-current-state",
       "gh-repo-health-contract",
-      "gh-artifact-contract",
-      "gh-findings"
+      "gh-artifact-contract"
     ],
     "ceratops-gh-ship-change": [
-      "minimal",
-      "credentials",
-      "gh-current-state",
-      "gh-artifact-contract",
-      "gh-findings"
+      "minimal"
     ],
-    "ceratops-gh-skills-standards-update": [
-      "minimal",
-      "credentials"
+    "ceratops-contract-review": [
+      "minimal"
     ],
     "ceratops-task-execute-in-stages": [
-      "minimal",
-      "credentials"
+      "minimal"
     ],
     "ceratops-thread-full-handoff": [
-      "minimal",
-      "credentials",
-      "thread-first-step"
+      "minimal"
     ],
     "ceratops-thread-resume-manual-stop": [
-      "minimal",
-      "credentials"
+      "minimal"
     ],
     "ceratops-thread-side-task-handoff": [
-      "minimal",
-      "credentials",
-      "thread-first-step"
+      "minimal"
     ]
   }
 }
