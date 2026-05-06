@@ -148,9 +148,10 @@ def status_rollup_findings(pr_data: dict[str, Any], findings: list[Finding]) -> 
         name = str(item.get("name") or item.get("context") or item.get("workflowName") or "unnamed-check")
         conclusion = item.get("conclusion")
         status = item.get("status")
-        if conclusion in {"FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "NEUTRAL", "STALE"}:
+        state = item.get("state")
+        if conclusion in {"FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "NEUTRAL", "STALE"} or state in {"FAILURE", "ERROR"}:
             failed.append(name)
-        elif status in {"IN_PROGRESS", "QUEUED", "PENDING", "WAITING"} or conclusion is None:
+        elif status in {"IN_PROGRESS", "QUEUED", "PENDING", "WAITING"} or state in {"PENDING", "EXPECTED"} or (conclusion is None and state != "SUCCESS"):
             pending.append(name)
         else:
             passed.append(name)

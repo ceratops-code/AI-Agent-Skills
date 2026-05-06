@@ -1183,7 +1183,7 @@ def evaluate_repo_check(
         return [finding(check_id, "PASS", "CODEOWNERS errors endpoint returned no errors.")]
 
     if check_id == "content.dependencies_label_when_dependabot_uses_it":
-        uses_label = any(path.endswith(".github/dependabot.yml") and "dependencies" in text for path, text in local.get("texts", {}).items())
+        uses_label = any(path.replace("\\", "/") in {".github/dependabot.yml", ".github/dependabot.yaml"} and "dependencies" in text for path, text in local.get("texts", {}).items())
         if not uses_label:
             return [finding(check_id, "SKIP", "Dependabot dependencies label not referenced.")]
         label = result(fetched, "/repos/${owner}/${repo}/labels/dependencies", params)
