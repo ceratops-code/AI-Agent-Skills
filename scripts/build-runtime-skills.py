@@ -21,6 +21,7 @@ import json
 import os
 import pathlib
 import shutil
+import stat
 import sys
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -192,6 +193,23 @@ def is_managed_runtime_dir(path: pathlib.Path) -> bool:
     return (path / MANIFEST_NAME).is_file()
 
 
+def is_windows_reparse_point(path: pathlib.Path) -> bool:
+    """Return whether `path` is a Windows reparse-point directory entry.
+
+    Older Ceratops installs used junctions from `$CODEX_HOME/skills` back into
+    the source checkout. During migration, the builder must remove only that
+    junction entry and must not traverse into or delete the source checkout.
+    """
+
+    if os.name != "nt":
+        return False
+    try:
+        attributes = path.stat(follow_symlinks=False).st_file_attributes
+    except (AttributeError, FileNotFoundError, OSError):
+        return False
+    return bool(attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
+
+
 def remove_existing_runtime_target(path: pathlib.Path) -> None:
     """Remove only targets that are known safe for this builder to replace."""
 
@@ -199,6 +217,9 @@ def remove_existing_runtime_target(path: pathlib.Path) -> None:
         return
     if path.is_symlink():
         path.unlink()
+        return
+    if is_windows_reparse_point(path):
+        path.rmdir()
         return
     if not is_managed_runtime_dir(path):
         raise RuntimeError(f"refusing to replace unmanaged runtime skill folder: {path}")
