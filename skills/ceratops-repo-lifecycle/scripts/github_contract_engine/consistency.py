@@ -8,27 +8,42 @@ import json
 import pathlib
 from typing import Any
 
-from .collect_observed_states import PRODUCER_REGISTRY, state_producer
+from github_pr_workflow.readiness import contract_implementation_errors
+
+from .collect_observed_states import (
+    PRODUCER_REGISTRY,
+    RUNTIME_PARAMETER_NAMES,
+    condition_state_producer,
+    state_producer,
+)
 from .collectors.local_repository import (
     ARTIFACT_DETECTOR_KEYS,
     ARTIFACT_DETECTOR_SURFACES,
     ARTIFACT_DETECTOR_WHEN,
     ARTIFACT_PUBLICATION_EVIDENCE_KEYS,
+)
+from .collectors.local_repository import (
     COLLECTION_KEYS as LOCAL_COLLECTION_KEYS,
 )
+from .collectors.registries import FETCHERS
 from .collectors.repository import (
     COLLECTION_KEYS as REPO_COLLECTION_KEYS,
 )
-from .collectors.registries import FETCHERS
 from .compare_states import (
     OPERATORS,
+    condition_identifiers,
     condition_syntax_valid,
     pointer_get,
 )
-from .compose_desired_state import org_subset_ids, repo_subset_ids
+from .compose_desired_state import (
+    org_subset_ids,
+    parameter_definitions,
+    repo_subset_ids,
+    validate_contract_identity,
+)
+from .levels import CANONICAL_LEVELS
 from .remediations import HANDLERS
 from .schema_validation import validate_all_contract_schemas
-
 
 SKILL_DIR = pathlib.Path(__file__).resolve().parents[2]
 REPO_ROOT = SKILL_DIR.parents[1]
@@ -39,6 +54,8 @@ SOURCE_DOCS = CONTRACTS / "github-contract-source-docs.json"
 SCHEMAS = REFERENCES / "schemas"
 DEPLOY_SCHEMA = SCHEMAS / "deploy.yml.schema.json"
 RELEASE_SCHEMA = SCHEMAS / "release.yml.schema.json"
+STATE_SCHEMA = SCHEMAS / "github-lifecycle-deterministic-contract.schema.json"
+PR_SCHEMA = SCHEMAS / "github-pr-readiness-deterministic-contract.schema.json"
 STATE_CONTRACT_PATHS = {
     "org": CONTRACTS / "github-org-deterministic-contract.json",
     "repo": CONTRACTS / "github-repo-deterministic-contract.json",
@@ -86,6 +103,156 @@ REQUIRED_FILES = [
     RELEASE_SCHEMA,
 ]
 
+STATE_ANNOTATION_FIELDS = frozenset(
+    {
+        "root.captured_on",
+        "root.captured_from",
+        "root.source_doc_scopes",
+        "root.source_files",
+        "root.required_scopes",
+        "root.optional_scopes_for_full_screen_parity",
+        "root.workflow_job_permissions_required_by_checks",
+        "root.remediation_policy",
+        "root.excluded_surfaces",
+        "def:parameter.description",
+        "def:sourceFile.path",
+        "def:sourceFile.lines",
+        "def:optionalScope.scope",
+        "def:optionalScope.enables",
+        "def:optionalScope.reason",
+        "def:workflowPermission.permission",
+        "def:workflowPermission.enables",
+        "def:workflowPermission.reason",
+        "def:excludedSurface.surface",
+        "def:excludedSurface.reason",
+        "def:check.kind",
+        "def:check.category",
+        "def:fetchBundle.purpose",
+        "def:fetchBundle.sources",
+        "def:artifactBundle.description",
+        "def:approvedDrift.exclusions",
+        "def:allowance.reason",
+        "def:remediationPolicy.default_mode",
+        "def:remediationPolicy.default",
+        "def:remediationPolicy.apply_flag",
+        "def:remediationPolicy.destructive_or_irreversible",
+        "def:remediationPolicy.publish_or_registry_mutation",
+        "def:remediationPolicy.token_or_secret_changes",
+        "def:artifactTypeSystem.behavior_explanations",
+        "def:artifactDetector.confidence",
+        "def:behaviorExplanation.id",
+        "def:behaviorExplanation.rule",
+    }
+)
+STATE_EXECUTABLE_FIELDS = frozenset(
+    {
+        "root.contract_format_version",
+        "root.kind",
+        "root.name",
+        "root.source_docs_ref",
+        "root.non_deterministic_review_file",
+        "root.parameters",
+        "root.checks",
+        "root.fetch_bundles",
+        "root.approved_drift",
+        "root.artifact_type_system",
+        "def:parameter.type",
+        "def:parameter.required",
+        "def:parameter.default",
+        "def:parameter.default_from",
+        "def:parameter.allowed_values",
+        "def:check.id",
+        "def:check.applies_when",
+        "def:check.assertions",
+        "def:check.collection",
+        "def:check.endpoint",
+        "def:check.desired",
+        "def:check.remediation_action",
+        "def:check.method",
+        "def:check.allowed_uninitialized_error",
+        "def:assertion.path",
+        "def:assertion.operator",
+        "def:assertion.desired_path",
+        "def:assertion.expected",
+        "def:assertion.level",
+        "def:assertion.when",
+        "def:collection.regex_patterns",
+        "def:collection.ignore_paths",
+        "def:collection.ignore_windows_path_prefixes",
+        "def:collection.report_open_prs_older_than_days",
+        "def:collection.ignored_branch_names",
+        "def:collection.retained_branch_name_patterns",
+        "def:collection.draft_review_after_days",
+        "def:collection.prerelease_review_after_days",
+        "def:collection.required_asset_name_patterns",
+        "def:uninitializedError.status",
+        "def:uninitializedError.message_contains",
+        "def:uninitializedError.only_when_public_repos_count",
+        "def:request.endpoint",
+        "def:request.method",
+        "def:request.covers_checks",
+        "def:request.paginate",
+        "def:request.applies_when",
+        "def:fetchBundle.id",
+        "def:fetchBundle.requests",
+        "def:fetchBundle.applies_when",
+        "def:fetchBundle.covers_checks",
+        "def:artifactBundle.endpoints",
+        "def:artifactBundle.feeds_checks",
+        "def:approvedDrift.allowances",
+        "def:allowance.id",
+        "def:allowance.when",
+        "def:allowance.allowed_checks",
+        "def:allowance.check_ids",
+        "def:allowance.check_id",
+        "def:artifactTypeSystem.categories",
+        "def:artifactTypeSystem.classification_fields",
+        "def:artifactTypeSystem.candidate_detectors",
+        "def:artifactTypeSystem.external_publish_detectors",
+        "def:artifactClassificationFields.local_buildable_candidates",
+        "def:artifactClassificationFields.confirmed_external_artifacts",
+        "def:artifactCategory.id",
+        "def:artifactCategory.artifact_types",
+        "def:artifactDetector.artifact_type",
+        "def:artifactDetector.when_any_path_matches",
+        "def:artifactDetector.and_when_any_path_matches",
+        "def:artifactDetector.and_when_matching_path_contains_any",
+        "def:artifactDetector.and_when_matching_path_contains_all",
+        "def:artifactDetector.when_workflow_contains_any",
+        "def:artifactDetector.and_when_workflow_contains_any",
+        "def:artifactDetector.and_when_workflow_contains_all",
+        "def:artifactDetector.when_release_assets_count_gt",
+        "def:artifactDetector.when",
+    }
+)
+PR_ANNOTATION_FIELDS = frozenset(
+    {
+        "root.description",
+        "root.source_docs",
+        "root.checks[].behavior_explanation",
+        "root.approved_drift[].condition",
+        "root.approved_drift[].approval",
+    }
+)
+PR_EXECUTABLE_FIELDS = frozenset(
+    {
+        "root.schema",
+        "root.surface",
+        "root.free_only",
+        "root.mutates",
+        "root.evidence",
+        "root.evidence.command",
+        "root.evidence.fields",
+        "root.checks",
+        "root.checks[].id",
+        "root.checks[].level_on_drift",
+        "root.approved_drift",
+        "root.approved_drift[].id",
+        "root.approved_drift[].check_ids",
+        "root.non_deterministic_review_file",
+    }
+)
+
 
 def rel(path: pathlib.Path) -> str:
     return path.relative_to(SKILL_DIR).as_posix()
@@ -101,6 +268,173 @@ def check_ids(contract: dict[str, Any]) -> list[str]:
         for check in contract.get("checks", [])
         if isinstance(check, dict) and check.get("id")
     ]
+
+
+def _schema_field_nodes(
+    schema_path: pathlib.Path, schema: dict[str, Any]
+) -> dict[str, tuple[dict[str, Any], dict[str, Any]]]:
+    """Return contract field nodes and their containing object schema."""
+
+    nodes: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
+    root_properties = schema.get("properties", {})
+    for name, specification in root_properties.items():
+        nodes[f"root.{name}"] = (specification, schema)
+    if schema_path == STATE_SCHEMA:
+        for definition_name, definition in schema.get("$defs", {}).items():
+            for name, specification in definition.get("properties", {}).items():
+                nodes[f"def:{definition_name}.{name}"] = (
+                    specification,
+                    definition,
+                )
+        return nodes
+    evidence = root_properties.get("evidence", {})
+    for name, specification in evidence.get("properties", {}).items():
+        nodes[f"root.evidence.{name}"] = (specification, evidence)
+    checks = root_properties.get("checks", {}).get("items", {})
+    for name, specification in checks.get("properties", {}).items():
+        nodes[f"root.checks[].{name}"] = (specification, checks)
+    drift = root_properties.get("approved_drift", {}).get("items", {})
+    for name, specification in drift.get("properties", {}).items():
+        nodes[f"root.approved_drift[].{name}"] = (specification, drift)
+    return nodes
+
+
+def _validate_schema_field_roles(
+    schema_path: pathlib.Path, schema: dict[str, Any]
+) -> list[str]:
+    """Reject every contract field not classified as executable or annotation-only."""
+
+    nodes = _schema_field_nodes(schema_path, schema)
+    if schema_path == STATE_SCHEMA:
+        annotations = STATE_ANNOTATION_FIELDS
+        executable = STATE_EXECUTABLE_FIELDS
+    else:
+        annotations = PR_ANNOTATION_FIELDS
+        executable = PR_EXECUTABLE_FIELDS
+    errors = [
+        f"{rel(schema_path)}: unclassified contract field {field}"
+        for field in sorted(set(nodes) - annotations - executable)
+    ]
+    errors.extend(
+        f"{rel(schema_path)}: classified field is absent from schema: {field}"
+        for field in sorted((annotations | executable) - set(nodes))
+    )
+    for field in sorted(annotations & set(nodes)):
+        specification, parent = nodes[field]
+        description = " ".join(
+            str(value)
+            for value in (specification.get("description"), parent.get("description"))
+            if value
+        )
+        if "Annotation-only" not in description:
+            errors.append(
+                f"{rel(schema_path)}: annotation field lacks Annotation-only description: {field}"
+            )
+    return errors
+
+
+def _condition_errors(
+    path: pathlib.Path,
+    label: str,
+    expression: str | None,
+    parameters: set[str],
+) -> list[str]:
+    if not condition_syntax_valid(expression):
+        return [f"{rel(path)}: {label} has unsupported condition syntax"]
+    return [
+        f"{rel(path)}: {label} references unimplemented state {identifier}"
+        for identifier in sorted(condition_identifiers(expression))
+        if condition_state_producer(identifier, parameters) is None
+    ]
+
+
+def _contains_parameter_placeholder(value: Any, name: str) -> bool:
+    if isinstance(value, str):
+        return f"${{{name}}}" in value
+    if isinstance(value, dict):
+        return any(
+            _contains_parameter_placeholder(child, name)
+            for key, child in value.items()
+            if key != "parameters"
+        )
+    if isinstance(value, list):
+        return any(_contains_parameter_placeholder(child, name) for child in value)
+    return False
+
+
+def _condition_names(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        names = set()
+        for key, child in value.items():
+            if key in {"applies_when", "when", "condition"} and isinstance(child, str):
+                names.update(condition_identifiers(child))
+            else:
+                names.update(_condition_names(child))
+        return names
+    if isinstance(value, list):
+        return set().union(*(_condition_names(child) for child in value)) if value else set()
+    return set()
+
+
+def _dynamic_state_path_errors(
+    path: pathlib.Path,
+    check_id: str,
+    state_path: str,
+    checks: list[dict[str, Any]],
+) -> list[str]:
+    """Validate dynamic producer keys that broad state-family globs cannot prove."""
+
+    errors: list[str] = []
+    endpoint_checks = {
+        str(check.get("id"))
+        for check in checks
+        if isinstance(check, dict) and check.get("endpoint")
+    }
+    if state_path.startswith("/api/"):
+        parts = state_path.split("/")
+        source_check = parts[2] if len(parts) > 2 else ""
+        if source_check not in endpoint_checks:
+            errors.append(
+                f"{rel(path)}: {check_id} assertion references uncollected API check {source_check!r}"
+            )
+        api_fields = {
+            "ok",
+            "method",
+            "endpoint",
+            "data",
+            "status",
+            "message",
+            "raw_stdout",
+            "raw_stderr",
+        }
+        if len(parts) > 3 and parts[3] not in api_fields:
+            errors.append(
+                f"{rel(path)}: {check_id} assertion references unknown API result field {parts[3]!r}"
+            )
+    if state_path.startswith("/local/scans/"):
+        parts = state_path.split("/")
+        source_check = parts[3] if len(parts) > 3 else ""
+        scan_checks = {
+            str(check.get("id"))
+            for check in checks
+            if isinstance(check, dict)
+            and check.get("collection", {}).get("regex_patterns")
+        }
+        if source_check not in scan_checks or parts[4:] != ["matches"]:
+            errors.append(
+                f"{rel(path)}: {check_id} assertion references uncollected local scan {source_check!r}"
+            )
+    if state_path.startswith("/registries/"):
+        parts = state_path.split("/")
+        registry = parts[2] if len(parts) > 2 else ""
+        implemented_registries = {specification[0] for specification in FETCHERS.values()}
+        if registry not in implemented_registries | {"github_packages"} or parts[
+            3:
+        ] != ["all_resolved"]:
+            errors.append(
+                f"{rel(path)}: {check_id} assertion references unimplemented registry state {state_path!r}"
+            )
+    return errors
 
 
 def _validate_artifact_contract_schema(
@@ -239,6 +573,11 @@ def _validate_fetch_bundles(
             for item in sorted(duplicates)
         )
         for bundle in bundles:
+            unknown_bundle_checks = set(bundle.get("covers_checks", [])) - known
+            errors.extend(
+                f"{rel(path)}: fetch bundle covers unknown check {item}"
+                for item in sorted(unknown_bundle_checks)
+            )
             for request in bundle.get("requests", []):
                 if not request.get("endpoint") or str(
                     request.get("method", "GET")
@@ -357,6 +696,45 @@ def _validate_artifact_detectors(
         for artifact_type in category.get("artifact_types", [])
         if artifact_type
     }
+    categories = [
+        category
+        for category in type_system.get("categories", [])
+        if isinstance(category, dict)
+    ]
+    category_ids = [str(category.get("id")) for category in categories]
+    errors.extend(
+        f"{rel(path)}: duplicate artifact category ID: {item}"
+        for item in sorted(
+            {item for item in category_ids if category_ids.count(item) > 1}
+        )
+    )
+    categorized_types = [
+        str(artifact_type)
+        for category in categories
+        for artifact_type in category.get("artifact_types", [])
+    ]
+    errors.extend(
+        f"{rel(path)}: artifact type belongs to multiple categories: {item}"
+        for item in sorted(
+            {
+                item
+                for item in categorized_types
+                if categorized_types.count(item) > 1
+            }
+        )
+    )
+    explanations = type_system.get("behavior_explanations", [])
+    explanation_ids = [
+        str(explanation.get("id"))
+        for explanation in explanations
+        if isinstance(explanation, dict)
+    ]
+    errors.extend(
+        f"{rel(path)}: duplicate artifact behavior explanation ID: {item}"
+        for item in sorted(
+            {item for item in explanation_ids if explanation_ids.count(item) > 1}
+        )
+    )
     detector_types = {
         str(detector.get("artifact_type"))
         for detector in all_detectors
@@ -372,19 +750,10 @@ def _validate_artifact_detectors(
     )
     if "no_artifact" not in declared_types:
         errors.append(f"{rel(path)}: artifact types must declare no_artifact")
-    registry_types = set(
-        contract.get("fetch_bundles", {})
-        .get("registry_metadata_bundle", {})
-        .get("endpoints_by_type", {})
-    )
     implemented_registry_types = set(FETCHERS)
     errors.extend(
-        f"{rel(path)}: registry type has no collector implementation: {item}"
-        for item in sorted(registry_types - implemented_registry_types)
-    )
-    errors.extend(
-        f"{rel(path)}: registry collector is absent from contract metadata: {item}"
-        for item in sorted(implemented_registry_types - registry_types)
+        f"{rel(path)}: registry collector type is not declared: {item}"
+        for item in sorted(implemented_registry_types - declared_types)
     )
     errors.extend(
         f"{rel(path)}: registry collector type has no artifact detector: {item}"
@@ -395,6 +764,22 @@ def _validate_artifact_detectors(
 
 def _validate_state_contract(path: pathlib.Path, contract: dict[str, Any]) -> list[str]:
     errors: list[str] = []
+    parameters = set(contract.get("parameters", {}))
+    try:
+        parameter_definitions([contract])
+    except ValueError as exc:
+        errors.append(f"{rel(path)}: {exc}")
+    condition_names = _condition_names(contract)
+    for name in sorted(parameters):
+        if (
+            name not in RUNTIME_PARAMETER_NAMES
+            and not _contains_parameter_placeholder(contract, name)
+            and not any(
+                identifier == name or identifier.startswith(name + ".")
+                for identifier in condition_names
+            )
+        ):
+            errors.append(f"{rel(path)}: parameter has no executable consumer: {name}")
     if "type_system" in contract:
         errors.append(
             f"{rel(path)}: unconsumed type_system duplicates collector-derived facts"
@@ -432,13 +817,54 @@ def _validate_state_contract(path: pathlib.Path, contract: dict[str, Any]) -> li
             f"{rel(path)}: approved drift references unknown check {item}"
             for item in sorted(set(candidates) - known - {"*"})
         )
-        if not condition_syntax_valid(allowance.get("when")):
-            errors.append(
-                f"{rel(path)}: approved drift {allowance.get('id')} has unsupported when syntax"
+        errors.extend(
+            _condition_errors(
+                path,
+                f"approved drift {allowance.get('id')}",
+                allowance.get("when"),
+                parameters,
             )
+        )
+    bundles = contract.get("fetch_bundles", [])
+    bundle_values = bundles.values() if isinstance(bundles, dict) else bundles
+    for bundle in bundle_values:
+        if not isinstance(bundle, dict):
+            continue
+        errors.extend(
+            _condition_errors(
+                path,
+                f"fetch bundle {bundle.get('id', '<unnamed>')}",
+                bundle.get("applies_when"),
+                parameters,
+            )
+        )
+        requests = bundle.get("requests")
+        if not isinstance(requests, list):
+            requests = bundle.get("endpoints")
+        if not isinstance(requests, list):
+            continue
+        for request in requests:
+            if isinstance(request, dict):
+                errors.extend(
+                    _condition_errors(
+                        path,
+                        f"fetch request {request.get('endpoint', '<unnamed>')}",
+                        request.get("applies_when"),
+                        parameters,
+                    )
+                )
     declared_actions: set[str] = set()
-    for check in contract.get("checks", []):
+    checks = contract.get("checks", [])
+    for check in checks:
         check_id = str(check.get("id"))
+        method = str(check.get("method", "GET")).upper()
+        if method not in {"GET", "HEAD"}:
+            errors.append(f"{rel(path)}: {check_id} uses non-read method {method}")
+        endpoint = check.get("endpoint")
+        if "method" in check and not endpoint:
+            errors.append(f"{rel(path)}: {check_id} declares method without endpoint")
+        if endpoint is not None and not str(endpoint).startswith("/"):
+            errors.append(f"{rel(path)}: {check_id} endpoint must start with /")
         assertions = check.get("assertions")
         if not isinstance(assertions, list) or not assertions:
             errors.append(
@@ -449,9 +875,14 @@ def _validate_state_contract(path: pathlib.Path, contract: dict[str, Any]) -> li
             check.get("applies_when"), str
         ):
             errors.append(f"{rel(path)}: {check_id} applies_when must be a string")
-        elif not condition_syntax_valid(check.get("applies_when")):
-            errors.append(
-                f"{rel(path)}: {check_id} has unsupported applies_when syntax"
+        else:
+            errors.extend(
+                _condition_errors(
+                    path,
+                    check_id,
+                    check.get("applies_when"),
+                    parameters,
+                )
             )
         for assertion in assertions:
             state_path = assertion.get("path")
@@ -459,20 +890,62 @@ def _validate_state_contract(path: pathlib.Path, contract: dict[str, Any]) -> li
                 errors.append(
                     f"{rel(path)}: {check_id} assertion has no registered state producer: {state_path!r}"
                 )
+            elif isinstance(state_path, str):
+                errors.extend(
+                    _dynamic_state_path_errors(
+                        path, check_id, state_path, checks
+                    )
+                )
             operator = assertion.get("operator")
             if operator not in OPERATORS:
                 errors.append(
                     f"{rel(path)}: {check_id} assertion uses unsupported operator {operator!r}"
+                )
+            has_expected = "expected" in assertion
+            has_desired_path = "desired_path" in assertion
+            if has_expected and has_desired_path:
+                errors.append(
+                    f"{rel(path)}: {check_id} assertion declares both expected and desired_path"
+                )
+            expectation_free = {
+                "empty",
+                "not_empty",
+                "truthy",
+                "falsy",
+                "any_true",
+                "all_true",
+            }
+            if operator in expectation_free and (has_expected or has_desired_path):
+                errors.append(
+                    f"{rel(path)}: {check_id} {operator} assertion has ignored expectation metadata"
+                )
+            if (
+                operator in OPERATORS
+                and operator not in expectation_free
+                and not has_expected
+                and not has_desired_path
+            ):
+                errors.append(
+                    f"{rel(path)}: {check_id} {operator} assertion has no expectation"
                 )
             desired_path = assertion.get("desired_path")
             if desired_path and pointer_get(check, str(desired_path), None) is None:
                 errors.append(
                     f"{rel(path)}: {check_id} assertion references missing desired path {desired_path}"
                 )
-            if not condition_syntax_valid(assertion.get("when")):
+            level = assertion.get("level")
+            if level is not None and level not in CANONICAL_LEVELS:
                 errors.append(
-                    f"{rel(path)}: {check_id} assertion has unsupported when syntax"
+                    f"{rel(path)}: {check_id} assertion uses unknown level {level!r}"
                 )
+            errors.extend(
+                _condition_errors(
+                    path,
+                    f"{check_id} assertion",
+                    assertion.get("when"),
+                    parameters,
+                )
+            )
         referenced_desired = [
             str(assertion["desired_path"])
             for assertion in assertions
@@ -482,7 +955,9 @@ def _validate_state_contract(path: pathlib.Path, contract: dict[str, Any]) -> li
         if desired is not None:
             leaves: list[str] = []
 
-            def visit(value: Any, pointer: str) -> None:
+            def visit(
+                value: Any, pointer: str, selected_leaves: list[str] = leaves
+            ) -> None:
                 if isinstance(value, dict) and value:
                     for key, child in value.items():
                         visit(
@@ -490,7 +965,7 @@ def _validate_state_contract(path: pathlib.Path, contract: dict[str, Any]) -> li
                             f"{pointer}/{str(key).replace('~', '~0').replace('/', '~1')}",
                         )
                 else:
-                    leaves.append(pointer)
+                    selected_leaves.append(pointer)
 
             visit(desired, "/desired")
             for leaf in leaves:
@@ -588,6 +1063,14 @@ def main(argv: list[str] | None = None) -> int:
         if not path.is_file()
     ]
     errors.extend(validate_all_contract_schemas())
+    for schema_path in (STATE_SCHEMA, PR_SCHEMA):
+        if not schema_path.is_file():
+            continue
+        try:
+            schema = load_json(schema_path)
+        except json.JSONDecodeError:
+            continue
+        errors.extend(_validate_schema_field_roles(schema_path, schema))
     contracts: dict[str, dict[str, Any]] = {}
     for surface, path in STATE_CONTRACT_PATHS.items():
         if not path.is_file():
@@ -597,6 +1080,10 @@ def main(argv: list[str] | None = None) -> int:
         except json.JSONDecodeError as exc:
             errors.append(f"{rel(path)}: invalid JSON: {exc}")
             continue
+        try:
+            validate_contract_identity(surface, contracts[surface])
+        except ValueError as exc:
+            errors.append(f"{rel(path)}: {exc}")
         errors.extend(_validate_state_contract(path, contracts[surface]))
         expected_review = ND_CONTRACT_PATHS[surface].name
         if contracts[surface].get("non_deterministic_review_file") != expected_review:
@@ -615,6 +1102,15 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
     if all(surface in contracts for surface in STATE_CONTRACT_PATHS):
+        try:
+            definitions = parameter_definitions(contracts.values())
+        except ValueError as exc:
+            errors.append(f"deterministic contract parameter mismatch: {exc}")
+            definitions = {}
+        errors.extend(
+            f"runtime parameter is absent from deterministic contracts: {name}"
+            for name in sorted(RUNTIME_PARAMETER_NAMES - set(definitions))
+        )
         errors.extend(_validate_subsets(contracts))
         declared_collection_keys = {
             key
@@ -656,6 +1152,10 @@ def main(argv: list[str] | None = None) -> int:
             errors.extend(
                 f"{rel(PR_CONTRACT)}: duplicate deterministic check ID {item}"
                 for item in sorted({item for item in ids if ids.count(item) > 1})
+            )
+            errors.extend(
+                f"{rel(PR_CONTRACT)}: {error}"
+                for error in contract_implementation_errors(pr)
             )
             expected_review = ND_CONTRACT_PATHS["pr"].name
             if pr.get("non_deterministic_review_file") != expected_review:

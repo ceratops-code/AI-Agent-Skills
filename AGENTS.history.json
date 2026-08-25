@@ -276,6 +276,14 @@
       "decision": "Define the repository-to-deliverable boundary as installed-runtime reuse or a separately owned implementation.",
       "reason": "The prior phrase deployed interface did not identify a stable dependency boundary.",
       "regression": "Preserve repository-maintenance ownership, installed-skill portability, and separate tests for independent implementations."
+    },
+    {
+      "rules": [
+        "SKILLS-CONTRACT-01"
+      ],
+      "decision": "Require each executable deterministic-contract field to have an exact runtime or validator consumer while keeping non-executable fields explicitly annotation-only and structurally validated.",
+      "reason": "The contract audit found schema-valid fields that looked executable but were absent from the Python verification graph.",
+      "regression": "Preserve detailed human explanations as annotations and do not mistake structural validation for semantic execution."
     }
   ]
 }

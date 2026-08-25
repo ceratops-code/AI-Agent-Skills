@@ -35,6 +35,7 @@
   },
   "$defs": {
     "artifact": {
+      "description": "External-artifact record shape. Deterministic validation enforces these fields and their basic types; ND.artifact.identity-contract-fit reviews whether their detailed text is semantically accurate for the real artifact.",
       "type": "object",
       "additionalProperties": false,
       "required": [
