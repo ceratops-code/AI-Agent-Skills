@@ -103,7 +103,7 @@ def check_ids(contract: dict[str, Any]) -> list[str]:
     ]
 
 
-def _validate_artifact_identity_schema(
+def _validate_artifact_contract_schema(
     contract: dict[str, Any], release_schema: dict[str, Any]
 ) -> list[str]:
     """Keep executable artifact identity fields aligned with release input."""
@@ -138,6 +138,26 @@ def _validate_artifact_identity_schema(
             ]
     assert isinstance(schema_fields, list)
     assert isinstance(contract_fields, list)
+    properties = pointer_get(release_schema, "/$defs/artifact/properties", None)
+    if not isinstance(properties, dict):
+        return [
+            f"{rel(RELEASE_SCHEMA)}: artifact properties must be an object"
+        ]
+    undocumented: list[str] = []
+    for field in schema_fields:
+        specification = properties.get(field)
+        description = (
+            specification.get("description")
+            if isinstance(specification, dict)
+            else None
+        )
+        if not isinstance(description, str) or not description.strip():
+            undocumented.append(field)
+    if undocumented:
+        return [
+            f"{rel(RELEASE_SCHEMA)}: required artifact fields need descriptions: "
+            + ", ".join(sorted(undocumented))
+        ]
     schema_set = set(schema_fields)
     contract_set = set(contract_fields)
     if schema_set == contract_set:
@@ -590,7 +610,7 @@ def main(argv: list[str] | None = None) -> int:
             errors.append(f"{rel(RELEASE_SCHEMA)}: invalid JSON: {exc}")
         else:
             errors.extend(
-                _validate_artifact_identity_schema(
+                _validate_artifact_contract_schema(
                     contracts["artifact"], release_schema
                 )
             )

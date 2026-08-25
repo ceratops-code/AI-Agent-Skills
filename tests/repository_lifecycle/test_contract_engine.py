@@ -2167,6 +2167,18 @@ class GHContractStateEngineTests(unittest.TestCase):
             / "schemas"
             / "release.yml.schema.json"
         )
+        undocumented_release_schema = json.loads(json.dumps(release_schema))
+        del undocumented_release_schema["$defs"]["artifact"]["properties"][
+            "artifact_type"
+        ]["description"]
+        self.assertTrue(
+            any(
+                "need descriptions: artifact_type" in error
+                for error in consistency._validate_artifact_contract_schema(
+                    self.contracts["artifact"], undocumented_release_schema
+                )
+            )
+        )
         drifted_artifact_contract = json.loads(
             json.dumps(self.contracts["artifact"])
         )
@@ -2179,7 +2191,7 @@ class GHContractStateEngineTests(unittest.TestCase):
         self.assertTrue(
             any(
                 "must match release.yml schema" in error
-                for error in consistency._validate_artifact_identity_schema(
+                for error in consistency._validate_artifact_contract_schema(
                     drifted_artifact_contract, release_schema
                 )
             )
