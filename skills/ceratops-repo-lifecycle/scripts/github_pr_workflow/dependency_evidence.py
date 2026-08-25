@@ -27,6 +27,15 @@ GROUPED_BODY_UPDATE_RE = re.compile(
     r"(?P<target>\S+)\s*$",
     re.MULTILINE,
 )
+REQUIREMENT_TITLE_UPDATE_RE = re.compile(
+    r"^Update (?P<package>.+?) requirement from (?P<current>\S+) to "
+    r"(?P<target>\S+)(?: in (?P<path>.+))?$",
+    re.IGNORECASE,
+)
+INCLUSIVE_LOWER_BOUND_RE = re.compile(
+    r"^>=\s*(?P<version>v?[0-9][0-9A-Za-z.!+_-]*)$",
+    re.IGNORECASE,
+)
 
 
 def project_check(check: dict[str, Any]) -> dict[str, Any]:
@@ -253,14 +262,42 @@ def build_update(
     }
 
 
+def inclusive_lower_bound(specifier: str | None) -> str | None:
+    """Project one unambiguous inclusive lower bound from a constraint string."""
+
+    if not specifier:
+        return None
+    versions = [
+        match.group("version")
+        for clause in specifier.split(",")
+        if (match := INCLUSIVE_LOWER_BOUND_RE.fullmatch(clause.strip()))
+    ]
+    return versions[0] if len(versions) == 1 else None
+
+
 def parse_update(title: str, files: list[dict[str, Any]], alerts: list[dict[str, Any]]) -> dict[str, Any]:
-    """Parse the existing single-update Dependabot title contract."""
+    """Parse one exact or safely projectable Dependabot title update."""
 
     match = BUMP_RE.match(title.strip())
-    package = match.group("package") if match else None
-    current = match.group("current") if match else None
-    target = match.group("target") if match else None
-    path_hint = match.group("path") if match else None
+    if match:
+        package = match.group("package")
+        current = match.group("current")
+        target = match.group("target")
+        path_hint = match.group("path")
+    else:
+        requirement_match = REQUIREMENT_TITLE_UPDATE_RE.match(title.strip())
+        package = requirement_match.group("package") if requirement_match else None
+        current = (
+            inclusive_lower_bound(requirement_match.group("current"))
+            if requirement_match
+            else None
+        )
+        target = (
+            inclusive_lower_bound(requirement_match.group("target"))
+            if requirement_match
+            else None
+        )
+        path_hint = requirement_match.group("path") if requirement_match else None
     changed_paths = [str(item.get("path") or "") for item in files]
     return build_update(package, current, target, path_hint, changed_paths, alerts)
 

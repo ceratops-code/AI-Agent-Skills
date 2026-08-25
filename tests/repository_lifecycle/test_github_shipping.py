@@ -541,3 +541,41 @@ def test_dependency_finalization_delegates_admin_to_shared_merge(
     assert "--admin" in command
     assert command[command.index("--expected-head") + 1] == "a" * 40
     assert "enforce_admins" not in " ".join(command)
+
+
+def test_dependabot_requirement_range_title_projects_concrete_minimum(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dependency = load_pr_workflow_module(monkeypatch, "dependency_evidence")
+
+    update = dependency.parse_update(
+        "Update pypdf requirement from <7,>=6.14.2 to >=6.16.1,<7",
+        [{"path": "requirements-dev.txt"}],
+        [],
+    )
+
+    assert update == {
+        "package": "pypdf",
+        "current_version": "6.14.2",
+        "target_version": "6.16.1",
+        "path_hint": None,
+        "ecosystem": "pip",
+        "update_type": "minor",
+    }
+
+
+def test_dependabot_requirement_range_title_rejects_ambiguous_minimum(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dependency = load_pr_workflow_module(monkeypatch, "dependency_evidence")
+
+    update = dependency.parse_update(
+        "Update pypdf requirement from >=6.14.2,<7 to >=6.16.1,>=6.17.0,<7",
+        [{"path": "requirements-dev.txt"}],
+        [],
+    )
+
+    assert update["package"] == "pypdf"
+    assert update["current_version"] == "6.14.2"
+    assert update["target_version"] is None
+    assert update["update_type"] == "unknown"
