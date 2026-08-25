@@ -113,6 +113,7 @@
     }
   ],
   "full_suite_paths": [
+    ".github/dependabot.yml",
     ".github/workflows/**",
     "AGENTS.md",
     "package-lock.json",
