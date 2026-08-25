@@ -20,6 +20,7 @@ from github_contract_engine import (
     audit_snapshot,  # noqa: E402
     codeql_disposition,  # noqa: E402
     collect_non_deterministic_evidence,  # noqa: E402
+    consistency,  # noqa: E402
     github_api,  # noqa: E402
     levels,  # noqa: E402
     organization_validator,  # noqa: E402
@@ -442,7 +443,6 @@ class GHContractStateEngineTests(unittest.TestCase):
 
     def test_repository_release_contract_owns_artifact_identity(self):
         record = {
-            "artifact_id": "bootstrap-installer",
             "artifact_type": "installer_or_cli_binary",
             "registry": "github_release",
             "package_or_image_name": "Setup.exe",
@@ -482,6 +482,12 @@ class GHContractStateEngineTests(unittest.TestCase):
 
             self.assertEqual(parameters["artifact_contracts"], [record])
             self.assertEqual(evidence_parameters["artifact_contracts"], [record])
+            args.param = [
+                "artifact_contracts="
+                + json.dumps([{**record, "artifact_id": "bootstrap-installer"}])
+            ]
+            with self.assertRaisesRegex(ValueError, "artifact_id"):
+                repository_validator._parameters(args, self.contracts)
             args.param = ["artifact_contracts=" + json.dumps([record])]
             with self.assertRaisesRegex(ValueError, "declared both"):
                 repository_validator._parameters(args, self.contracts)
@@ -2098,7 +2104,7 @@ class GHContractStateEngineTests(unittest.TestCase):
             SCRIPTS.parent
             / "references"
             / "schemas"
-            / "state-contract.schema.json"
+            / "github-lifecycle-deterministic-contract.schema.json"
         )
         misspelled = json.loads(json.dumps(self.contracts["repo"]))
         assertion = misspelled["checks"][0]["assertions"][0]
@@ -2107,7 +2113,7 @@ class GHContractStateEngineTests(unittest.TestCase):
             misspelled,
             schema,
             document_name="misspelled.json",
-            schema_name="state-contract.schema.json",
+            schema_name="github-lifecycle-deterministic-contract.schema.json",
         )
         self.assertTrue(
             any(
@@ -2121,7 +2127,7 @@ class GHContractStateEngineTests(unittest.TestCase):
             inert,
             schema,
             document_name="inert.json",
-            schema_name="state-contract.schema.json",
+            schema_name="github-lifecycle-deterministic-contract.schema.json",
         )
         self.assertTrue(
             any("settable" in error and "/checks/0" in error for error in inert_errors)
@@ -2134,12 +2140,48 @@ class GHContractStateEngineTests(unittest.TestCase):
             source_anchored,
             schema,
             document_name="source-anchored.json",
-            schema_name="state-contract.schema.json",
+            schema_name="github-lifecycle-deterministic-contract.schema.json",
         )
         self.assertTrue(
             any(
                 "source_lines" in error and "/checks/0" in error
                 for error in source_anchor_errors
+            )
+        )
+        unused_parameter_metadata = json.loads(json.dumps(self.contracts["artifact"]))
+        unused_parameter_metadata["parameters"]["artifact_contracts"][
+            "item_shape"
+        ] = {}
+        unused_metadata_errors = schema_validation.validate_contract_document(
+            unused_parameter_metadata,
+            schema,
+            document_name="unused-parameter-metadata.json",
+            schema_name="github-lifecycle-deterministic-contract.schema.json",
+        )
+        self.assertTrue(
+            any("item_shape" in error for error in unused_metadata_errors)
+        )
+        release_schema = load_json(
+            SCRIPTS.parent
+            / "references"
+            / "schemas"
+            / "release.yml.schema.json"
+        )
+        drifted_artifact_contract = json.loads(
+            json.dumps(self.contracts["artifact"])
+        )
+        identity_check = next(
+            check
+            for check in drifted_artifact_contract["checks"]
+            if check["id"] == "common.identity_contract"
+        )
+        identity_check["desired"]["required_per_artifact_fields"].pop()
+        self.assertTrue(
+            any(
+                "must match release.yml schema" in error
+                for error in consistency._validate_artifact_identity_schema(
+                    drifted_artifact_contract, release_schema
+                )
             )
         )
 

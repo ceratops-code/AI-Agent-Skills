@@ -20,13 +20,13 @@ CONTRACTS = REFERENCES / "contracts"
 SCHEMAS = REFERENCES / "schemas"
 
 SCHEMA_ASSIGNMENTS = {
-    SCHEMAS / "state-contract.schema.json": (
+    SCHEMAS / "github-lifecycle-deterministic-contract.schema.json": (
         CONTRACTS / "github-org-deterministic-contract.json",
         CONTRACTS / "github-repo-deterministic-contract.json",
         CONTRACTS / "code-repo-deterministic-contract.json",
         CONTRACTS / "artifact-deterministic-contract.json",
     ),
-    SCHEMAS / "pr-readiness-contract.schema.json": (
+    SCHEMAS / "github-pr-readiness-deterministic-contract.schema.json": (
         CONTRACTS / "github-pr-readiness-deterministic-contract.json",
     ),
     SCHEMAS / "nondeterministic-contract.schema.json": (
@@ -37,9 +37,11 @@ SCHEMA_ASSIGNMENTS = {
         CONTRACTS / "artifact-nondeterministic-contract.json",
         CONTRACTS / "code-comment-nondeterministic-contract.json",
     ),
-    SCHEMAS / "source-doc-registry.schema.json": (
+    SCHEMAS / "github-contract-source-docs.schema.json": (
         CONTRACTS / "github-contract-source-docs.json",
     ),
+    SCHEMAS / "deploy.yml.schema.json": (),
+    SCHEMAS / "release.yml.schema.json": (),
 }
 
 

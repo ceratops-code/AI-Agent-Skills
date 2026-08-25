@@ -17,7 +17,7 @@ import jsonschema
 import yaml
 
 SKILL_ROOT = pathlib.Path(__file__).resolve().parents[2]
-SCHEMA = SKILL_ROOT / "references" / "schemas" / "deploy-contract.schema.json"
+SCHEMA = SKILL_ROOT / "references" / "schemas" / "deploy.yml.schema.json"
 
 
 class DeployContractError(RuntimeError):

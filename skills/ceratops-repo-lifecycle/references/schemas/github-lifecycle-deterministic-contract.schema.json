@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ceratops.dev/schemas/github/state-contract.schema.json",
-  "title": "GitHub lifecycle state contract",
+  "$id": "https://ceratops.dev/schemas/github/github-lifecycle-deterministic-contract.schema.json",
+  "title": "GitHub lifecycle deterministic state contract",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -83,8 +83,7 @@
         "default": {},
         "default_from": { "type": "string", "minLength": 1 },
         "allowed_values": { "type": "array" },
-        "description": { "type": "string" },
-        "item_shape": { "type": "object" }
+        "description": { "type": "string" }
       }
     },
     "sourceFile": {

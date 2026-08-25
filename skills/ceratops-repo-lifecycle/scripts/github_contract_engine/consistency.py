@@ -37,6 +37,8 @@ CONTRACTS = REFERENCES / "contracts"
 SCRIPTS = SKILL_DIR / "scripts"
 SOURCE_DOCS = CONTRACTS / "github-contract-source-docs.json"
 SCHEMAS = REFERENCES / "schemas"
+DEPLOY_SCHEMA = SCHEMAS / "deploy.yml.schema.json"
+RELEASE_SCHEMA = SCHEMAS / "release.yml.schema.json"
 STATE_CONTRACT_PATHS = {
     "org": CONTRACTS / "github-org-deterministic-contract.json",
     "repo": CONTRACTS / "github-repo-deterministic-contract.json",
@@ -76,10 +78,12 @@ REQUIRED_FILES = [
     SCRIPTS / "github_pr_workflow" / "codex_review.py",
     SCRIPTS / "github_pr_workflow" / "merge.py",
     SCRIPTS / "github_pr_workflow" / "sync.py",
-    SCHEMAS / "state-contract.schema.json",
-    SCHEMAS / "pr-readiness-contract.schema.json",
+    SCHEMAS / "github-lifecycle-deterministic-contract.schema.json",
+    SCHEMAS / "github-pr-readiness-deterministic-contract.schema.json",
     SCHEMAS / "nondeterministic-contract.schema.json",
-    SCHEMAS / "source-doc-registry.schema.json",
+    SCHEMAS / "github-contract-source-docs.schema.json",
+    DEPLOY_SCHEMA,
+    RELEASE_SCHEMA,
 ]
 
 
@@ -96,6 +100,59 @@ def check_ids(contract: dict[str, Any]) -> list[str]:
         str(check.get("id"))
         for check in contract.get("checks", [])
         if isinstance(check, dict) and check.get("id")
+    ]
+
+
+def _validate_artifact_identity_schema(
+    contract: dict[str, Any], release_schema: dict[str, Any]
+) -> list[str]:
+    """Keep executable artifact identity fields aligned with release input."""
+
+    schema_fields = pointer_get(release_schema, "/$defs/artifact/required", None)
+    identity_checks = [
+        check
+        for check in contract.get("checks", [])
+        if isinstance(check, dict) and check.get("id") == "common.identity_contract"
+    ]
+    if len(identity_checks) != 1:
+        return [
+            f"{rel(STATE_CONTRACT_PATHS['artifact'])}: expected one "
+            "common.identity_contract check"
+        ]
+    contract_fields = pointer_get(
+        identity_checks[0], "/desired/required_per_artifact_fields", None
+    )
+    for label, fields in (
+        ("release.yml artifact required fields", schema_fields),
+        ("common.identity_contract required fields", contract_fields),
+    ):
+        if (
+            not isinstance(fields, list)
+            or not fields
+            or not all(isinstance(field, str) and field for field in fields)
+            or len(fields) != len(set(fields))
+        ):
+            return [
+                f"{rel(STATE_CONTRACT_PATHS['artifact'])}: {label} must be a "
+                "nonempty unique string list"
+            ]
+    assert isinstance(schema_fields, list)
+    assert isinstance(contract_fields, list)
+    schema_set = set(schema_fields)
+    contract_set = set(contract_fields)
+    if schema_set == contract_set:
+        return []
+    missing = sorted(schema_set - contract_set)
+    extra = sorted(contract_set - schema_set)
+    details: list[str] = []
+    if missing:
+        details.append("missing " + ", ".join(missing))
+    if extra:
+        details.append("extra " + ", ".join(extra))
+    return [
+        f"{rel(STATE_CONTRACT_PATHS['artifact'])}: common.identity_contract "
+        "required fields must match release.yml schema artifact requirements: "
+        + "; ".join(details)
     ]
 
 
@@ -525,6 +582,17 @@ def main(argv: list[str] | None = None) -> int:
         if contracts[surface].get("non_deterministic_review_file") != expected_review:
             errors.append(
                 f"{rel(path)}: non_deterministic_review_file must be {expected_review}"
+            )
+    if "artifact" in contracts and RELEASE_SCHEMA.is_file():
+        try:
+            release_schema = load_json(RELEASE_SCHEMA)
+        except json.JSONDecodeError as exc:
+            errors.append(f"{rel(RELEASE_SCHEMA)}: invalid JSON: {exc}")
+        else:
+            errors.extend(
+                _validate_artifact_identity_schema(
+                    contracts["artifact"], release_schema
+                )
             )
     if all(surface in contracts for surface in STATE_CONTRACT_PATHS):
         errors.extend(_validate_subsets(contracts))

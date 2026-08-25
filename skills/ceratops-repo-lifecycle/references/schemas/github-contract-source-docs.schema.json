@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ceratops.dev/schemas/github/source-doc-registry.schema.json",
+  "$id": "https://ceratops.dev/schemas/github/github-contract-source-docs.schema.json",
   "title": "GitHub lifecycle source-document registry",
   "type": "object",
   "additionalProperties": false,

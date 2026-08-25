@@ -40,18 +40,7 @@
     "artifact_contracts": {
       "type": "array",
       "required": false,
-      "description": "External-artifact identity records loaded from local release/release.yml when declared, otherwise supplied explicitly. Every non-no_artifact record confirms publication even when no workflow is present.",
-      "item_shape": {
-        "artifact_id": "stable local contract id",
-        "artifact_type": "one artifact_type_system.artifact_types value",
-        "registry": "registry host or github_release/pages",
-        "package_or_image_name": "external artifact name",
-        "version_source": "manifest, git tag, release tag, package metadata, or explicit approved source",
-        "release_policy": "manual, tag-driven, workflow-driven, no-artifact, or approved custom value",
-        "tag_style": "semver, v-prefix-semver, calendar, sha, digest, or approved custom value",
-        "changelog_source": "CHANGELOG.md, GitHub release notes, package metadata, or approved custom value",
-        "post_publish_consumer_check": "command or endpoint used to verify consumers can fetch and use the published artifact"
-      }
+      "description": "External-artifact identity records loaded from local release/release.yml when declared, otherwise supplied explicitly. Every non-no_artifact record confirms publication even when no workflow is present."
     },
     "current_change_affects_artifact": {
       "type": "boolean",

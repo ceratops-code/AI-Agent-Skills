@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/Ceratops-Code/AI-Agent-Skills/schemas/deploy-contract.schema.json",
+  "$id": "https://github.com/Ceratops-Code/AI-Agent-Skills/schemas/deploy.yml.schema.json",
   "title": "Ceratops repository deployment contract",
   "type": "object",
   "additionalProperties": false,

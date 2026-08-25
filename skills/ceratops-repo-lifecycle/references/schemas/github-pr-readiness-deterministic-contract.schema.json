@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ceratops.dev/schemas/github/pr-readiness-contract.schema.json",
+  "$id": "https://ceratops.dev/schemas/github/github-pr-readiness-deterministic-contract.schema.json",
   "title": "GitHub PR readiness contract",
   "type": "object",
   "additionalProperties": false,

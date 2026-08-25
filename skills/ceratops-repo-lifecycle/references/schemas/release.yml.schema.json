@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/Ceratops-Code/AI-Agent-Skills/schemas/release-contract.schema.json",
+  "$id": "https://github.com/Ceratops-Code/AI-Agent-Skills/schemas/release.yml.schema.json",
   "title": "Ceratops repository release-publication contract",
   "type": "object",
   "additionalProperties": false,
@@ -48,10 +48,6 @@
         "post_publish_consumer_check"
       ],
       "properties": {
-        "artifact_id": {
-          "type": "string",
-          "pattern": "^[a-z0-9][a-z0-9._-]*$"
-        },
         "artifact_type": {
           "type": "string",
           "minLength": 1
