@@ -8,6 +8,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from typing import Any
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -1961,7 +1962,7 @@ class ShipTests(unittest.TestCase):
 
 class DependencyFinalizationTests(unittest.TestCase):
     @staticmethod
-    def _live(head: str, *, failed: bool = False) -> dict[str, object]:
+    def _live(head: str, *, failed: bool = False) -> dict[str, Any]:
         checks = (
             [{"name": "ci", "classification": "failed"}]
             if failed
@@ -1981,8 +1982,8 @@ class DependencyFinalizationTests(unittest.TestCase):
     def _finalize_case(
         self,
         approved: list[tuple[str, int]],
-        live_states: dict[tuple[str, int], dict[str, object]],
-    ) -> tuple[dict[str, object], list[tuple[str, int]], list[tuple[str, int]]]:
+        live_states: dict[tuple[str, int], dict[str, Any]],
+    ) -> tuple[dict[str, Any], list[tuple[str, int]], list[tuple[str, int]]]:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = pathlib.Path(temporary_directory)
             preflight_path = root / "preflight.json"
