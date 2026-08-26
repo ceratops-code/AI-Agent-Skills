@@ -349,8 +349,8 @@
       "collection": {
         "regex_patterns": [
           "(?<![A-Za-z0-9_])[A-Za-z]:\\\\",
-          "/Users/",
-          "/home/[^/]+/"
+          "(?<![A-Za-z0-9._-])/Users/",
+          "(?<![A-Za-z0-9._-])/home/[^/]+/"
         ],
         "ignore_windows_path_prefixes": [
           "C:\\repo",
@@ -362,6 +362,7 @@
           "C:\\CodexProjects"
         ],
         "ignore_paths": [
+          "exports/**",
           "skills/ceratops-repo-lifecycle/references/contracts/code-repo-deterministic-contract.json"
         ]
       }

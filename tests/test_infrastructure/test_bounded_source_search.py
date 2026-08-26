@@ -117,7 +117,7 @@ class BoundedSourceSearchTests(unittest.TestCase):
             "hook_event_name": "PostToolUse",
             "tool_name": "Bash",
             "tool_input": {
-                "command": "python C:\\hooks\\command-probe.py --encoded-request x"
+                "command": "python C:\\repo\\hooks\\command-probe.py --encoded-request x"
             },
             "tool_response": {"exit_code": 0, "output": probe_output},
         }

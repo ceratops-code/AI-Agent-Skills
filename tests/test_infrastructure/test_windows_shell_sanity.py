@@ -166,15 +166,15 @@ class WindowsShellSanityTests(unittest.TestCase):
         )
 
     def test_new_item_rewrites_only_wildcard_free_static_paths(self):
-        safe = "New-Item -ItemType Directory -LiteralPath 'C:\\safe'"
-        ambiguous = "New-Item -ItemType Directory -LiteralPath 'C:\\[name]'"
+        safe = "New-Item -ItemType Directory -LiteralPath 'C:\\repo\\safe'"
+        ambiguous = "New-Item -ItemType Directory -LiteralPath 'C:\\repo\\[name]'"
 
         safe_analysis = SANITY.analyze_command(safe)
         ambiguous_analysis = SANITY.analyze_command(ambiguous)
 
         self.assertEqual(
             safe_analysis.command,
-            "New-Item -ItemType Directory -Path 'C:\\safe'",
+            "New-Item -ItemType Directory -Path 'C:\\repo\\safe'",
         )
         self.assertEqual(safe_analysis.rewrites, ("new_item_literalpath",))
         self.assertIn(
@@ -654,15 +654,15 @@ class ProjectPythonRedirectionTests(unittest.TestCase):
             ("py script.py", f"& {quoted} script.py"),
             ("py.exe -3.14 script.py", f"& {quoted} -3.14 script.py"),
             (
-                r"C:\CodexRuntime\python.exe script.py",
+                r"C:\repo\CodexRuntime\python.exe script.py",
                 f"& {quoted} script.py",
             ),
             (
-                r"& 'C:\Codex Runtime\python.exe' script.py",
+                r"& 'C:\repo\Codex Runtime\python.exe' script.py",
                 f"& {quoted} script.py",
             ),
             (
-                r'& "C:\Codex Runtime\python.exe" script.py',
+                r'& "C:\repo\Codex Runtime\python.exe" script.py',
                 f"& {quoted} script.py",
             ),
         )
@@ -677,9 +677,9 @@ class ProjectPythonRedirectionTests(unittest.TestCase):
         cwd = self.project_paths["pdf-form-tools"]["main"]
         quoted = SANITY.powershell_quote(self.canonical_python)
         command = (
-            "Write-Output '😀 python.exe C:\\data\\py.exe'; "
+            "Write-Output '😀 python.exe C:\\repo\\data\\py.exe'; "
             "python 'script named python.py'; py.exe two.py | "
-            '& "C:\\Codex Runtime\\python.exe" three.py # py ignored'
+            '& "C:\\repo\\Codex Runtime\\python.exe" three.py # py ignored'
         )
 
         payload = self.redirected_hook_result(command, cwd)
@@ -688,14 +688,14 @@ class ProjectPythonRedirectionTests(unittest.TestCase):
         assert payload is not None
         self.assertEqual(
             self.rewritten_command(payload),
-            "Write-Output '😀 python.exe C:\\data\\py.exe'; "
+            "Write-Output '😀 python.exe C:\\repo\\data\\py.exe'; "
             f"& {quoted} 'script named python.py'; & {quoted} two.py | "
             f"& {quoted} three.py # py ignored",
         )
 
     def test_python_looking_data_does_not_require_environment_or_rewrite(self):
         cwd = self.project_paths["PixelTops-Skills"]["main"]
-        command = "Write-Output 'python.exe C:\\data\\py.exe' # python ignored"
+        command = "Write-Output 'python.exe C:\\repo\\data\\py.exe' # python ignored"
 
         with mock.patch.dict(
             SANITY.os.environ,

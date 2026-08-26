@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -120,6 +121,8 @@ def main() -> int:
     )
     with tempfile.TemporaryDirectory(prefix="repository-validation-") as temporary:
         temporary_root = pathlib.Path(temporary)
+        child_environment = os.environ.copy()
+        child_environment["PYTHONPYCACHEPREFIX"] = str(temporary_root / "python-cache")
         for definition in CHECK_DEFINITIONS:
             argv = command(definition, temporary_root)
             prepare_temporary_directories(argv, temporary_root)
@@ -136,6 +139,7 @@ def main() -> int:
                     encoding="utf-8",
                     errors="replace",
                     check=False,
+                    env=child_environment,
                 )
             except OSError as exc:
                 result = subprocess.CompletedProcess(

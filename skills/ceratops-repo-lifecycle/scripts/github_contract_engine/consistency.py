@@ -218,6 +218,7 @@ STATE_EXECUTABLE_FIELDS = frozenset(
         "def:artifactDetector.and_when_any_path_matches",
         "def:artifactDetector.and_when_matching_path_contains_any",
         "def:artifactDetector.and_when_matching_path_contains_all",
+        "def:artifactDetector.and_when_matching_json_field_not_true",
         "def:artifactDetector.when_workflow_contains_any",
         "def:artifactDetector.and_when_workflow_contains_any",
         "def:artifactDetector.and_when_workflow_contains_all",

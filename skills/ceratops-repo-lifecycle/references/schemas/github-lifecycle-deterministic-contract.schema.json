@@ -487,6 +487,7 @@
         "and_when_any_path_matches": { "type": "array", "items": { "type": "string" } },
         "and_when_matching_path_contains_any": { "type": "array", "items": { "type": "string" } },
         "and_when_matching_path_contains_all": { "type": "array", "items": { "type": "string" } },
+        "and_when_matching_json_field_not_true": { "type": "string", "minLength": 1 },
         "when_workflow_contains_any": { "type": "array", "items": { "type": "string" } },
         "and_when_workflow_contains_any": { "type": "array", "items": { "type": "string" } },
         "and_when_workflow_contains_all": { "type": "array", "items": { "type": "string" } },

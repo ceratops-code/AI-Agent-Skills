@@ -40,6 +40,7 @@ from github_contract_engine.collectors.local_repository import (  # noqa: E402
     collect_local_repository,
 )
 from github_contract_engine.collectors.repository import (  # noqa: E402
+    _latest_stable_release_assets_count,
     stale_branch_candidates,
     stale_pull_request_candidates,
     stale_release_candidates,
@@ -160,6 +161,13 @@ class GHContractStateEngineTests(unittest.TestCase):
             slash = chr(92)
             fixture.write_text(
                 f'USES_RE = re.compile(r"^{slash}s*uses:{slash}s*")\n',
+                encoding="utf-8",
+            )
+            local = collect_local_repository(temporary_directory, [rule])
+            self.assertEqual(local["scans"][rule["id"]]["matches"], [])
+
+            fixture.write_text(
+                'DOCS = "https://docs.arc42.org/home/guide/"\n',
                 encoding="utf-8",
             )
             local = collect_local_repository(temporary_directory, [rule])
@@ -703,6 +711,24 @@ class GHContractStateEngineTests(unittest.TestCase):
                 ["git visible-file inventory failed: blocked"],
             )
 
+    def test_local_path_scan_ignores_export_archives(self):
+        rule = next(
+            item
+            for item in self.contracts["code"]["checks"]
+            if item["id"] == "stale_state.local_path_references"
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = pathlib.Path(temporary_directory) / "exports" / "run"
+            archive.mkdir(parents=True)
+            (archive / "thread.txt").write_text(
+                "archived from D:\\work\\repository\n",
+                encoding="utf-8",
+            )
+
+            local = collect_local_repository(temporary_directory, [rule])
+
+            self.assertEqual(local["scans"][rule["id"]]["matches"], [])
+
     def test_private_node_app_with_docker_publish_is_not_an_npm_artifact(self):
         local = {
             "files": [
@@ -729,7 +755,35 @@ class GHContractStateEngineTests(unittest.TestCase):
             self.contracts["artifact"]["artifact_type_system"],
         )
         self.assertIn("docker_oci_image", classification["artifact_surface"])
+        self.assertNotIn("npm_package", classification["artifact_candidates"])
         self.assertNotIn("npm_package", classification["artifact_surface"])
+
+    def test_release_artifact_detection_uses_only_latest_stable_release(self):
+        releases = [
+            {
+                "tag_name": "v3.0.1",
+                "published_at": "2026-08-25T00:00:00Z",
+                "draft": False,
+                "prerelease": False,
+                "assets": [],
+            },
+            {
+                "tag_name": "v3.1.0-rc.1",
+                "published_at": "2026-08-26T00:00:00Z",
+                "draft": False,
+                "prerelease": True,
+                "assets": [{"name": "preview.zip"}],
+            },
+            {
+                "tag_name": "v2.0.2",
+                "published_at": "2025-01-01T00:00:00Z",
+                "draft": False,
+                "prerelease": False,
+                "assets": [{"name": "legacy.zip"}],
+            },
+        ]
+
+        self.assertEqual(_latest_stable_release_assets_count(releases), 0)
 
     def test_contracts_compose_to_one_desired_state(self):
         desired_state = compose_desired_state(
