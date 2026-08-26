@@ -53,6 +53,7 @@ from github_contract_engine.compare_states import (  # noqa: E402
 from github_contract_engine.compose_desired_state import (  # noqa: E402
     _request_plan,
     compose_desired_state,
+    parameter_definitions,
     repo_subset_ids,
     validate_contract_identity,
 )
@@ -765,6 +766,23 @@ class GHContractStateEngineTests(unittest.TestCase):
                 {**parameters, "audit_only": "false"},
                 repo_subset_ids(self.contracts, "all"),
             )
+
+    def test_default_from_rejects_parameter_the_runtime_does_not_populate(self):
+        contract = {
+            "parameters": {
+                "branch_alias": {
+                    "type": "string",
+                    "required": True,
+                    "default_from": "repo.default_branch",
+                }
+            }
+        }
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "parameter branch_alias uses unsupported default_from 'repo.default_branch'",
+        ):
+            parameter_definitions([contract])
 
     def test_request_plan_preserves_executable_conditions(self):
         contract = {

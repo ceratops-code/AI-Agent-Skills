@@ -56,7 +56,7 @@ def parameter_definitions(
             if previous != executable:
                 raise ValueError(f"conflicting parameter contract for {name}")
             default_from = executable.get("default_from")
-            if default_from and default_from not in IMPLEMENTED_DEFAULT_FROM:
+            if default_from and IMPLEMENTED_DEFAULT_FROM.get(default_from) != name:
                 raise ValueError(
                     f"parameter {name} uses unsupported default_from {default_from!r}"
                 )

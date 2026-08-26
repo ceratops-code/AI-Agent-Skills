@@ -93,7 +93,8 @@ RUNTIME_PARAMETER_NAMES = frozenset(
         "repository_validation_evidence_file",
     }
 )
-IMPLEMENTED_DEFAULT_FROM = frozenset({"repo.default_branch"})
+# Map each derived source to the sole parameter name that _fetch_all populates.
+IMPLEMENTED_DEFAULT_FROM = {"repo.default_branch": "default_branch"}
 CONDITION_STATE_PATTERNS = (
     "api.dependabot.repository_access.ok",
     "artifact_category",
