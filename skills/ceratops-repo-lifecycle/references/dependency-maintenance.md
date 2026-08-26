@@ -31,8 +31,9 @@ first.
   engine/API, and exact-CI evidence. Finalization owns preflight-approved head
   binding, bounded readiness waits, live revalidation, blocker fingerprints,
   one-successful-merge-per-repository waves, merge delegation, snapshot refresh,
-  checkout sync, and bounded results. After a repository merges, its later
-  approved PRs become `next_wave_required` without another readiness wait.
+  checkout sync, and bounded results. After a repository merges, each later
+  approved PR still in the refreshed queue becomes `next_wave_required`; an
+  absent PR becomes `resolved_after_refresh`.
   Finalization delegates `--admin` to `python -m github_pr_workflow merge` and
   inherits its checkpointed admin-enforcement semantics; it does not toggle
   protection independently.
@@ -95,12 +96,12 @@ first.
   post-merge cleanup.
 - For a caller-scoped multi-PR queue, pass every model-approved PR to one
   queue finalization call; it must reuse `merge-pr` semantics, allow at most one
-  successful merge per repository in that call, and mark later same-repository
-  PRs `next_wave_required` without duplicating or weakening gates,
-  admin-enforcement bypass, or recovery.
+  successful merge per repository in that call, and reconcile later
+  same-repository PRs with the refreshed queue without duplicating or weakening
+  gates, admin-enforcement bypass, or recovery.
 - Treat `next_wave_required` as expected continuation, not a blocker. Refresh
   preflight and model approval against current repository state before the next
-  finalization call.
+  finalization call. Treat `resolved_after_refresh` as terminal for that PR.
 - Include live repo dependency selection only when the queue changes or
   explicitly verifies GitHub dependency/security posture.
 - Include code dependency selection only when explicitly verifying Dependabot

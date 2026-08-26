@@ -187,6 +187,30 @@ def prior_fingerprints(path: pathlib.Path) -> dict[tuple[str, int], str]:
     return result
 
 
+def snapshot_open_pr_keys(
+    snapshot: dict[str, Any],
+) -> set[tuple[str, int]] | None:
+    """Return open Dependabot PR keys, or ``None`` when evidence is malformed.
+
+    A missing or malformed membership list must never prove that an approved PR
+    was resolved. Callers conservatively require another preflight in that case.
+    """
+
+    raw = snapshot.get("open_dependabot_prs")
+    if not isinstance(raw, list):
+        return None
+    keys: set[tuple[str, int]] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            return None
+        repo = item.get("repo")
+        number = item.get("number")
+        if not isinstance(repo, str) or not repo or not isinstance(number, int):
+            return None
+        keys.add((repo.lower(), number))
+    return keys
+
+
 def choose_merge_method(policy: dict[str, Any], requested: str) -> str | None:
     allowed = {
         "merge": bool(policy.get("mergeCommitAllowed")),
@@ -334,6 +358,7 @@ def finalize(args: argparse.Namespace) -> int:
     snapshot_fresh = False
     merged_count = 0
     merged_repositories: set[str] = set()
+    latest_open_prs: set[tuple[str, int]] | None = None
 
     for repo, number in approved:
         key = (repo.lower(), number)
@@ -382,17 +407,26 @@ def finalize(args: argparse.Namespace) -> int:
             continue
         if key[0] in merged_repositories:
             approved_pr = as_object(approved_item.get("pr"))
+            if latest_open_prs is not None and key not in latest_open_prs:
+                status = "resolved_after_refresh"
+                message = (
+                    "PR is absent from the refreshed Dependabot queue after "
+                    "the repository merge; no new wave is required"
+                )
+            else:
+                status = "next_wave_required"
+                message = (
+                    "another approved PR for this repository merged during "
+                    "this finalization; run a new preflight and approval"
+                )
             results.append(
                 {
                     "repo": repo,
                     "pr": number,
                     "url": approved_pr.get("url"),
-                    "status": "next_wave_required",
+                    "status": status,
                     "check": "repository_merge_wave",
-                    "message": (
-                        "another approved PR for this repository merged during "
-                        "this finalization; run a new preflight and approval"
-                    ),
+                    "message": message,
                     "approved_head": approved_head,
                 }
             )
@@ -574,6 +608,7 @@ def finalize(args: argparse.Namespace) -> int:
             }
             blockers.append(blocker)
             break
+        latest_open_prs = snapshot_open_pr_keys(refreshed)
 
     if not snapshot_fresh:
         final_snapshot, snapshot_process = refresh_snapshot(
@@ -620,6 +655,7 @@ def finalize(args: argparse.Namespace) -> int:
     unchanged_count = sum(1 for item in results if item.get("status") == "unchanged_blocker")
     blocked_count = sum(1 for item in results if item.get("status") == "blocked")
     next_wave_count = sum(1 for item in results if item.get("status") == "next_wave_required")
+    resolved_count = sum(1 for item in results if item.get("status") == "resolved_after_refresh")
     queue_present = bool(as_object(final_snapshot.get("outcome")).get("queue_present"))
     summary = {
         "approved_prs": len(approved),
@@ -628,6 +664,7 @@ def finalize(args: argparse.Namespace) -> int:
         "blocked_prs": blocked_count,
         "unchanged_blockers": unchanged_count,
         "next_wave_prs": next_wave_count,
+        "resolved_after_refresh_prs": resolved_count,
         "open_dependabot_alerts": final_summary.get("open_dependabot_alerts"),
         "open_dependabot_prs": final_summary.get("open_dependabot_prs"),
         "repositories_with_work": final_summary.get("repositories_with_work"),

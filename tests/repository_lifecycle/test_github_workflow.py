@@ -1983,6 +1983,9 @@ class DependencyFinalizationTests(unittest.TestCase):
         self,
         approved: list[tuple[str, int]],
         live_states: dict[tuple[str, int], dict[str, Any]],
+        *,
+        snapshot_open: list[tuple[str, int]] | None = None,
+        include_snapshot_membership: bool = True,
     ) -> tuple[dict[str, Any], list[tuple[str, int]], list[tuple[str, int]]]:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = pathlib.Path(temporary_directory)
@@ -2023,14 +2026,20 @@ class DependencyFinalizationTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            final_snapshot = {
-                "outcome": {"blocked": False, "queue_present": True},
+            remaining = approved if snapshot_open is None else snapshot_open
+            final_snapshot: dict[str, Any] = {
+                "outcome": {"blocked": False, "queue_present": bool(remaining)},
                 "summary": {
                     "open_dependabot_alerts": 0,
-                    "open_dependabot_prs": 1,
-                    "repositories_with_work": 1,
+                    "open_dependabot_prs": len(remaining),
+                    "repositories_with_work": len({repo for repo, _ in remaining}),
                 },
             }
+            if include_snapshot_membership:
+                final_snapshot["open_dependabot_prs"] = [
+                    {"repo": repo, "number": number, "state": "OPEN"}
+                    for repo, number in remaining
+                ]
             snapshot_path.write_text(json.dumps(final_snapshot), encoding="utf-8")
             args = argparse.Namespace(
                 approved_pr=[
@@ -2130,6 +2139,53 @@ class DependencyFinalizationTests(unittest.TestCase):
         self.assertTrue(payload["outcome"]["next_wave_required"])
         self.assertFalse(payload["outcome"]["blocked"])
         self.assertEqual(payload["blockers"], [])
+
+    def test_finalization_accepts_resolution_from_the_refreshed_queue(self) -> None:
+        approved = [("owner/one", 1), ("owner/one", 2)]
+        live_states = {
+            (repo.lower(), number): self._live(str(number) * 40)
+            for repo, number in approved
+        }
+
+        payload, fresh_calls, merge_calls = self._finalize_case(
+            approved,
+            live_states,
+            snapshot_open=[],
+        )
+
+        self.assertEqual(
+            [item["status"] for item in payload["pull_requests"]],
+            ["merged", "resolved_after_refresh"],
+        )
+        self.assertEqual(fresh_calls, [("owner/one", 1)])
+        self.assertEqual(merge_calls, fresh_calls)
+        self.assertEqual(payload["summary"]["next_wave_prs"], 0)
+        self.assertEqual(payload["summary"]["resolved_after_refresh_prs"], 1)
+        self.assertFalse(payload["outcome"]["next_wave_required"])
+        self.assertFalse(payload["outcome"]["queue_present"])
+        self.assertEqual(payload["blockers"], [])
+
+    def test_missing_snapshot_membership_requires_a_fresh_wave(self) -> None:
+        approved = [("owner/one", 1), ("owner/one", 2)]
+        live_states = {
+            (repo.lower(), number): self._live(str(number) * 40)
+            for repo, number in approved
+        }
+
+        payload, fresh_calls, merge_calls = self._finalize_case(
+            approved,
+            live_states,
+            include_snapshot_membership=False,
+        )
+
+        self.assertEqual(
+            [item["status"] for item in payload["pull_requests"]],
+            ["merged", "next_wave_required"],
+        )
+        self.assertEqual(fresh_calls, [("owner/one", 1)])
+        self.assertEqual(merge_calls, fresh_calls)
+        self.assertEqual(payload["summary"]["next_wave_prs"], 1)
+        self.assertEqual(payload["summary"]["resolved_after_refresh_prs"], 0)
 
     def test_blocked_pr_does_not_consume_the_repository_merge_wave(self) -> None:
         approved = [("owner/one", 1), ("owner/one", 2)]
