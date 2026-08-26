@@ -40,6 +40,7 @@ from github_contract_engine.collectors.local_repository import (  # noqa: E402
     collect_local_repository,
 )
 from github_contract_engine.collectors.repository import (  # noqa: E402
+    _latest_completed_runs_per_workflow,
     _latest_stable_release_assets_count,
     stale_branch_candidates,
     stale_pull_request_candidates,
@@ -720,8 +721,9 @@ class GHContractStateEngineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             archive = pathlib.Path(temporary_directory) / "exports" / "run"
             archive.mkdir(parents=True)
+            slash = chr(92)
             (archive / "thread.txt").write_text(
-                "archived from D:\\work\\repository\n",
+                f"archived from D:{slash}work{slash}repository\n",
                 encoding="utf-8",
             )
 
@@ -784,6 +786,64 @@ class GHContractStateEngineTests(unittest.TestCase):
         ]
 
         self.assertEqual(_latest_stable_release_assets_count(releases), 0)
+
+        runs = [
+            {
+                "id": 1,
+                "path": ".github/workflows/release.yml",
+                "run_number": 11,
+                "created_at": "2026-08-25T00:00:00Z",
+                "status": "completed",
+                "conclusion": "failure",
+            },
+            {
+                "id": 4,
+                "path": ".github/workflows/test.yml",
+                "run_number": 6,
+                "created_at": "2026-08-28T00:00:00Z",
+                "status": "completed",
+                "conclusion": "failure",
+            },
+            {
+                "id": 6,
+                "workflow_id": 99,
+                "run_number": 8,
+                "created_at": "2026-08-24T00:00:00Z",
+                "status": "completed",
+                "conclusion": "success",
+            },
+            {
+                "id": 2,
+                "path": ".github/workflows/release.yml",
+                "run_number": 12,
+                "created_at": "2026-08-26T00:00:00Z",
+                "status": "completed",
+                "conclusion": "success",
+            },
+            {
+                "id": 3,
+                "path": ".github/workflows/release.yml",
+                "run_number": 13,
+                "created_at": "2026-08-27T00:00:00Z",
+                "status": "completed",
+                "conclusion": "neutral",
+            },
+            {
+                "id": 5,
+                "workflow_id": 99,
+                "run_number": 7,
+                "created_at": "2026-08-23T00:00:00Z",
+                "status": "completed",
+                "conclusion": "failure",
+            },
+        ]
+
+        latest_runs = _latest_completed_runs_per_workflow(runs)
+        self.assertEqual([run["id"] for run in latest_runs], [4, 2, 6])
+        self.assertEqual(
+            [run["id"] for run in latest_runs if run["conclusion"] != "success"],
+            [4],
+        )
 
     def test_contracts_compose_to_one_desired_state(self):
         desired_state = compose_desired_state(

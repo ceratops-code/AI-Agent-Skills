@@ -93,6 +93,63 @@ def _latest_stable_release_assets_count(releases: list[Any]) -> int:
     return len(assets) if isinstance(assets, list) else 0
 
 
+def _workflow_run_timestamp(run: dict[str, Any]) -> float:
+    created = _parse_datetime(
+        run.get("created_at") or run.get("run_started_at") or run.get("updated_at")
+    )
+    if created is None:
+        return float("-inf")
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=dt.timezone.utc)
+    return created.timestamp()
+
+
+def _workflow_run_order(run: dict[str, Any]) -> tuple[int, float, int, int]:
+    """Return a stable newest-run comparison key within one workflow."""
+
+    def integer(name: str) -> int:
+        try:
+            return int(run.get(name) or -1)
+        except (TypeError, ValueError):
+            return -1
+
+    return (
+        integer("run_number"),
+        _workflow_run_timestamp(run),
+        integer("run_attempt"),
+        integer("id"),
+    )
+
+
+def _latest_completed_runs_per_workflow(runs: list[Any]) -> list[dict[str, Any]]:
+    """Keep only the newest meaningful completed run for each workflow identity."""
+
+    latest: dict[str, dict[str, Any]] = {}
+    for index, item in enumerate(runs):
+        if (
+            not isinstance(item, dict)
+            or item.get("status") != "completed"
+            or item.get("conclusion") in {"skipped", "neutral"}
+        ):
+            continue
+        identity = next(
+            (
+                f"{name}:{value}"
+                for name in ("path", "workflow_id", "name")
+                if (value := item.get(name)) is not None and str(value).strip()
+            ),
+            f"unidentified:{index}",
+        )
+        current = latest.get(identity)
+        if current is None or _workflow_run_order(item) > _workflow_run_order(current):
+            latest[identity] = item
+    return sorted(
+        latest.values(),
+        key=lambda run: (_workflow_run_timestamp(run), _workflow_run_order(run)),
+        reverse=True,
+    )
+
+
 def _older_than(value: Any, days: int, now: dt.datetime | None = None) -> bool:
     parsed = _parse_datetime(value)
     if not parsed:
@@ -421,13 +478,7 @@ def collect_repository(
         parameters,
     )
     runs = _items(runs_response.data)
-    relevant_runs = [
-        item
-        for item in runs
-        if isinstance(item, dict)
-        and item.get("status") == "completed"
-        and item.get("conclusion") not in {"skipped", "neutral"}
-    ]
+    relevant_runs = _latest_completed_runs_per_workflow(runs)
     workflow_text = local.get("workflows", {}).get("text", "")
     dependabot_path = local.get("dependabot", {}).get("config_path")
     dependabot_text = (
