@@ -135,7 +135,7 @@ def _latest_completed_runs_per_workflow(runs: list[Any]) -> list[dict[str, Any]]
         identity = next(
             (
                 f"{name}:{value}"
-                for name in ("path", "workflow_id", "name")
+                for name in ("workflow_id", "path", "name")
                 if (value := item.get(name)) is not None and str(value).strip()
             ),
             f"unidentified:{index}",

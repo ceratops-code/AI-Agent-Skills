@@ -791,6 +791,7 @@ class GHContractStateEngineTests(unittest.TestCase):
             {
                 "id": 1,
                 "path": ".github/workflows/release.yml",
+                "workflow_id": 10,
                 "run_number": 11,
                 "created_at": "2026-08-25T00:00:00Z",
                 "status": "completed",
@@ -799,10 +800,11 @@ class GHContractStateEngineTests(unittest.TestCase):
             {
                 "id": 4,
                 "path": ".github/workflows/test.yml",
-                "run_number": 6,
+                "workflow_id": 20,
+                "run_number": 100,
                 "created_at": "2026-08-28T00:00:00Z",
                 "status": "completed",
-                "conclusion": "failure",
+                "conclusion": "success",
             },
             {
                 "id": 6,
@@ -814,7 +816,8 @@ class GHContractStateEngineTests(unittest.TestCase):
             },
             {
                 "id": 2,
-                "path": ".github/workflows/release.yml",
+                "path": ".github/workflows/publish.yml",
+                "workflow_id": 10,
                 "run_number": 12,
                 "created_at": "2026-08-26T00:00:00Z",
                 "status": "completed",
@@ -822,7 +825,8 @@ class GHContractStateEngineTests(unittest.TestCase):
             },
             {
                 "id": 3,
-                "path": ".github/workflows/release.yml",
+                "path": ".github/workflows/publish.yml",
+                "workflow_id": 10,
                 "run_number": 13,
                 "created_at": "2026-08-27T00:00:00Z",
                 "status": "completed",
@@ -836,13 +840,22 @@ class GHContractStateEngineTests(unittest.TestCase):
                 "status": "completed",
                 "conclusion": "failure",
             },
+            {
+                "id": 7,
+                "path": ".github/workflows/test.yml",
+                "workflow_id": 21,
+                "run_number": 1,
+                "created_at": "2026-08-29T00:00:00Z",
+                "status": "completed",
+                "conclusion": "failure",
+            },
         ]
 
         latest_runs = _latest_completed_runs_per_workflow(runs)
-        self.assertEqual([run["id"] for run in latest_runs], [4, 2, 6])
+        self.assertEqual([run["id"] for run in latest_runs], [7, 4, 2, 6])
         self.assertEqual(
             [run["id"] for run in latest_runs if run["conclusion"] != "success"],
-            [4],
+            [7],
         )
 
     def test_contracts_compose_to_one_desired_state(self):
