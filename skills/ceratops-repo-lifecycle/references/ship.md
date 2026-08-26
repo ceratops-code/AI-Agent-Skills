@@ -117,10 +117,12 @@ selected merged source branches and worktrees.
    verifies that the path is unregistered and remains below the recorded root
    before deleting it. When elevated, it may take ownership only of that
    validated path, without a public flag or second confirmation. Before
-   retiring the record, it deletes task-temp subdirectories under
-   `<repo-parent>/tmp/<repo-name>` only when a name
-   exactly matches the recorded worktree name, exactly matches the thread ID,
-   or starts with the thread ID followed by `-`; it preserves every other
+   retiring the record, it preserves any matching task-temp directory that
+   contains the valid helper-owned `.ceratops-skill-update-active.json` marker
+   for required post-deployment finalization. Otherwise it deletes matching
+   task-temp subdirectories under `<repo-parent>/tmp/<repo-name>` only when a
+   name exactly matches the recorded worktree name, exactly matches the thread
+   ID, or starts with the thread ID followed by `-`; it preserves every other
    name. It removes empty worktree and task-temp parents
    only up to their nearest `worktrees`, `tmp`, or `temp` boundary and never
    deletes the boundary itself. On Windows sharing violation 32,

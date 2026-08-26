@@ -69,6 +69,19 @@ def test_skill_update_workflow_accepts_new_shared_section_source(
         str(state_path),
     )
     assert prepared.returncode == 0, prepared.stderr
+    retention_marker = task_temp_root / ".ceratops-skill-update-active.json"
+    assert json.loads(retention_marker.read_text(encoding="utf-8")) == {
+        "schema": "ceratops-skill-update-retention.v1",
+        "state": str(state_path.resolve()),
+    }
+    prepared_state = json.loads(state_path.read_text(encoding="utf-8"))
+    retention_record = next(
+        artifact
+        for artifact in prepared_state["cleanup"]["owned_artifacts"]
+        if artifact["role"] == "retention"
+    )
+    assert retention_record["path"] == str(retention_marker.resolve())
+    assert len(retention_record["sha256"]) == 64
     shared_source.write_text(
         "SHARED_PAYLOAD = True\n",
         encoding="utf-8",

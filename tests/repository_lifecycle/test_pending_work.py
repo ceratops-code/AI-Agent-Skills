@@ -67,6 +67,20 @@ def test_pending_work_scope_is_selected_generic_and_finalized_late(
         (directory / "artifact.txt").write_text(
             "temporary\n", encoding="utf-8", newline="\n"
         )
+    retained_state = thread_temp / "workflow" / "skill-update-state.json"
+    retained_state.parent.mkdir()
+    retained_state.write_text("{}\n", encoding="utf-8", newline="\n")
+    (thread_temp / ".ceratops-skill-update-active.json").write_text(
+        json.dumps(
+            {
+                "schema": "ceratops-skill-update-retention.v1",
+                "state": str(retained_state.resolve()),
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
     (selected_worktree / "README.md").write_text(
         "base\nselected\n",
         encoding="utf-8",
@@ -414,7 +428,9 @@ def test_pending_work_scope_is_selected_generic_and_finalized_late(
     assert run_git(repo, "show-ref", "--verify", "refs/heads/unrelated").returncode == 0
     assert not scope_path.exists()
     assert not worktree_temp.exists()
-    assert not thread_temp.exists()
+    assert thread_temp.is_dir()
+    assert retained_state.is_file()
+    assert (thread_temp / ".ceratops-skill-update-active.json").is_file()
     assert ambiguous_temp.is_dir()
     assert unrelated_temp.is_dir()
     assert task_temp_root.is_dir()
