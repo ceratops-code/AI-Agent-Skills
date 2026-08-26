@@ -20,6 +20,7 @@ from github_contract_engine import (
     audit_snapshot,  # noqa: E402
     codeql_disposition,  # noqa: E402
     collect_non_deterministic_evidence,  # noqa: E402
+    consistency,  # noqa: E402
     github_api,  # noqa: E402
     levels,  # noqa: E402
     organization_validator,  # noqa: E402
@@ -27,6 +28,7 @@ from github_contract_engine import (
     schema_validation,  # noqa: E402
 )
 from github_contract_engine.collect_observed_states import (  # noqa: E402
+    _artifact_categories,
     _artifact_state,
     _fetch_all,
     _registry_confirmed_artifact_types,
@@ -49,8 +51,11 @@ from github_contract_engine.compare_states import (  # noqa: E402
     pointer_get,
 )
 from github_contract_engine.compose_desired_state import (  # noqa: E402
+    _request_plan,
     compose_desired_state,
+    parameter_definitions,
     repo_subset_ids,
+    validate_contract_identity,
 )
 from github_contract_engine.format_report import (  # noqa: E402
     build_report,
@@ -442,7 +447,6 @@ class GHContractStateEngineTests(unittest.TestCase):
 
     def test_repository_release_contract_owns_artifact_identity(self):
         record = {
-            "artifact_id": "bootstrap-installer",
             "artifact_type": "installer_or_cli_binary",
             "registry": "github_release",
             "package_or_image_name": "Setup.exe",
@@ -482,6 +486,12 @@ class GHContractStateEngineTests(unittest.TestCase):
 
             self.assertEqual(parameters["artifact_contracts"], [record])
             self.assertEqual(evidence_parameters["artifact_contracts"], [record])
+            args.param = [
+                "artifact_contracts="
+                + json.dumps([{**record, "artifact_id": "bootstrap-installer"}])
+            ]
+            with self.assertRaisesRegex(ValueError, "artifact_id"):
+                repository_validator._parameters(args, self.contracts)
             args.param = ["artifact_contracts=" + json.dumps([record])]
             with self.assertRaisesRegex(ValueError, "declared both"):
                 repository_validator._parameters(args, self.contracts)
@@ -737,6 +747,180 @@ class GHContractStateEngineTests(unittest.TestCase):
             )
         )
 
+    def test_compose_enforces_declared_parameter_contracts(self):
+        parameters = {"owner": "owner", "repo": "repo", "default_branch": "main"}
+        with self.assertRaisesRegex(ValueError, "undeclared contract parameter"):
+            compose_desired_state(
+                self.paths,
+                {**parameters, "not_declared": True},
+                repo_subset_ids(self.contracts, "all"),
+            )
+
+        wrong_identity = json.loads(json.dumps(self.contracts["repo"]))
+        wrong_identity["kind"] = "wrong_contract_kind"
+        with self.assertRaisesRegex(ValueError, "contract kind must be"):
+            validate_contract_identity("repo", wrong_identity)
+        with self.assertRaisesRegex(ValueError, "audit_only must have type boolean"):
+            compose_desired_state(
+                self.paths,
+                {**parameters, "audit_only": "false"},
+                repo_subset_ids(self.contracts, "all"),
+            )
+
+    def test_default_from_rejects_parameter_the_runtime_does_not_populate(self):
+        contract = {
+            "parameters": {
+                "branch_alias": {
+                    "type": "string",
+                    "required": True,
+                    "default_from": "repo.default_branch",
+                }
+            }
+        }
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "parameter branch_alias uses unsupported default_from 'repo.default_branch'",
+        ):
+            parameter_definitions([contract])
+
+    def test_request_plan_preserves_executable_conditions(self):
+        contract = {
+            "checks": [{"id": "repo.example"}],
+            "fetch_bundles": [
+                {
+                    "id": "example",
+                    "applies_when": "repo.archived == false",
+                    "requests": [
+                        {
+                            "method": "GET",
+                            "endpoint": "/repos/example",
+                            "covers_checks": ["repo.example"],
+                            "applies_when": "repo.fork == false",
+                        }
+                    ],
+                }
+            ],
+        }
+        requests = _request_plan(contract, None, None)
+        self.assertEqual(
+            requests[0]["applies_when"],
+            "(repo.archived == false) && (repo.fork == false)",
+        )
+
+    def test_state_contract_metadata_requires_executable_consumers(self):
+        contract_path = consistency.STATE_CONTRACT_PATHS["repo"]
+        base = self.contracts["repo"]
+
+        invalid_level = json.loads(json.dumps(base))
+        invalid_level["checks"][0]["assertions"][0]["level"] = "EROR"
+        self.assertTrue(
+            any(
+                "unknown level" in error
+                for error in consistency._validate_state_contract(
+                    contract_path, invalid_level
+                )
+            )
+        )
+
+        mutating_method = json.loads(json.dumps(base))
+        mutating_method["checks"][0]["method"] = "PATCH"
+        self.assertTrue(
+            any(
+                "non-read method" in error
+                for error in consistency._validate_state_contract(
+                    contract_path, mutating_method
+                )
+            )
+        )
+
+        missing_producer = json.loads(json.dumps(base))
+        missing_producer["checks"][0]["assertions"][0]["path"] = (
+            "/repository/types/definitely_not_produced"
+        )
+        self.assertTrue(
+            any(
+                "no registered state producer" in error
+                for error in consistency._validate_state_contract(
+                    contract_path, missing_producer
+                )
+            )
+        )
+
+        org_contract = load_json(
+            REFERENCES / "github-org-deterministic-contract.json"
+        )
+        unknown_api_check = json.loads(json.dumps(org_contract))
+        unknown_api_check["checks"][0]["assertions"][0]["path"] = (
+            "/api/not.a.declared.check/data"
+        )
+        self.assertTrue(
+            any(
+                "uncollected API check" in error
+                for error in consistency._validate_state_contract(
+                    consistency.STATE_CONTRACT_PATHS["org"], unknown_api_check
+                )
+            )
+        )
+
+        unresolved_condition = json.loads(json.dumps(base))
+        unresolved_condition["checks"][0]["applies_when"] = (
+            "unimplemented_runtime_fact == true"
+        )
+        self.assertTrue(
+            any(
+                "references unimplemented state" in error
+                for error in consistency._validate_state_contract(
+                    contract_path, unresolved_condition
+                )
+            )
+        )
+
+        unresolved_nested_condition = json.loads(json.dumps(base))
+        unresolved_nested_condition["checks"][0]["applies_when"] = (
+            "repo.definitely_not_produced == true"
+        )
+        self.assertTrue(
+            any(
+                "references unimplemented state" in error
+                for error in consistency._validate_state_contract(
+                    contract_path, unresolved_nested_condition
+                )
+            )
+        )
+
+        unused_parameter = json.loads(json.dumps(base))
+        unused_parameter["parameters"]["unconsumed"] = {
+            "type": "boolean",
+            "default": False,
+            "description": "Test-only unused parameter.",
+        }
+        self.assertTrue(
+            any(
+                "parameter has no executable consumer" in error
+                for error in consistency._validate_state_contract(
+                    contract_path, unused_parameter
+                )
+            )
+        )
+
+        ignored_expectation = json.loads(json.dumps(base))
+        unary = next(
+            assertion
+            for check in ignored_expectation["checks"]
+            for assertion in check["assertions"]
+            if assertion["operator"] == "empty"
+        )
+        unary["expected"] = []
+        self.assertTrue(
+            any(
+                "ignored expectation metadata" in error
+                for error in consistency._validate_state_contract(
+                    contract_path, ignored_expectation
+                )
+            )
+        )
+
     def test_dependency_review_request_uses_visibility_and_owner_plan(self):
         desired_state = compose_desired_state(
             self.paths,
@@ -915,6 +1099,35 @@ class GHContractStateEngineTests(unittest.TestCase):
             condition_matches("type.workflow_surface has has_workflows", states)
         )
         self.assertTrue(condition_matches("artifact_type contains npm_package", states))
+
+    def test_artifact_categories_are_contract_driven(self):
+        type_system = {
+            "categories": [
+                {"id": "custom_registry", "artifact_types": ["custom_package"]},
+                {"id": "unrelated", "artifact_types": ["other_package"]},
+            ]
+        }
+        self.assertEqual(
+            _artifact_categories(["custom_package"], type_system),
+            ["custom_registry"],
+        )
+
+    def test_artifact_identity_requires_records_for_detected_types(self):
+        artifact = _artifact_state(
+            {"artifact_contracts": []},
+            {"types": {"artifact_surface": ["npm_package"]}},
+            {},
+            {},
+        )
+        self.assertEqual(artifact["identity"]["missing_types"], ["npm_package"])
+
+        artifact = _artifact_state(
+            {"artifact_contracts": [{"artifact_type": "npm_package"}]},
+            {"types": {"artifact_surface": ["npm_package"]}},
+            {},
+            {},
+        )
+        self.assertEqual(artifact["identity"]["missing_types"], [])
 
     def test_release_attestation_verification_uses_workflow_or_immutability(self):
         rule = next(
@@ -2098,7 +2311,21 @@ class GHContractStateEngineTests(unittest.TestCase):
             SCRIPTS.parent
             / "references"
             / "schemas"
-            / "state-contract.schema.json"
+            / "github-lifecycle-deterministic-contract.schema.json"
+        )
+        self.assertIn(
+            "Annotation-only",
+            schema["properties"]["remediation_policy"]["description"],
+        )
+        unclassified_schema = json.loads(json.dumps(schema))
+        unclassified_schema["properties"]["new_metadata"] = {"type": "string"}
+        self.assertTrue(
+            any(
+                "unclassified contract field root.new_metadata" in error
+                for error in consistency._validate_schema_field_roles(
+                    consistency.STATE_SCHEMA, unclassified_schema
+                )
+            )
         )
         misspelled = json.loads(json.dumps(self.contracts["repo"]))
         assertion = misspelled["checks"][0]["assertions"][0]
@@ -2107,7 +2334,7 @@ class GHContractStateEngineTests(unittest.TestCase):
             misspelled,
             schema,
             document_name="misspelled.json",
-            schema_name="state-contract.schema.json",
+            schema_name="github-lifecycle-deterministic-contract.schema.json",
         )
         self.assertTrue(
             any(
@@ -2121,7 +2348,7 @@ class GHContractStateEngineTests(unittest.TestCase):
             inert,
             schema,
             document_name="inert.json",
-            schema_name="state-contract.schema.json",
+            schema_name="github-lifecycle-deterministic-contract.schema.json",
         )
         self.assertTrue(
             any("settable" in error and "/checks/0" in error for error in inert_errors)
@@ -2134,12 +2361,64 @@ class GHContractStateEngineTests(unittest.TestCase):
             source_anchored,
             schema,
             document_name="source-anchored.json",
-            schema_name="state-contract.schema.json",
+            schema_name="github-lifecycle-deterministic-contract.schema.json",
         )
         self.assertTrue(
             any(
                 "source_lines" in error and "/checks/0" in error
                 for error in source_anchor_errors
+            )
+        )
+        unused_parameter_metadata = json.loads(json.dumps(self.contracts["artifact"]))
+        unused_parameter_metadata["parameters"]["artifact_contracts"][
+            "item_shape"
+        ] = {}
+        unused_metadata_errors = schema_validation.validate_contract_document(
+            unused_parameter_metadata,
+            schema,
+            document_name="unused-parameter-metadata.json",
+            schema_name="github-lifecycle-deterministic-contract.schema.json",
+        )
+        self.assertTrue(
+            any("item_shape" in error for error in unused_metadata_errors)
+        )
+        release_schema = load_json(
+            SCRIPTS.parent
+            / "references"
+            / "schemas"
+            / "release.yml.schema.json"
+        )
+        self.assertIn(
+            "ND.artifact.identity-contract-fit",
+            release_schema["$defs"]["artifact"]["description"],
+        )
+        undocumented_release_schema = json.loads(json.dumps(release_schema))
+        del undocumented_release_schema["$defs"]["artifact"]["properties"][
+            "artifact_type"
+        ]["description"]
+        self.assertTrue(
+            any(
+                "need descriptions: artifact_type" in error
+                for error in consistency._validate_artifact_contract_schema(
+                    self.contracts["artifact"], undocumented_release_schema
+                )
+            )
+        )
+        drifted_artifact_contract = json.loads(
+            json.dumps(self.contracts["artifact"])
+        )
+        identity_check = next(
+            check
+            for check in drifted_artifact_contract["checks"]
+            if check["id"] == "common.identity_contract"
+        )
+        identity_check["desired"]["required_per_artifact_fields"].pop()
+        self.assertTrue(
+            any(
+                "must match release.yml schema" in error
+                for error in consistency._validate_artifact_contract_schema(
+                    drifted_artifact_contract, release_schema
+                )
             )
         )
 
@@ -2154,6 +2433,74 @@ class GHContractStateEngineTests(unittest.TestCase):
             )
         self.assertEqual(status, 1)
         self.assertEqual(json.loads(stream.getvalue())["counts"]["ERROR"], 1)
+
+    def test_pr_contract_requires_exact_validator_implementation(self):
+        contract_path = REFERENCES / "github-pr-readiness-deterministic-contract.json"
+        contract = load_json(contract_path)
+
+        drifted_level = json.loads(json.dumps(contract))
+        drifted_level["checks"][0]["level_on_drift"] = "WARN"
+        self.assertTrue(
+            any(
+                "validator implements" in error
+                for error in pr_validator.contract_implementation_errors(drifted_level)
+            )
+        )
+
+        missing_evidence = json.loads(json.dumps(contract))
+        missing_evidence["evidence"]["fields"].pop()
+        self.assertTrue(
+            any(
+                "collector field is absent" in error
+                for error in pr_validator.contract_implementation_errors(
+                    missing_evidence
+                )
+            )
+        )
+
+        drift_mapping = json.loads(json.dumps(contract))
+        drift_mapping["approved_drift"][0]["check_ids"] = ["pr.status_checks"]
+        self.assertTrue(
+            any(
+                "check mapping does not match" in error
+                for error in pr_validator.contract_implementation_errors(drift_mapping)
+            )
+        )
+
+        extra_check = json.loads(json.dumps(contract))
+        extra_check["checks"].append(
+            {
+                "id": "pr.not_implemented",
+                "level_on_drift": "ERROR",
+                "behavior_explanation": "This check has no validator implementation.",
+            }
+        )
+        self.assertTrue(
+            any(
+                "has no validator implementation" in error
+                for error in pr_validator.contract_implementation_errors(extra_check)
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            invalid_path = pathlib.Path(temporary_directory) / "contract.json"
+            invalid_path.write_text('{"schema": "wrong"}', encoding="utf-8")
+            with self.assertRaises(pr_validator.CommandError):
+                pr_validator.load_contract(invalid_path)
+
+        one_finding = pr_validator.Finding(
+            level="PASS", check="pr.state_open", message="PR is open."
+        )
+        with (
+            mock.patch.object(pr_validator, "load_contract", return_value=contract),
+            mock.patch.object(
+                pr_validator, "pr_readiness", return_value=({}, [one_finding])
+            ),
+            self.assertRaisesRegex(
+                pr_validator.CommandError, "does not match the contract"
+            ),
+        ):
+            pr_validator.validate_readiness(None, pathlib.Path.cwd(), contract_path)
 
     def test_pr_readiness_matches_github_check_conclusions(self):
         cases = {

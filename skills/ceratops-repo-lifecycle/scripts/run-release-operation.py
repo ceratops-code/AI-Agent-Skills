@@ -14,7 +14,7 @@ DEFAULT_CONTRACT = pathlib.Path("release/release.yml")
 PROFILE = OperationProfile(
     label="Release",
     default_contract=DEFAULT_CONTRACT,
-    schema=SCRIPT_ROOT.parent / "references" / "schemas" / "release-contract.schema.json",
+    schema=SCRIPT_ROOT.parent / "references" / "schemas" / "release.yml.schema.json",
     default_success_status="completed",
     operation_statuses={"preflight": "checked", "publish": "published"},
 )

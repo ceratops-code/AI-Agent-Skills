@@ -10,7 +10,6 @@ from typing import Any, Callable
 
 from .github_api import substitute
 
-
 MISSING = object()
 
 
@@ -298,6 +297,24 @@ def condition_syntax_valid(expression: str | None) -> bool:
         r"[A-Za-z_][A-Za-z0-9_.-]*",
     )
     return any(re.fullmatch(pattern, expression) for pattern in patterns)
+
+
+def condition_identifiers(expression: str | None) -> set[str]:
+    """Return every observed-state identifier used by a valid condition."""
+
+    if not expression or expression == "always":
+        return set()
+    expression = expression.strip()
+    if expression.startswith("(") and expression.endswith(")"):
+        expression = expression[1:-1].strip()
+    for operator in ("||", "&&"):
+        groups = _split(expression, operator)
+        if len(groups) > 1:
+            return set().union(*(condition_identifiers(group) for group in groups))
+    if expression.startswith("!"):
+        return condition_identifiers(expression[1:].strip())
+    match = re.match(r"([A-Za-z_][A-Za-z0-9_.-]*)", expression)
+    return {match.group(1)} if match else set()
 
 
 def condition_matches(expression: str | None, observed_states: dict[str, Any]) -> bool:

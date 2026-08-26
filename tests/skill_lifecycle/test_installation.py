@@ -270,7 +270,7 @@ def test_bootstrap_full_install_materializes_self_contained_lifecycle_bundle(
         installed_lifecycle
         / "references"
         / "schemas"
-        / "deploy-contract.schema.json"
+        / "deploy.yml.schema.json"
     ).is_file()
     assert (
         installed_lifecycle / "scripts" / COMPATIBILITY_ENGINE / "__main__.py"

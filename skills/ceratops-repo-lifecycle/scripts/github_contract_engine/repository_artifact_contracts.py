@@ -15,6 +15,7 @@ from typing import Any
 from ceratops_repo_compatibility_engine.deploy_contract_validation import (
     DeployContractError,
     load_contract,
+    validation_errors,
 )
 
 RELEASE_CONTRACT = pathlib.Path("release/release.yml")
@@ -22,7 +23,7 @@ RELEASE_SCHEMA = (
     pathlib.Path(__file__).resolve().parents[2]
     / "references"
     / "schemas"
-    / "release-contract.schema.json"
+    / "release.yml.schema.json"
 )
 
 
@@ -38,13 +39,34 @@ def _records(value: object) -> list[dict[str, Any]]:
     return [dict(item) for item in value]
 
 
+def _validated_explicit_records(value: object) -> list[dict[str, Any]]:
+    """Validate explicit artifact records through the release schema owner."""
+
+    records = _records(value)
+    if not records:
+        return records
+    document = {
+        "version": 1,
+        "kind": "ceratops-release",
+        "artifacts": records,
+        "operations": {},
+    }
+    try:
+        errors = validation_errors(document, schema_path=RELEASE_SCHEMA)
+    except DeployContractError as exc:
+        raise ValueError(f"invalid artifact_contracts schema: {exc}") from exc
+    if errors:
+        raise ValueError("invalid artifact_contracts: " + "; ".join(errors))
+    return records
+
+
 def resolve_repository_artifact_contracts(
     local_repo_path: object,
     explicit_contracts: object,
 ) -> list[dict[str, Any]]:
     """Prefer validated repository release identity over caller configuration."""
 
-    explicit = _records(explicit_contracts)
+    explicit = _validated_explicit_records(explicit_contracts)
     if not isinstance(local_repo_path, str) or not local_repo_path.strip():
         return explicit
     repo_root = pathlib.Path(local_repo_path).expanduser().resolve()

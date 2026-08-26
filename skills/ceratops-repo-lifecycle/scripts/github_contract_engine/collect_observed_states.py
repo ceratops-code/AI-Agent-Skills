@@ -17,7 +17,14 @@ from .github_api import ApiResult, run_gh_api, substitute
 
 PRODUCER_REGISTRY = {
     "github_api": ("/api/*",),
-    "organization": ("/organization/avatar/*",),
+    "organization": (
+        "/organization/avatar/collected",
+        "/organization/avatar/url",
+        "/organization/avatar/content_type",
+        "/organization/avatar/bytes",
+        "/organization/avatar/sha256",
+        "/organization/avatar/error",
+    ),
     "repository": (
         "/repository/repo/*",
         "/repository/actions/*",
@@ -29,7 +36,14 @@ PRODUCER_REGISTRY = {
         "/repository/security/*",
         "/repository/stale/*",
         "/repository/topics",
-        "/repository/types*",
+        "/repository/types",
+        "/repository/types/visibility",
+        "/repository/types/origin",
+        "/repository/types/lifecycle",
+        "/repository/types/language_or_iac",
+        "/repository/types/workflow_surface",
+        "/repository/types/artifact_candidates",
+        "/repository/types/artifact_surface",
     ),
     "local_repository": (
         "/local/available",
@@ -46,11 +60,79 @@ PRODUCER_REGISTRY = {
         "/artifact/contracts",
         "/artifact/live_metadata/all_resolved",
         "/artifact/publish_requested",
-        "/artifact/recorded_checks/*",
+        "/artifact/identity/missing_types",
+        "/artifact/recorded_checks/local_build",
+        "/artifact/recorded_checks/consumer_smoke",
+        "/artifact/recorded_checks/publish_authorized",
         "/artifact/release_assets",
         "/artifact/types",
     ),
 }
+
+RUNTIME_PARAMETER_NAMES = frozenset(
+    {
+        "artifact_contracts",
+        "artifact_was_published",
+        "audit_only",
+        "consumer_smoke_succeeded",
+        "current_change_affects_artifact",
+        "default_branch",
+        "docker_build_push_action_default_provenance_applies",
+        "expected_maintainer_bypass_actors",
+        "final_answer_makes_artifact_claim",
+        "final_answer_makes_no_artifact_claim",
+        "linked_artifacts_claimed",
+        "local_build_succeeded",
+        "local_repo_path",
+        "merged_change_requires_release",
+        "org_login",
+        "owner",
+        "publish_authorized",
+        "publish_requested",
+        "repo",
+        "repository_validation_evidence_file",
+    }
+)
+# Map each derived source to the sole parameter name that _fetch_all populates.
+IMPLEMENTED_DEFAULT_FROM = {"repo.default_branch": "default_branch"}
+CONDITION_STATE_PATTERNS = (
+    "api.dependabot.repository_access.ok",
+    "artifact_category",
+    "artifact_type",
+    "artifact_type_system",
+    "artifact_was_published",
+    "audit_only",
+    "current_change_affects_artifact",
+    "detected_external_artifact_count",
+    "docker_build_push_action_default_provenance_applies",
+    "expected_maintainer_bypass_actors",
+    "final_answer_makes_artifact_claim",
+    "final_answer_makes_no_artifact_claim",
+    "immutable_release_detected",
+    "linked_artifacts_claimed",
+    "local.compatibility.applicable",
+    "local.deploy_contract.present",
+    "local.workflows.unpinned_external_refs",
+    "local_repo_path",
+    "merged_change_requires_release",
+    "owner.plan.name",
+    "package_manifests_present",
+    "publish_workflow_detected",
+    "registry_hosts",
+    "repo.archived",
+    "repo.fork",
+    "repo.has_pages",
+    "repo.owner.type",
+    "repo.visibility",
+    "repository.codeowners_present",
+    "repository.content.dependabot_label_referenced",
+    "repository.private_fork_enabled",
+    "repository.security.dependabot_prs.available",
+    "repository.security.dependabot_prs.items",
+    "type.workflow_surface",
+    "workflow_contains_artifact_metadata_write",
+    "workflow_emits_attestation_or_provenance",
+)
 
 
 def state_producer(path: str) -> str | None:
@@ -64,6 +146,21 @@ def state_producer(path: str) -> str | None:
         ),
         None,
     )
+
+
+def condition_state_producer(
+    identifier: str, parameter_names: set[str] | frozenset[str]
+) -> str | None:
+    """Return the exact runtime source for one applicability identifier."""
+
+    if identifier in parameter_names:
+        return "parameter"
+    if any(
+        fnmatch.fnmatchcase(identifier, pattern)
+        for pattern in CONDITION_STATE_PATTERNS
+    ):
+        return "observed_state"
+    return None
 
 
 def _planned_requests(desired_state: dict[str, Any]) -> list[dict[str, Any]]:
@@ -189,6 +286,11 @@ def _artifact_state(
         for item in parameters.get("artifact_contracts", [])
         if isinstance(item, dict)
     ]
+    declared_types = {
+        str(item.get("artifact_type"))
+        for item in contracts
+        if item.get("artifact_type") and item.get("artifact_type") != "no_artifact"
+    }
     releases = repository.get("stale", {}).get("releases", {}).get("inventory", [])
     immutable_release_detected = any(
         isinstance(release, dict) and release.get("immutable") is True
@@ -214,6 +316,7 @@ def _artifact_state(
         "external_count": len(external),
         "contracts": contracts,
         "contract_count": len(contracts),
+        "identity": {"missing_types": sorted(set(external) - declared_types)},
         "audit_only": bool(parameters.get("audit_only", True)),
         "publish_requested": bool(parameters.get("publish_requested", False)),
         "publish_workflow_detected": bool(
@@ -264,6 +367,21 @@ def _registry_confirmed_artifact_types(
     return sorted(confirmed)
 
 
+def _artifact_categories(
+    artifact_types: list[str], artifact_type_system: dict[str, Any]
+) -> list[str]:
+    """Resolve artifact categories exclusively from the contract type system."""
+
+    selected = set(artifact_types)
+    return [
+        str(category["id"])
+        for category in artifact_type_system.get("categories", [])
+        if isinstance(category, dict)
+        and category.get("id")
+        and selected.intersection(category.get("artifact_types", []))
+    ]
+
+
 def collect_observed_states(desired_state: dict[str, Any]) -> dict[str, Any]:
     """Collect selected external and local facts once, then compose one JSON state."""
 
@@ -276,15 +394,20 @@ def collect_observed_states(desired_state: dict[str, Any]) -> dict[str, Any]:
         parameters.get("default_branch"),
         parameters.get("repository_validation_evidence_file"),
     )
+    raw_artifact_type_system: Any = next(
+        (
+            contract.get("artifact_type_system")
+            for contract in desired_state["contracts"]
+            if contract.get("kind") == "artifact_registry_contract"
+        ),
+        {},
+    )
+    artifact_type_system: dict[str, Any] = (
+        raw_artifact_type_system
+        if isinstance(raw_artifact_type_system, dict)
+        else {}
+    )
     if parameters.get("owner") and parameters.get("repo"):
-        artifact_type_system = next(
-            (
-                contract.get("artifact_type_system")
-                for contract in desired_state["contracts"]
-                if contract.get("kind") == "artifact_registry_contract"
-            ),
-            None,
-        )
         repository = collect_repository(
             fetched, parameters, local, rules, artifact_type_system
         )
@@ -333,25 +456,9 @@ def collect_observed_states(desired_state: dict[str, Any]) -> dict[str, Any]:
         "type": repository.get("types", {}),
         "artifact_type": artifact_types,
         "artifact_type_system": artifact_types,
-        "artifact_category": [
-            category
-            for category, members in {
-                "github_packages": {
-                    "github_packages_container",
-                    "github_packages_npm",
-                    "github_packages_maven",
-                    "github_packages_gradle",
-                    "github_packages_nuget",
-                    "github_packages_rubygems",
-                },
-                "release_assets": {
-                    "github_release_binary",
-                    "generic_binary_archive",
-                    "installer_or_cli_binary",
-                },
-            }.items()
-            if set(artifact_types).intersection(members)
-        ],
+        "artifact_category": _artifact_categories(
+            artifact_types, artifact_type_system
+        ),
         "registry_hosts": artifact["registry_hosts"],
         "detected_external_artifact_count": artifact["external_count"],
         "audit_only": artifact["audit_only"],

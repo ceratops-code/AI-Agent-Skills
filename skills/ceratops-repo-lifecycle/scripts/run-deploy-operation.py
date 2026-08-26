@@ -14,7 +14,7 @@ DEFAULT_CONTRACT = pathlib.Path("deploy/deploy.yml")
 PROFILE = OperationProfile(
     label="Deployment",
     default_contract=DEFAULT_CONTRACT,
-    schema=SCRIPT_ROOT.parent / "references" / "schemas" / "deploy-contract.schema.json",
+    schema=SCRIPT_ROOT.parent / "references" / "schemas" / "deploy.yml.schema.json",
     default_success_status="deployed",
     operation_statuses={},
 )

@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ceratops.dev/schemas/github/github-pr-readiness-deterministic-contract.schema.json",
+  "title": "GitHub PR readiness contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "surface",
+    "description",
+    "source_docs",
+    "free_only",
+    "mutates",
+    "evidence",
+    "checks",
+    "approved_drift",
+    "non_deterministic_review_file"
+  ],
+  "properties": {
+    "schema": { "const": "ceratops.github.pr-readiness.deterministic.v1" },
+    "surface": { "const": "pr" },
+    "description": {
+      "description": "Annotation-only summary of the executable checks.",
+      "type": "string",
+      "minLength": 1
+    },
+    "source_docs": {
+      "description": "Annotation-only source-registry provenance used during human contract review.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "free_only": { "const": true },
+    "mutates": { "const": false },
+    "evidence": {
+      "description": "Executable CLI and live-field inventory; the validator compares it with its implementation constants.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "fields"],
+      "properties": {
+        "command": {
+          "type": "string",
+          "pattern": "^python -m github_pr_workflow validate(?:\\s|$)"
+        },
+        "fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "level_on_drift", "behavior_explanation"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "level_on_drift": {
+            "enum": ["ERROR", "WARN", "ERROR_OR_WARN", "ERROR_OR_ADMIN_BYPASS"]
+          },
+          "behavior_explanation": {
+            "description": "Annotation-only explanation; the Python checker and its behavior tests own enforcement.",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "approved_drift": {
+      "description": "Drift IDs and check mappings are executable workflow contracts; condition and approval text are annotation-only explanations.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "check_ids", "condition", "approval"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "check_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "condition": {
+            "description": "Annotation-only explanation of the workflow condition.",
+            "type": "string",
+            "minLength": 1
+          },
+          "approval": {
+            "description": "Annotation-only explanation of the workflow treatment.",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "non_deterministic_review_file": { "type": "string", "minLength": 1 }
+  }
+}

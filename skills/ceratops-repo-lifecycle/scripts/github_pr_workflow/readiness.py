@@ -22,11 +22,66 @@ from typing import Any
 
 from github_contract_engine.github_api import run_gh_graphql
 from github_contract_engine.levels import ERROR, count_by_level
-
+from github_contract_engine.schema_validation import validate_contract_document
 
 SCRIPTS_DIR = pathlib.Path(__file__).resolve().parent.parent
 SKILL_DIR = SCRIPTS_DIR.parent
 ROOT = SKILL_DIR.parent.parent if SKILL_DIR.parent.name == "skills" else SKILL_DIR
+PR_CONTRACT_SCHEMA = (
+    SKILL_DIR
+    / "references"
+    / "schemas"
+    / "github-pr-readiness-deterministic-contract.schema.json"
+)
+IMPLEMENTED_CHECK_LEVELS = {
+    "pr.state_open": "ERROR",
+    "pr.not_draft": "ERROR",
+    "pr.mergeable": "ERROR_OR_WARN",
+    "pr.review_decision": "ERROR_OR_ADMIN_BYPASS",
+    "pr.status_checks": "ERROR_OR_WARN",
+    "pr.auto_merge_request": "WARN",
+}
+IMPLEMENTED_CONTRACT_FLAGS = {
+    "schema": "ceratops.github.pr-readiness.deterministic.v1",
+    "surface": "pr",
+    "free_only": True,
+    "mutates": False,
+}
+IMPLEMENTED_EVIDENCE_COMMAND = (
+    "python -m github_pr_workflow validate --pr NUMBER_OR_URL --cwd PATH --json "
+    "[--allow-admin-review-bypass]"
+)
+PR_VIEW_FIELDS = (
+    "number",
+    "url",
+    "state",
+    "isDraft",
+    "mergeable",
+    "reviewDecision",
+    "statusCheckRollup",
+    "headRefName",
+    "headRefOid",
+    "baseRefName",
+    "autoMergeRequest",
+)
+IMPLEMENTED_EVIDENCE_FIELDS = frozenset(
+    {
+        *PR_VIEW_FIELDS,
+        "ref.rules.type",
+        "ref.rules.parameters.requiredApprovingReviewCount",
+        "ref.rules.parameters.requiredReviewThreadResolution",
+        "ref.rules.parameters.requiredStatusChecks.context",
+        "ref.branchProtectionRule.requiresApprovingReviews",
+        "ref.branchProtectionRule.requiredApprovingReviewCount",
+        "ref.branchProtectionRule.requiresConversationResolution",
+        "ref.branchProtectionRule.requiresStatusChecks",
+        "ref.branchProtectionRule.requiredStatusChecks.context",
+    }
+)
+IMPLEMENTED_APPROVED_DRIFT = {
+    "direct_merge_without_auto_merge": frozenset({"pr.auto_merge_request"}),
+    "auto_merge_waits_for_pending_checks": frozenset({"pr.status_checks"}),
+}
 
 PULL_REQUEST_RULES_QUERY = """
 query(
@@ -160,20 +215,7 @@ def current_branch(cwd: pathlib.Path) -> str | None:
 def gh_pr_view(selector: str | None, cwd: pathlib.Path) -> dict[str, Any]:
     """Fetch the live PR fields used by the merge-readiness policy."""
 
-    fields = [
-        "number",
-        "url",
-        "state",
-        "isDraft",
-        "mergeable",
-        "reviewDecision",
-        "statusCheckRollup",
-        "headRefName",
-        "headRefOid",
-        "baseRefName",
-        "autoMergeRequest",
-    ]
-    args = ["gh", "pr", "view", "--json", ",".join(fields)]
+    args = ["gh", "pr", "view", "--json", ",".join(PR_VIEW_FIELDS)]
     if selector:
         args.append(selector)
     return json.loads(require_command(args, cwd))
@@ -490,16 +532,109 @@ def default_contract_path() -> pathlib.Path:
 
 
 def load_contract(path: pathlib.Path) -> dict[str, Any]:
-    """Load the PR readiness contract so finding IDs stay contract-backed."""
+    """Load and validate the PR readiness contract before using it."""
 
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        contract = json.loads(path.read_text(encoding="utf-8"))
+        schema = json.loads(PR_CONTRACT_SCHEMA.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CommandError(f"Could not load PR readiness contract: {exc}") from exc
+    schema_errors = validate_contract_document(
+        contract,
+        schema,
+        document_name=str(path),
+        schema_name=str(PR_CONTRACT_SCHEMA),
+    )
+    if schema_errors:
+        raise CommandError(schema_errors[0])
+    implementation_errors = contract_implementation_errors(contract)
+    if implementation_errors:
+        raise CommandError(implementation_errors[0])
+    return contract
 
 
 def contract_check_ids(contract: dict[str, Any]) -> set[str]:
     """Return deterministic check IDs declared by the PR contract."""
 
     return {str(check.get("id")) for check in contract.get("checks", []) if check.get("id")}
+
+
+def contract_implementation_errors(contract: dict[str, Any]) -> list[str]:
+    """Return contract declarations that the PR validator does not implement."""
+
+    errors: list[str] = []
+    for field, expected in IMPLEMENTED_CONTRACT_FLAGS.items():
+        if contract.get(field) != expected:
+            errors.append(
+                f"PR readiness {field} declares {contract.get(field)!r}; "
+                f"validator implements {expected!r}"
+            )
+    evidence = contract.get("evidence", {})
+    if evidence.get("command") != IMPLEMENTED_EVIDENCE_COMMAND:
+        errors.append("PR readiness evidence command does not match the validator CLI")
+    fields = evidence.get("fields", [])
+    if len(fields) != len(set(fields)):
+        errors.append("PR readiness evidence fields contain duplicates")
+    declared_fields = set(fields)
+    errors.extend(
+        f"PR readiness evidence field has no collector implementation: {field}"
+        for field in sorted(declared_fields - IMPLEMENTED_EVIDENCE_FIELDS)
+    )
+    errors.extend(
+        f"PR readiness collector field is absent from the contract: {field}"
+        for field in sorted(IMPLEMENTED_EVIDENCE_FIELDS - declared_fields)
+    )
+    checks = contract.get("checks", [])
+    ids = [str(check.get("id")) for check in checks if check.get("id")]
+    duplicates = sorted({check_id for check_id in ids if ids.count(check_id) > 1})
+    errors.extend(f"duplicate PR readiness check ID: {check_id}" for check_id in duplicates)
+    declared = set(ids)
+    implemented = set(IMPLEMENTED_CHECK_LEVELS)
+    errors.extend(
+        f"PR readiness check has no validator implementation: {check_id}"
+        for check_id in sorted(declared - implemented)
+    )
+    errors.extend(
+        f"PR validator check is absent from the contract: {check_id}"
+        for check_id in sorted(implemented - declared)
+    )
+    for check in checks:
+        check_id = str(check.get("id"))
+        expected_level = IMPLEMENTED_CHECK_LEVELS.get(check_id)
+        actual_level = check.get("level_on_drift")
+        if expected_level is not None and actual_level != expected_level:
+            errors.append(
+                f"PR readiness check {check_id} declares {actual_level!r}; "
+                f"validator implements {expected_level!r}"
+            )
+    drift_ids: list[str] = []
+    for allowance in contract.get("approved_drift", []):
+        drift_id = str(allowance.get("id"))
+        drift_ids.append(drift_id)
+        implemented_checks = IMPLEMENTED_APPROVED_DRIFT.get(drift_id)
+        declared_checks = frozenset(allowance.get("check_ids", []))
+        if implemented_checks is None:
+            errors.append(f"approved PR drift has no workflow implementation: {drift_id}")
+        elif declared_checks != implemented_checks:
+            errors.append(
+                f"approved PR drift {drift_id} check mapping does not match "
+                "the merge workflow"
+            )
+        errors.extend(
+            f"approved PR drift {drift_id} references unknown check: {check_id}"
+            for check_id in sorted(set(allowance.get("check_ids", [])) - declared)
+        )
+    errors.extend(
+        f"duplicate approved PR drift ID: {drift_id}"
+        for drift_id in sorted(
+            {drift_id for drift_id in drift_ids if drift_ids.count(drift_id) > 1}
+        )
+    )
+    errors.extend(
+        f"merge workflow drift is absent from the PR contract: {drift_id}"
+        for drift_id in sorted(set(IMPLEMENTED_APPROVED_DRIFT) - set(drift_ids))
+    )
+    return errors
 
 
 def add(
@@ -762,7 +897,7 @@ def validate_readiness(
     *,
     allow_admin_review_bypass: bool = False,
 ) -> tuple[dict[str, object], list[Finding]]:
-    """Evaluate readiness and enforce that every emitted check is contract-backed."""
+    """Evaluate readiness and enforce exact contract-to-validator check parity."""
 
     contract = load_contract(contract_path)
     summary, findings = pr_readiness(
@@ -770,16 +905,13 @@ def validate_readiness(
         cwd,
         allow_admin_review_bypass=allow_admin_review_bypass,
     )
-    unknown = sorted(
-        {finding.check for finding in findings} - contract_check_ids(contract)
-    )
-    if unknown:
-        add(
-            findings,
-            "ERROR",
-            "contract.unknown_check_ids",
-            "Validator emitted checks missing from the PR readiness contract.",
-            actual=unknown,
+    emitted = {finding.check for finding in findings}
+    declared = contract_check_ids(contract)
+    if emitted != declared:
+        raise CommandError(
+            "PR validator output does not match the contract; "
+            f"missing={sorted(declared - emitted)!r}, "
+            f"undeclared={sorted(emitted - declared)!r}"
         )
     return summary, findings
 

@@ -171,10 +171,10 @@ The contract structure is split by the owning lifecycle skill:
 
 - `release/release.yml` declares a target repository's executable remote
   release-publication operations and is validated against
-  `skills/ceratops-repo-lifecycle/references/schemas/release-contract.schema.json`.
+  `skills/ceratops-repo-lifecycle/references/schemas/release.yml.schema.json`.
 - `deploy/deploy.yml` declares this repository's executable deployment
   operations and is validated against
-  `skills/ceratops-repo-lifecycle/references/schemas/deploy-contract.schema.json`.
+  `skills/ceratops-repo-lifecycle/references/schemas/deploy.yml.schema.json`.
 - `skills/ceratops-repo-lifecycle/references/contracts/github-contract-source-docs.json`
   records official source documents and reference repositories used by GitHub,
   repo, PR readiness, code, and artifact contracts.

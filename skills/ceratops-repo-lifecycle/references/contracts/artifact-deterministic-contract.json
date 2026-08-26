@@ -18,16 +18,6 @@
       "type": "string",
       "required": true
     },
-    "owner_type": {
-      "type": "string",
-      "required": false,
-      "allowed_values": [
-        "org",
-        "user",
-        "autodetect"
-      ],
-      "default": "autodetect"
-    },
     "default_branch": {
       "type": "string",
       "required": false,
@@ -40,43 +30,79 @@
     "artifact_contracts": {
       "type": "array",
       "required": false,
-      "description": "External-artifact identity records loaded from local release/release.yml when declared, otherwise supplied explicitly. Every non-no_artifact record confirms publication even when no workflow is present.",
-      "item_shape": {
-        "artifact_id": "stable local contract id",
-        "artifact_type": "one artifact_type_system.artifact_types value",
-        "registry": "registry host or github_release/pages",
-        "package_or_image_name": "external artifact name",
-        "version_source": "manifest, git tag, release tag, package metadata, or explicit approved source",
-        "release_policy": "manual, tag-driven, workflow-driven, no-artifact, or approved custom value",
-        "tag_style": "semver, v-prefix-semver, calendar, sha, digest, or approved custom value",
-        "changelog_source": "CHANGELOG.md, GitHub release notes, package metadata, or approved custom value",
-        "post_publish_consumer_check": "command or endpoint used to verify consumers can fetch and use the published artifact"
-      }
+      "description": "External-artifact identity records loaded from local release/release.yml when declared, otherwise supplied explicitly. Every non-no_artifact record confirms publication even when no workflow is present."
+    },
+    "publish_requested": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "description": "Caller-provided signal that this run intends publication; the audit never publishes by itself."
+    },
+    "local_build_succeeded": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "description": "Caller-recorded result of the repository's local build or package step."
+    },
+    "consumer_smoke_succeeded": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "description": "Caller-recorded result of consuming the built or published artifact."
+    },
+    "publish_authorized": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "description": "Caller-provided confirmation that publication is authorized."
+    },
+    "linked_artifacts_claimed": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "description": "Caller-provided signal that linked artifact metadata is claimed."
+    },
+    "artifact_was_published": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "description": "Caller-recorded publication outcome used to activate live verification."
+    },
+    "final_answer_makes_no_artifact_claim": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "description": "Caller-provided signal that the final result explicitly claims no external artifact."
+    },
+    "docker_build_push_action_default_provenance_applies": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "description": "Caller-confirmed signal that the selected Docker build-push action emits provenance by default."
     },
     "current_change_affects_artifact": {
       "type": "boolean",
       "required": false,
-      "default": false
+      "default": false,
+      "description": "Caller-provided signal that the current repository change affects an external artifact or its publication path."
     },
     "final_answer_makes_artifact_claim": {
       "type": "boolean",
       "required": false,
-      "default": false
+      "default": false,
+      "description": "Caller-provided signal that the reported result claims an external artifact exists or was published."
     },
     "merged_change_requires_release": {
       "type": "boolean",
       "required": false,
-      "default": false
+      "default": false,
+      "description": "Caller-provided signal that the merged change requires a release publication decision."
     },
     "audit_only": {
       "type": "boolean",
       "required": false,
-      "default": true
-    },
-    "approved_drift_profile": {
-      "type": "string",
-      "required": false,
-      "default": "default"
+      "default": true,
+      "description": "True for report-only contract audits; this validator never treats the flag as publication authorization."
     }
   },
   "required_scopes": [
@@ -147,35 +173,7 @@
         "allowed_checks": [
           "common.publish_guard",
           "common.live_registry_verification"
-        ],
-        "requires_report": true
-      },
-      {
-        "id": "no_external_artifact_is_valid_when_consistent",
-        "when": "detected_external_artifact_count == 0 && no_artifact_docs_consistent == true",
-        "allowed_checks": [
-          "common.identity_contract",
-          "common.local_build_package_consume",
-          "common.live_registry_verification"
-        ],
-        "requires_report": false
-      },
-      {
-        "id": "registry_without_trusted_publishing_support_may_use_scoped_token",
-        "when": "selected_registry_supports_short_lived_identity == false && token_fallback_scope_is_minimal == true",
-        "allowed_checks": [
-          "common.short_lived_identity_policy"
-        ],
-        "requires_report": true
-      },
-      {
-        "id": "private_or_internal_artifact_may_have_unreachable_public_endpoint",
-        "when": "artifact_visibility in ['private','internal'] && token_scope_missing_for_registry_read == true",
-        "allowed_checks": [
-          "common.live_registry_verification",
-          "github_packages.live_package_metadata"
-        ],
-        "requires_report": true
+        ]
       }
     ]
   },
@@ -677,7 +675,7 @@
         ]
       }
     ],
-    "resolution_rules": [
+    "behavior_explanations": [
       {
         "id": "multi_artifact_repos_are_allowed",
         "rule": "A repo may publish several artifact types; every detected external artifact gets its own identity record and applicable checks."
@@ -701,58 +699,6 @@
     ]
   },
   "fetch_bundles": {
-    "local_artifact_bundle": {
-      "description": "Single local scan for manifests, workflows, release config, changelog, build files, packaging outputs, and docs publish signals.",
-      "sources": [
-        "git_tree",
-        "README*",
-        "CHANGELOG*",
-        "RELEASE*",
-        ".github/workflows/*",
-        "Dockerfile",
-        "**/Dockerfile",
-        ".dockerignore",
-        "pyproject.toml",
-        "setup.cfg",
-        "setup.py",
-        "package.json",
-        "package-lock.json",
-        "npm-shrinkwrap.json",
-        "pnpm-lock.yaml",
-        "yarn.lock",
-        "pom.xml",
-        "build.gradle",
-        "build.gradle.kts",
-        "*.csproj",
-        "*.fsproj",
-        "*.vbproj",
-        "*.nuspec",
-        "Cargo.toml",
-        "Cargo.lock",
-        "*.gemspec",
-        "*.psd1",
-        "Chart.yaml",
-        "*.tf"
-      ],
-      "feeds_checks": [
-        "common.real_deliverable_classification",
-        "common.identity_contract",
-        "common.version_source",
-        "common.local_build_package_consume",
-        "common.short_lived_identity_policy",
-        "common.attestation_permissions",
-        "docker_oci.*",
-        "pypi.*",
-        "npm.*",
-        "maven.*",
-        "nuget.*",
-        "crates.*",
-        "rubygems.*",
-        "powershell_gallery.*",
-        "github_release_assets.*",
-        "docs_site.*"
-      ]
-    },
     "github_release_bundle": {
       "description": "GitHub release, tag, and release-asset metadata for release artifacts and version verification.",
       "endpoints": [
@@ -771,118 +717,6 @@
         "common.version_source",
         "common.live_registry_verification",
         "github_release_assets.assets_and_tags"
-      ]
-    },
-    "github_packages_bundle": {
-      "description": "GitHub Packages metadata for supported package registries.",
-      "endpoints": [
-        "GET /orgs/${owner}/packages?package_type=container",
-        "GET /orgs/${owner}/packages?package_type=npm",
-        "GET /orgs/${owner}/packages?package_type=maven",
-        "GET /orgs/${owner}/packages?package_type=nuget",
-        "GET /orgs/${owner}/packages?package_type=rubygems",
-        "GET /users/${owner}/packages?package_type=container",
-        "GET /users/${owner}/packages?package_type=npm",
-        "GET /users/${owner}/packages?package_type=maven",
-        "GET /users/${owner}/packages?package_type=nuget",
-        "GET /users/${owner}/packages?package_type=rubygems"
-      ],
-      "endpoint_selection": "Use /orgs when owner_type is org; use /users when owner_type is user; autodetect from repo.owner.type.",
-      "feeds_checks": [
-        "github_packages.live_package_metadata"
-      ]
-    },
-    "registry_metadata_bundle": {
-      "description": "Registry-specific live metadata. The checker calls only the endpoints for detected artifact types.",
-      "endpoints_by_type": {
-        "pypi_python_package": [
-          "GET https://pypi.org/pypi/${package}/json"
-        ],
-        "npm_package": [
-          "GET https://registry.npmjs.org/${package}"
-        ],
-        "maven_package": [
-          "GET https://search.maven.org/solrsearch/select?q=g:${groupId}+AND+a:${artifactId}"
-        ],
-        "gradle_maven_package": [
-          "GET https://search.maven.org/solrsearch/select?q=g:${groupId}+AND+a:${artifactId}"
-        ],
-        "nuget_package": [
-          "GET https://api.nuget.org/v3-flatcontainer/${package}/index.json"
-        ],
-        "crates_package": [
-          "GET https://crates.io/api/v1/crates/${crate}"
-        ],
-        "rubygems_package": [
-          "GET https://rubygems.org/api/v1/gems/${gem}.json"
-        ],
-        "powershell_gallery_module": [
-          "GET https://www.powershellgallery.com/api/v2/Packages?$filter=Id eq '${module}'"
-        ],
-        "docker_oci_image": [
-          "GET https://hub.docker.com/v2/namespaces/${docker_namespace}/repositories/${docker_repository}/",
-          "GET https://hub.docker.com/v2/namespaces/${docker_namespace}/repositories/${docker_repository}/tags?page_size=25&ordering=last_updated"
-        ]
-      },
-      "feeds_checks": [
-        "common.live_registry_verification",
-        "pypi.live_version_install_smoke",
-        "npm.live_package_version_smoke",
-        "maven.metadata_publish_and_verify",
-        "nuget.metadata_pack_publish_and_verify",
-        "crates.metadata_package_publish_and_verify",
-        "rubygems.metadata_build_publish_and_verify",
-        "powershell_gallery.metadata_publish_and_verify",
-        "docker_oci.build_publish_and_pull"
-      ]
-    },
-    "post_publish_consumer_bundle": {
-      "description": "Local smoke checks for the exact published artifact, not an editable checkout.",
-      "commands_by_type": {
-        "pypi_python_package": [
-          "python -m pip install ${package}==${version}",
-          "${post_publish_consumer_check}"
-        ],
-        "npm_package": [
-          "npm view ${package}@${version} version",
-          "${post_publish_consumer_check}"
-        ],
-        "maven_package": [
-          "mvn dependency:get -Dartifact=${groupId}:${artifactId}:${version}",
-          "${post_publish_consumer_check}"
-        ],
-        "nuget_package": [
-          "dotnet add package ${package} --version ${version}",
-          "${post_publish_consumer_check}"
-        ],
-        "crates_package": [
-          "cargo install ${crate} --version ${version} --locked",
-          "${post_publish_consumer_check}"
-        ],
-        "rubygems_package": [
-          "gem install ${gem} -v ${version}",
-          "${post_publish_consumer_check}"
-        ],
-        "powershell_gallery_module": [
-          "Install-PSResource ${module} -Version ${version}",
-          "${post_publish_consumer_check}"
-        ],
-        "docker_oci_image": [
-          "docker pull ${image}@${digest_or_tag}",
-          "${post_publish_consumer_check}"
-        ],
-        "github_release_binary": [
-          "download_release_asset:${release}:${asset}",
-          "${post_publish_consumer_check}"
-        ],
-        "github_pages_site": [
-          "GET ${pages_url}",
-          "${post_publish_consumer_check}"
-        ]
-      },
-      "feeds_checks": [
-        "common.local_build_package_consume",
-        "common.live_registry_verification"
       ]
     }
   },
@@ -933,6 +767,10 @@
           "path": "/artifact/contracts",
           "operator": "all_objects_have",
           "desired_path": "/desired/required_per_artifact_fields"
+        },
+        {
+          "path": "/artifact/identity/missing_types",
+          "operator": "empty"
         }
       ]
     },

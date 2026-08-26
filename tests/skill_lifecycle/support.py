@@ -334,7 +334,7 @@ def install_bundle_manifest(bundle_root: pathlib.Path) -> None:
         / "ceratops-repo-lifecycle"
         / "references"
         / "schemas"
-        / "deploy-contract.schema.json"
+        / "deploy.yml.schema.json"
     )
     installed_schema.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(
@@ -343,7 +343,7 @@ def install_bundle_manifest(bundle_root: pathlib.Path) -> None:
         / "ceratops-repo-lifecycle"
         / "references"
         / "schemas"
-        / "deploy-contract.schema.json",
+        / "deploy.yml.schema.json",
         installed_schema,
     )
 

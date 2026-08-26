@@ -35,21 +35,6 @@
       "required": false,
       "default_from": "repo.default_branch"
     },
-    "expected_codeowners_owners": {
-      "type": "array",
-      "required": false,
-      "default": []
-    },
-    "expected_required_checks": {
-      "type": "array",
-      "required": false,
-      "default": []
-    },
-    "artifact_publishers": {
-      "type": "array",
-      "required": false,
-      "default": []
-    },
     "local_repo_path": {
       "type": "string",
       "required": false
@@ -62,11 +47,6 @@
       "type": "array",
       "required": false,
       "default": []
-    },
-    "approved_drift_profile": {
-      "type": "string",
-      "required": false,
-      "default": "default"
     }
   },
   "required_scopes": [
