@@ -65,6 +65,34 @@ def _parse_datetime(value: Any) -> dt.datetime | None:
         return None
 
 
+def _latest_stable_release_assets_count(releases: list[Any]) -> int:
+    """Count assets only on the newest published non-prerelease release."""
+
+    stable = [
+        release
+        for release in releases
+        if isinstance(release, dict)
+        and not release.get("draft")
+        and not release.get("prerelease")
+    ]
+    if not stable:
+        return 0
+
+    def published_timestamp(release: dict[str, Any]) -> float:
+        published = _parse_datetime(
+            release.get("published_at") or release.get("created_at")
+        )
+        if published is None:
+            return float("-inf")
+        if published.tzinfo is None:
+            published = published.replace(tzinfo=dt.timezone.utc)
+        return published.timestamp()
+
+    latest = max(stable, key=published_timestamp)
+    assets = latest.get("assets", [])
+    return len(assets) if isinstance(assets, list) else 0
+
+
 def _older_than(value: Any, days: int, now: dt.datetime | None = None) -> bool:
     parsed = _parse_datetime(value)
     if not parsed:
@@ -287,11 +315,7 @@ def collect_repository(
             fetched, "/repos/${owner}/${repo}/releases?per_page=100", parameters
         ).data
     )
-    release_assets_count = sum(
-        len(release.get("assets", []))
-        for release in releases
-        if isinstance(release, dict)
-    )
+    release_assets_count = _latest_stable_release_assets_count(releases)
     declared_artifact_types = [
         str(contract["artifact_type"])
         for contract in parameters.get("artifact_contracts", [])

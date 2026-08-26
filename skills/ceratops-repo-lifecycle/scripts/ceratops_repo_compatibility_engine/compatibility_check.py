@@ -96,6 +96,27 @@ def _string_list_errors(value: object, label: str) -> list[str]:
     return []
 
 
+def _runtime_payload_list_errors(value: object, label: str) -> list[str]:
+    """Accept portable payload paths and exact source-target mappings."""
+
+    if not isinstance(value, list):
+        return [f"{label} must be a list of payload declarations"]
+    errors: list[str] = []
+    for index, item in enumerate(value):
+        if isinstance(item, str) and item:
+            continue
+        if (
+            isinstance(item, Mapping)
+            and set(item) == {"source", "target"}
+            and all(isinstance(item[key], str) and item[key] for key in item)
+        ):
+            continue
+        errors.append(
+            f"{label}[{index}] must be a nonempty path or source-target mapping"
+        )
+    return errors
+
+
 def _manifest_errors(
     root: pathlib.Path,
     path: pathlib.Path,
@@ -139,7 +160,12 @@ def _manifest_errors(
             errors.append(f"section manifest {field} must be an object")
             continue
         for name, items in value.items():
-            errors.extend(_string_list_errors(items, f"{field}.{name}"))
+            validator = (
+                _runtime_payload_list_errors
+                if field == "runtime_payloads"
+                else _string_list_errors
+            )
+            errors.extend(validator(items, f"{field}.{name}"))
 
     if source_skills and "core" not in sections:
         errors.append("section manifest must define core when source skills exist")

@@ -278,7 +278,8 @@
         "and_when_matching_path_contains_all": [
           "\"name\"",
           "\"version\""
-        ]
+        ],
+        "and_when_matching_json_field_not_true": "private"
       },
       {
         "artifact_type": "maven_package",

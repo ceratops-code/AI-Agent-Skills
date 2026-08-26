@@ -100,6 +100,7 @@ ARTIFACT_DETECTOR_KEYS = {
     "and_when_any_path_matches",
     "and_when_matching_path_contains_any",
     "and_when_matching_path_contains_all",
+    "and_when_matching_json_field_not_true",
     "when_workflow_contains_any",
     "and_when_workflow_contains_any",
     "and_when_workflow_contains_all",
@@ -488,6 +489,13 @@ def _artifact_types(
         if detector.get("when_release_assets_count_gt") is not None:
             matched = matched and release_assets_count > int(
                 detector["when_release_assets_count_gt"]
+            )
+        json_field = detector.get("and_when_matching_json_field_not_true")
+        if json_field:
+            matching_json = [_json(texts.get(path, "")) for path in detector_paths]
+            matched = matched and any(
+                error is None and value.get(json_field) is not True
+                for value, error in matching_json
             )
         condition = detector.get("when")
         if condition == "repo.has_pages == true":
@@ -880,7 +888,7 @@ def collect_local_repository(
         patterns = collection.get("regex_patterns")
         if not patterns:
             continue
-        ignored = set(collection.get("ignore_paths", []))
+        ignored = list(collection.get("ignore_paths", []))
         ignored_windows_prefixes = collection.get(
             "ignore_windows_path_prefixes", []
         )
@@ -888,7 +896,7 @@ def collect_local_repository(
         for pattern in patterns:
             regex = re.compile(pattern)
             for name, text in local["texts"].items():
-                if name in ignored:
+                if path_matches([name], ignored):
                     continue
                 if any(
                     not _has_ignored_windows_prefix(

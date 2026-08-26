@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import pathlib
 import shutil
@@ -114,6 +115,30 @@ def test_compatibility_materializer_supplies_target_identity_and_assignments(
         "validator": "materialized",
         "workflow": "materialized",
     }
+    payload = repo / "skills" / "sections" / "scripts" / "shared.py"
+    payload.parent.mkdir()
+    payload.write_text("VALUE = True\n", encoding="utf-8", newline="\n")
+    manifest["runtime_payloads"] = {
+        "alpha-tool": [
+            {
+                "source": "skills/sections/scripts/shared.py",
+                "target": "scripts/shared.py",
+            }
+        ]
+    }
+    (repo / "skills" / "skill-sections.json").write_text(
+        json.dumps(manifest, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    compatibility = importlib.import_module(
+        "ceratops_repo_compatibility_engine.compatibility_check"
+    )
+    assert compatibility.check_repository(repo) == {
+        "applicable": True,
+        "valid": True,
+        "errors": [],
+    }
 
 
 def test_compatibility_materializer_supports_repositories_without_skills(
@@ -147,6 +172,15 @@ def test_compatibility_materializer_supports_repositories_without_skills(
     )
     (repo / "package.json").write_text(
         json.dumps({"scripts": {"lint": "echo lint"}}) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_probe.py").write_text(
+        "import unittest\n\n"
+        "class TestProbe(unittest.TestCase):\n"
+        "    def test_probe(self) -> None:\n"
+        "        self.assertTrue(True)\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -217,7 +251,7 @@ def test_compatibility_materializer_supports_repositories_without_skills(
     assert not (repo / "deploy").exists()
     assert not (repo / "scripts" / "install-skills-bootstrap.py").exists()
     assert output["repository_validation"] == {
-        "checks": ["npm-lint"],
+        "checks": ["npm-lint", "unittest"],
         "validator": "materialized",
         "workflow": "materialized",
     }
@@ -245,6 +279,7 @@ def test_compatibility_materializer_supports_repositories_without_skills(
     assert validation.stdout == "OK\n"
     assert not validation_evidence.exists()
     assert not validation_temporary.exists()
+    assert not list(repo.rglob("__pycache__"))
 
     omitted = tmp_path / "empty-without-deploy"
     shutil.copytree(repo, omitted)
