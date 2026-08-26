@@ -115,6 +115,25 @@ def test_selection_infrastructure_and_shared_support_select_full_suite(
     assert {reason.path for reason in selection.reasons} == {path}
 
 
+def test_agents_history_selects_full_suite_from_repository_manifest(
+    test_runner_module: Any,
+) -> None:
+    runner = test_runner_module
+    root = pathlib.Path(__file__).resolve().parents[2]
+    manifest = runner.load_manifest(root / "tests" / "test-impact.json")
+
+    selection = runner.selection_from_changes(
+        manifest,
+        (runner.ChangedFile("M", ("AGENTS.history.json",)),),
+    )
+
+    assert selection.full_suite
+    assert not selection.full_suite_fallback
+    assert {reason.rule for reason in selection.reasons} == {
+        "full-suite:AGENTS.history.json"
+    }
+
+
 def test_changed_test_file_selects_its_single_owner(test_runner_module: Any) -> None:
     runner = test_runner_module
     selection = runner.selection_from_changes(

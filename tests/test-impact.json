@@ -114,6 +114,7 @@
   ],
   "full_suite_paths": [
     ".github/workflows/**",
+    "AGENTS.history.json",
     "AGENTS.md",
     "package-lock.json",
     "package.json",
