@@ -83,11 +83,9 @@ selected merged source branches and worktrees.
    performs no remote mutation. A `preserved` legacy source is outside
    pending-work blockers and destructive cleanup. An absent or proven-empty
    scope is a cleanup no-op.
-4. (D) The delegated GitHub workflow owns deterministic, decision-complete
-   PR-gate resolution for the exact head. It reads linked Actions runs with
-   argument-array `gh run view --json jobs` calls, matches affected jobs inside
-   the helper, and returns bounded run and job evidence without shell-evaluated
-   `--jq`.
+4. (D) The delegated GitHub workflow must resolve exact-head gates with bounded,
+   shell-safe evidence. A confirmed Actions outage must stop shipping with
+   `external_service_outage`; gates are never bypassed.
 5. Only after those gates pass, integrated ship delegates the final exact-head
    merge to `merge.merge_verified_pr(admin=True)`. It inherits the shared
    merge action's checkpointed dedicated-endpoint bypass, restoration, read-back,

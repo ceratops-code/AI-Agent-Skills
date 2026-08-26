@@ -22,7 +22,7 @@ from typing import Any, Mapping
 from github_contract_engine.github_api import run_gh_api, run_json_command
 from github_contract_engine.levels import ERROR, WARN
 
-from . import codex_review, ensure_pr, merge, readiness, sync
+from . import actions_availability, codex_review, ensure_pr, merge, readiness, sync
 from .command import CommandError, require_output, require_success, run_command
 
 PHASES = ("prepared", "pr_ready", "gates_passed", "merged", "synchronized")
@@ -86,6 +86,28 @@ def _repository_name(repo_root: pathlib.Path, requested: str | None) -> str:
     if not isinstance(name, str) or name.count("/") != 1:
         raise ShipError("Could not infer GitHub repository; pass --repo OWNER/REPO.")
     return name
+
+
+def _enforce_actions_availability(repository: str, commit: str) -> None:
+    """Stop before remote mutation when GitHub confirms an Actions outage."""
+
+    outage = actions_availability.confirmed_actions_outage()
+    if outage is None:
+        return
+    raise ShipBlocked(
+        "GitHub Actions has a confirmed outage; shipping stopped.",
+        {
+            "phase": "gates",
+            "remote_mutation": False,
+            "blocker": {
+                "kind": "external_service_outage",
+                "service": "github_actions",
+                "repository": repository,
+                "head_oid": commit,
+                "evidence": outage,
+            },
+        },
+    )
 
 
 def _checkpoint_directory(repo_root: pathlib.Path, repository: str) -> pathlib.Path:
@@ -1830,6 +1852,9 @@ def ship(args: argparse.Namespace) -> dict[str, Any]:
         pending_work_identity,
     )
     changes: list[str] = []
+
+    if not _phase_at_least(state, "merged"):
+        _enforce_actions_availability(repository, commit)
 
     if not _phase_at_least(state, "pr_ready"):
         if pending_work_scope is not None:
