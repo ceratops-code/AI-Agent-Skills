@@ -8,11 +8,12 @@ after success; it invalidates the earlier success before checks and cannot be
 reopened after passing. Prepare collects declared pytest nodes without running
 tests. Checks use closed structured forms and run without a shell.
 Source files are never patched, staged, committed, installed, promoted, or
-rolled back. Prepare records exact cleanup ownership beneath the verified task
-temp root, verify retains detailed evidence, and finalize is the caller's
-explicit signal that successful verification and requested deployment/use are
-complete. Finalize removes only recorded workflow-owned request, state, and
-evidence files, then removes the verified task-temp root only when empty.
+rolled back. Prepare records exact cleanup ownership and an active-update
+retention marker beneath the verified task temp root, verify retains detailed
+evidence, and finalize is the caller's explicit signal that successful
+verification and requested deployment/use are complete. Finalize removes only
+recorded workflow-owned request, state, evidence, and retention-marker files,
+then removes the verified task-temp root only when empty.
 Stdout is only ``OK`` and failures are one compact stderr line.
 """
 
@@ -33,6 +34,8 @@ REQUEST_SCHEMA = "ceratops-skill-update-request.v2"
 STATE_SCHEMA = "ceratops-skill-update-state.v2"
 EVIDENCE_SCHEMA = "ceratops-skill-update-evidence.v2"
 CLEANUP_SCHEMA = "ceratops-skill-update-cleanup.v1"
+RETENTION_SCHEMA = "ceratops-skill-update-retention.v1"
+RETENTION_MARKER = ".ceratops-skill-update-active.json"
 REQUEST_FIELDS = {
     "schema",
     "repo_root",
@@ -73,6 +76,7 @@ CLEANUP_FIELDS = {
 OWNED_ARTIFACT_FIELDS = {"role", "path", "sha256"}
 VERIFICATION_FIELDS = {"status", "evidence_sha256", "input_sha256", "generation"}
 DISPOSABLE_ROLES = {"request", "state", "evidence"}
+OWNED_ROLES = DISPOSABLE_ROLES | {"retention"}
 SKILL_NAME_RE = re.compile(
     r"^(?![a-z0-9-]*--)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
 )
@@ -710,38 +714,64 @@ def command_prepare(request_path: pathlib.Path, state_path: pathlib.Path) -> Non
         "state output",
         must_exist=False,
     )
-    if len({resolved_request, resolved_state, evidence_path}) != 3:
-        raise UpdateExecutionError("request, state, and evidence paths must differ")
+    retention_path = _task_artifact(
+        task_temp_root / RETENTION_MARKER,
+        task_temp_root,
+        "retention marker",
+        must_exist=False,
+    )
+    if len({resolved_request, resolved_state, evidence_path, retention_path}) != 4:
+        raise UpdateExecutionError(
+            "request, state, evidence, and retention paths must differ"
+        )
     if resolved_state.exists():
         raise UpdateExecutionError(f"refusing to overwrite state output: {resolved_state}")
     if evidence_path.exists():
         raise UpdateExecutionError(
             f"refusing to overwrite evidence output: {evidence_path}"
         )
-    owned_artifacts: list[dict[str, object]] = [
-        {"role": "state", "path": str(resolved_state), "sha256": None},
-        {"role": "evidence", "path": str(evidence_path), "sha256": None},
-    ]
-    protected_artifacts: list[str] = []
-    if "request" in disposable:
-        owned_artifacts.insert(
-            0,
-            {
-                "role": "request",
-                "path": str(resolved_request),
-                "sha256": _file_sha256(resolved_request),
-            },
+    if retention_path.exists():
+        raise UpdateExecutionError(
+            f"refusing to overwrite retention marker: {retention_path}"
         )
-    else:
-        protected_artifacts.append(str(resolved_request))
-    state["cleanup"] = {
-        "schema": CLEANUP_SCHEMA,
-        "task_temp_root": str(task_temp_root),
-        "owned_artifacts": owned_artifacts,
-        "protected_artifacts": protected_artifacts,
-    }
-    state["verification"] = None
-    _write_json_atomic(resolved_state, state, "state output")
+    try:
+        _write_json_atomic(
+            retention_path,
+            {"schema": RETENTION_SCHEMA, "state": str(resolved_state)},
+            "retention marker",
+        )
+        owned_artifacts: list[dict[str, object]] = [
+            {
+                "role": "retention",
+                "path": str(retention_path),
+                "sha256": _file_sha256(retention_path),
+            },
+            {"role": "state", "path": str(resolved_state), "sha256": None},
+            {"role": "evidence", "path": str(evidence_path), "sha256": None},
+        ]
+        protected_artifacts: list[str] = []
+        if "request" in disposable:
+            owned_artifacts.insert(
+                0,
+                {
+                    "role": "request",
+                    "path": str(resolved_request),
+                    "sha256": _file_sha256(resolved_request),
+                },
+            )
+        else:
+            protected_artifacts.append(str(resolved_request))
+        state["cleanup"] = {
+            "schema": CLEANUP_SCHEMA,
+            "task_temp_root": str(task_temp_root),
+            "owned_artifacts": owned_artifacts,
+            "protected_artifacts": protected_artifacts,
+        }
+        state["verification"] = None
+        _write_json_atomic(resolved_state, state, "state output")
+    except (OSError, UpdateExecutionError):
+        retention_path.unlink(missing_ok=True)
+        raise
 
 
 def _valid_sha256(value: object) -> bool:
@@ -781,7 +811,7 @@ def _validated_cleanup(
             raise UpdateExecutionError(f"owned artifact {index} must be an object")
         _closed_fields(artifact, OWNED_ARTIFACT_FIELDS, f"owned artifact {index}")
         role = artifact["role"]
-        if not isinstance(role, str) or role not in DISPOSABLE_ROLES:
+        if not isinstance(role, str) or role not in OWNED_ROLES:
             raise UpdateExecutionError(f"owned artifact {index} role is invalid")
         if role in roles:
             raise UpdateExecutionError(f"duplicate owned artifact role: {role}")
@@ -797,9 +827,9 @@ def _validated_cleanup(
         if path in paths:
             raise UpdateExecutionError("owned artifact paths must be unique")
         expected_hash = artifact["sha256"]
-        if role == "request":
+        if role in {"request", "retention"}:
             if not _valid_sha256(expected_hash):
-                raise UpdateExecutionError("owned request hash is invalid")
+                raise UpdateExecutionError(f"owned {role} hash is invalid")
         elif expected_hash is not None:
             raise UpdateExecutionError(f"owned {role} hash must be null")
         roles.add(role)
@@ -942,13 +972,15 @@ def _validated_state(path: pathlib.Path) -> dict[str, object]:
     owned_cleanup = cleanup["owned_artifacts"]
     assert isinstance(owned_cleanup, list)
     for artifact in owned_cleanup:
-        if artifact["role"] != "request":
+        role = artifact["role"]
+        if role not in {"request", "retention"}:
             continue
-        request_path = artifact["path"]
+        owned_path = artifact["path"]
         expected_hash = artifact["sha256"]
-        assert isinstance(request_path, pathlib.Path)
-        if not request_path.is_file() or _file_sha256(request_path) != expected_hash:
-            raise UpdateExecutionError("owned request changed after prepare")
+        assert isinstance(role, str)
+        assert isinstance(owned_path, pathlib.Path)
+        if not owned_path.is_file() or _file_sha256(owned_path) != expected_hash:
+            raise UpdateExecutionError(f"owned {role} changed after prepare")
     baseline_dirty = raw["baseline_dirty"]
     baseline_targets = raw["baseline_targets"]
     if not isinstance(baseline_dirty, Mapping) or not isinstance(baseline_targets, Mapping):

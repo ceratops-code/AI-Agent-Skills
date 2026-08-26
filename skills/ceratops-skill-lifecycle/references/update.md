@@ -82,7 +82,8 @@ repo docs, then update the narrowest correct source that exists.
 - (D) Before the first edit of helper-runtime code or a multi-file contract
   update, create one request declaring selected skills, allowed paths, cohesive
   change groups, structured checks, the verified task-temp root, the exact
-  evidence output, and the disposable request, state, and evidence roles; run
+  evidence output, the disposable request, state, and evidence roles, and a
+  helper-owned active-update retention marker; run
   `python scripts/skill-update-workflow.py prepare --request REQUEST --state
   STATE`. After the last edit, run `python scripts/skill-update-workflow.py
   verify --state STATE --evidence-output EVIDENCE`. The helper must preserve the
@@ -139,8 +140,8 @@ repo docs, then update the narrowest correct source that exists.
   the explicit completion trigger. The helper must reject incomplete or changed
   ownership state, links, path escapes, repository files, and failed
   verification; preserve undeclared inputs; remove only the exact owned
-  request, state, and evidence files; and remove the verified task-temp root
-  only when empty afterward. A successful update run is not complete
+  request, state, evidence, and retention-marker files; and remove the verified
+  task-temp root only when empty afterward. A successful update run is not complete
   until finalization returns `OK`; do not finalize failed or incomplete runs.
 - After committing, use `$ceratops-repo-lifecycle` `promote` when only local
   release staging is requested, `promote-and-deploy` when the repository's
