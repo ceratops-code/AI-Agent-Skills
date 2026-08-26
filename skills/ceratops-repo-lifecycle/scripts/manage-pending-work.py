@@ -278,7 +278,17 @@ def _active_skill_update_state(candidate: pathlib.Path) -> pathlib.Path | None:
     if not isinstance(raw_state, str) or not raw_state:
         raise PendingWorkError(f"Skill-update retention marker has no state: {marker}")
     state_path = pathlib.Path(raw_state)
-    if not state_path.is_absolute() or state_path.parent != candidate:
+    if not state_path.is_absolute():
+        raise PendingWorkError(
+            f"Skill-update retention state escapes its task-temp directory: {state_path}"
+        )
+    try:
+        resolved_state = state_path.resolve(strict=True)
+    except OSError as exc:
+        raise PendingWorkError(
+            f"Could not resolve skill-update retention state {state_path}: {exc}"
+        ) from exc
+    if resolved_state != state_path or not _inside(resolved_state, candidate):
         raise PendingWorkError(
             f"Skill-update retention state escapes its task-temp directory: {state_path}"
         )

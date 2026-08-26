@@ -67,7 +67,8 @@ def test_pending_work_scope_is_selected_generic_and_finalized_late(
         (directory / "artifact.txt").write_text(
             "temporary\n", encoding="utf-8", newline="\n"
         )
-    retained_state = thread_temp / "skill-update-state.json"
+    retained_state = thread_temp / "workflow" / "skill-update-state.json"
+    retained_state.parent.mkdir()
     retained_state.write_text("{}\n", encoding="utf-8", newline="\n")
     (thread_temp / ".ceratops-skill-update-active.json").write_text(
         json.dumps(
