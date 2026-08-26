@@ -1960,6 +1960,200 @@ class ShipTests(unittest.TestCase):
 
 
 class DependencyFinalizationTests(unittest.TestCase):
+    @staticmethod
+    def _live(head: str, *, failed: bool = False) -> dict[str, object]:
+        checks = (
+            [{"name": "ci", "classification": "failed"}]
+            if failed
+            else []
+        )
+        return {
+            "url": "https://github.com/owner/repo/pull/1",
+            "head_oid": head,
+            "state": "OPEN",
+            "is_draft": False,
+            "checks": checks,
+            "mergeable": "MERGEABLE",
+            "review_decision": "APPROVED",
+            "merge_state": "CLEAN",
+        }
+
+    def _finalize_case(
+        self,
+        approved: list[tuple[str, int]],
+        live_states: dict[tuple[str, int], dict[str, object]],
+    ) -> tuple[dict[str, object], list[tuple[str, int]], list[tuple[str, int]]]:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            preflight_path = root / "preflight.json"
+            snapshot_path = root / "snapshot.json"
+            output_path = root / "finalize.json"
+            repositories = []
+            for repo in dict.fromkeys(repo for repo, _number in approved):
+                pull_requests = []
+                for item_repo, number in approved:
+                    if item_repo != repo:
+                        continue
+                    live = live_states[(repo.lower(), number)]
+                    pull_requests.append(
+                        {
+                            "number": number,
+                            "url": f"https://github.com/{repo}/pull/{number}",
+                            "live": {"head_oid": live["head_oid"]},
+                        }
+                    )
+                repositories.append(
+                    {
+                        "repo": repo,
+                        "archived": False,
+                        "requires_report_only": False,
+                        "checkout": {"status": "found", "path": str(root)},
+                        "pull_requests": pull_requests,
+                    }
+                )
+            preflight_path.write_text(
+                json.dumps(
+                    {
+                        "outcome": {"blocked": False},
+                        "summary": {"org": "owner"},
+                        "snapshot": {"summary": {"excluded_repositories": []}},
+                        "repositories": repositories,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            final_snapshot = {
+                "outcome": {"blocked": False, "queue_present": True},
+                "summary": {
+                    "open_dependabot_alerts": 0,
+                    "open_dependabot_prs": 1,
+                    "repositories_with_work": 1,
+                },
+            }
+            snapshot_path.write_text(json.dumps(final_snapshot), encoding="utf-8")
+            args = argparse.Namespace(
+                approved_pr=[
+                    f"https://github.com/{repo}/pull/{number}"
+                    for repo, number in approved
+                ],
+                org=None,
+                admin=True,
+                merge_method="auto",
+                wait_seconds=600,
+                interval_seconds=15,
+                workspace_root=root,
+                snapshot_helper=root / "snapshot-helper.py",
+                sync_helper=root / "sync-helper.py",
+                preflight=preflight_path,
+                snapshot=snapshot_path,
+                sync_output=root / "sync.json",
+                output=output_path,
+            )
+            policy = {
+                "isArchived": False,
+                "mergeCommitAllowed": True,
+                "rebaseMergeAllowed": False,
+                "squashMergeAllowed": False,
+                "viewerPermission": "ADMIN",
+            }
+
+            def fresh(repo: str, number: int):
+                return live_states[(repo.lower(), number)], None
+
+            with (
+                mock.patch.object(
+                    dependency_finalization,
+                    "fetch_repo_policy",
+                    return_value=(policy, None),
+                ),
+                mock.patch.object(
+                    dependency_finalization,
+                    "fresh_live",
+                    side_effect=fresh,
+                ) as fresh_pr,
+                mock.patch.object(
+                    dependency_finalization,
+                    "merge_pr",
+                    return_value=({"status": "merged"}, None),
+                ) as merge_pr,
+                mock.patch.object(
+                    dependency_finalization,
+                    "refresh_snapshot",
+                    return_value=(
+                        final_snapshot,
+                        argparse.Namespace(returncode=0, stdout="", stderr=""),
+                    ),
+                ),
+                mock.patch.object(
+                    dependency_finalization,
+                    "run_sync",
+                    return_value=({"summary": {}, "repositories": []}, None),
+                ),
+                mock.patch.object(dependency_finalization, "emit_result"),
+            ):
+                self.assertEqual(dependency_finalization.finalize(args), 0)
+
+            payload = json.loads(output_path.read_text(encoding="utf-8"))
+            fresh_calls = [
+                (call.args[0].lower(), call.args[1])
+                for call in fresh_pr.call_args_list
+            ]
+            merge_calls = [
+                (call.args[0].lower(), call.args[1])
+                for call in merge_pr.call_args_list
+            ]
+            return payload, fresh_calls, merge_calls
+
+    def test_finalization_defers_only_after_a_repository_merge(self) -> None:
+        approved = [("owner/one", 1), ("owner/one", 2), ("owner/two", 3)]
+        live_states = {
+            (repo.lower(), number): self._live(str(number) * 40)
+            for repo, number in approved
+        }
+
+        payload, fresh_calls, merge_calls = self._finalize_case(
+            approved,
+            live_states,
+        )
+
+        self.assertEqual(
+            [item["status"] for item in payload["pull_requests"]],
+            ["merged", "next_wave_required", "merged"],
+        )
+        self.assertEqual(
+            fresh_calls,
+            [("owner/one", 1), ("owner/two", 3)],
+        )
+        self.assertEqual(merge_calls, fresh_calls)
+        self.assertEqual(payload["summary"]["next_wave_prs"], 1)
+        self.assertTrue(payload["outcome"]["next_wave_required"])
+        self.assertFalse(payload["outcome"]["blocked"])
+        self.assertEqual(payload["blockers"], [])
+
+    def test_blocked_pr_does_not_consume_the_repository_merge_wave(self) -> None:
+        approved = [("owner/one", 1), ("owner/one", 2)]
+        live_states = {
+            ("owner/one", 1): self._live("1" * 40, failed=True),
+            ("owner/one", 2): self._live("2" * 40),
+        }
+
+        payload, fresh_calls, merge_calls = self._finalize_case(
+            approved,
+            live_states,
+        )
+
+        self.assertEqual(
+            [item["status"] for item in payload["pull_requests"]],
+            ["blocked", "merged"],
+        )
+        self.assertEqual(
+            fresh_calls,
+            [("owner/one", 1), ("owner/one", 2)],
+        )
+        self.assertEqual(merge_calls, [("owner/one", 2)])
+        self.assertEqual(payload["summary"]["next_wave_prs"], 0)
+        self.assertFalse(payload["outcome"]["next_wave_required"])
+
     def test_dependency_merge_passes_the_preflight_approved_head(self) -> None:
         approved_head = "a" * 40
         completed = argparse.Namespace(

@@ -1,4 +1,4 @@
-"""Finalize explicitly approved dependency PRs through shared merge gates."""
+"""Finalize approved dependency PRs through gates and repository-safe waves."""
 
 from __future__ import annotations
 
@@ -333,6 +333,7 @@ def finalize(args: argparse.Namespace) -> int:
     policies: dict[str, dict[str, Any]] = {}
     snapshot_fresh = False
     merged_count = 0
+    merged_repositories: set[str] = set()
 
     for repo, number in approved:
         key = (repo.lower(), number)
@@ -378,6 +379,23 @@ def finalize(args: argparse.Namespace) -> int:
             }
             blockers.append(blocker)
             results.append({**blocker, "status": "blocked"})
+            continue
+        if key[0] in merged_repositories:
+            approved_pr = as_object(approved_item.get("pr"))
+            results.append(
+                {
+                    "repo": repo,
+                    "pr": number,
+                    "url": approved_pr.get("url"),
+                    "status": "next_wave_required",
+                    "check": "repository_merge_wave",
+                    "message": (
+                        "another approved PR for this repository merged during "
+                        "this finalization; run a new preflight and approval"
+                    ),
+                    "approved_head": approved_head,
+                }
+            )
             continue
         policy = policies.get(repo.lower())
         if policy is None:
@@ -529,6 +547,7 @@ def finalize(args: argparse.Namespace) -> int:
             )
             continue
         merged_count += 1
+        merged_repositories.add(repo.lower())
         results.append(
             {
                 "repo": repo,
@@ -600,6 +619,7 @@ def finalize(args: argparse.Namespace) -> int:
     sync_summary = as_object(sync_result.get("summary")) if sync_result else {}
     unchanged_count = sum(1 for item in results if item.get("status") == "unchanged_blocker")
     blocked_count = sum(1 for item in results if item.get("status") == "blocked")
+    next_wave_count = sum(1 for item in results if item.get("status") == "next_wave_required")
     queue_present = bool(as_object(final_snapshot.get("outcome")).get("queue_present"))
     summary = {
         "approved_prs": len(approved),
@@ -607,6 +627,7 @@ def finalize(args: argparse.Namespace) -> int:
         "blocked": len(blockers),
         "blocked_prs": blocked_count,
         "unchanged_blockers": unchanged_count,
+        "next_wave_prs": next_wave_count,
         "open_dependabot_alerts": final_summary.get("open_dependabot_alerts"),
         "open_dependabot_prs": final_summary.get("open_dependabot_prs"),
         "repositories_with_work": final_summary.get("repositories_with_work"),
@@ -625,7 +646,10 @@ def finalize(args: argparse.Namespace) -> int:
             "changed": merged_count > 0,
             "blocked": blocked,
             "queue_present": queue_present,
-            "attention_required": blocked or queue_present or merged_count > 0,
+            "next_wave_required": next_wave_count > 0,
+            "attention_required": (
+                blocked or queue_present or merged_count > 0 or next_wave_count > 0
+            ),
         },
         "summary": summary,
         "preflight": str(args.preflight),
