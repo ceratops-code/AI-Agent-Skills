@@ -1,4 +1,4 @@
-"""Finalize explicitly approved dependency PRs through shared merge gates."""
+"""Finalize approved dependency PRs through gates and repository-safe waves."""
 
 from __future__ import annotations
 
@@ -187,6 +187,30 @@ def prior_fingerprints(path: pathlib.Path) -> dict[tuple[str, int], str]:
     return result
 
 
+def snapshot_open_pr_keys(
+    snapshot: dict[str, Any],
+) -> set[tuple[str, int]] | None:
+    """Return open Dependabot PR keys, or ``None`` when evidence is malformed.
+
+    A missing or malformed membership list must never prove that an approved PR
+    was resolved. Callers conservatively require another preflight in that case.
+    """
+
+    raw = snapshot.get("open_dependabot_prs")
+    if not isinstance(raw, list):
+        return None
+    keys: set[tuple[str, int]] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            return None
+        repo = item.get("repo")
+        number = item.get("number")
+        if not isinstance(repo, str) or not repo or not isinstance(number, int):
+            return None
+        keys.add((repo.lower(), number))
+    return keys
+
+
 def choose_merge_method(policy: dict[str, Any], requested: str) -> str | None:
     allowed = {
         "merge": bool(policy.get("mergeCommitAllowed")),
@@ -333,6 +357,8 @@ def finalize(args: argparse.Namespace) -> int:
     policies: dict[str, dict[str, Any]] = {}
     snapshot_fresh = False
     merged_count = 0
+    merged_repositories: set[str] = set()
+    latest_open_prs: set[tuple[str, int]] | None = None
 
     for repo, number in approved:
         key = (repo.lower(), number)
@@ -378,6 +404,32 @@ def finalize(args: argparse.Namespace) -> int:
             }
             blockers.append(blocker)
             results.append({**blocker, "status": "blocked"})
+            continue
+        if key[0] in merged_repositories:
+            approved_pr = as_object(approved_item.get("pr"))
+            if latest_open_prs is not None and key not in latest_open_prs:
+                status = "resolved_after_refresh"
+                message = (
+                    "PR is absent from the refreshed Dependabot queue after "
+                    "the repository merge; no new wave is required"
+                )
+            else:
+                status = "next_wave_required"
+                message = (
+                    "another approved PR for this repository merged during "
+                    "this finalization; run a new preflight and approval"
+                )
+            results.append(
+                {
+                    "repo": repo,
+                    "pr": number,
+                    "url": approved_pr.get("url"),
+                    "status": status,
+                    "check": "repository_merge_wave",
+                    "message": message,
+                    "approved_head": approved_head,
+                }
+            )
             continue
         policy = policies.get(repo.lower())
         if policy is None:
@@ -529,6 +581,7 @@ def finalize(args: argparse.Namespace) -> int:
             )
             continue
         merged_count += 1
+        merged_repositories.add(repo.lower())
         results.append(
             {
                 "repo": repo,
@@ -555,6 +608,7 @@ def finalize(args: argparse.Namespace) -> int:
             }
             blockers.append(blocker)
             break
+        latest_open_prs = snapshot_open_pr_keys(refreshed)
 
     if not snapshot_fresh:
         final_snapshot, snapshot_process = refresh_snapshot(
@@ -600,6 +654,8 @@ def finalize(args: argparse.Namespace) -> int:
     sync_summary = as_object(sync_result.get("summary")) if sync_result else {}
     unchanged_count = sum(1 for item in results if item.get("status") == "unchanged_blocker")
     blocked_count = sum(1 for item in results if item.get("status") == "blocked")
+    next_wave_count = sum(1 for item in results if item.get("status") == "next_wave_required")
+    resolved_count = sum(1 for item in results if item.get("status") == "resolved_after_refresh")
     queue_present = bool(as_object(final_snapshot.get("outcome")).get("queue_present"))
     summary = {
         "approved_prs": len(approved),
@@ -607,6 +663,8 @@ def finalize(args: argparse.Namespace) -> int:
         "blocked": len(blockers),
         "blocked_prs": blocked_count,
         "unchanged_blockers": unchanged_count,
+        "next_wave_prs": next_wave_count,
+        "resolved_after_refresh_prs": resolved_count,
         "open_dependabot_alerts": final_summary.get("open_dependabot_alerts"),
         "open_dependabot_prs": final_summary.get("open_dependabot_prs"),
         "repositories_with_work": final_summary.get("repositories_with_work"),
@@ -625,7 +683,10 @@ def finalize(args: argparse.Namespace) -> int:
             "changed": merged_count > 0,
             "blocked": blocked,
             "queue_present": queue_present,
-            "attention_required": blocked or queue_present or merged_count > 0,
+            "next_wave_required": next_wave_count > 0,
+            "attention_required": (
+                blocked or queue_present or merged_count > 0 or next_wave_count > 0
+            ),
         },
         "summary": summary,
         "preflight": str(args.preflight),
