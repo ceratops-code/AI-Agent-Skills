@@ -608,12 +608,17 @@ def test_ship_stops_before_remote_mutation_on_confirmed_actions_outage(
     head = "a" * 40
     checkpoint = tmp_path / "ship-checkpoint.json"
     state = {"phase": "prepared", "commit": head}
-    evidence = {
+    evidence: dict[str, object] = {
         "source": "https://www.githubstatus.com/api/v2/summary.json",
         "component": {"name": "Actions", "status": "major_outage"},
         "incident": None,
     }
     events: list[str] = []
+
+    def confirmed_actions_outage() -> dict[str, object]:
+        events.append("probe")
+        return evidence
+
     monkeypatch.setattr(
         ship.merge,
         "restore_unfinished_checkpoints",
@@ -630,7 +635,7 @@ def test_ship_stops_before_remote_mutation_on_confirmed_actions_outage(
     monkeypatch.setattr(
         ship.actions_availability,
         "confirmed_actions_outage",
-        lambda: events.append("probe") or evidence,
+        confirmed_actions_outage,
     )
     monkeypatch.setattr(
         ship.ensure_pr,
