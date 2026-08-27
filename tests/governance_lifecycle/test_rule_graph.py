@@ -32,7 +32,9 @@ from tests.support.repositories import run_git  # noqa: E402
 
 GOVERNANCE_SNAPSHOT = runpy.run_path(str(SCRIPTS / "governance-snapshot.py"))
 agents_rule_graph_inventory = GOVERNANCE_SNAPSHOT["agents_rule_graph_inventory"]
+build_decision_payload = GOVERNANCE_SNAPSHOT["build_decision_payload"]
 build_snapshot = GOVERNANCE_SNAPSHOT["build_snapshot"]
+repo_git_state = GOVERNANCE_SNAPSHOT["repo_git_state"]
 
 
 class RuleGraphTests(unittest.TestCase):
@@ -104,6 +106,17 @@ class RuleGraphTests(unittest.TestCase):
                 snapshot["d_rule_brevity"]["sources_checked"],
                 2,
             )
+            self.assertEqual(
+                snapshot["schema"],
+                "global-governance-consistency-audit/snapshot.v4",
+            )
+            self.assertNotIn("misplaced_worktree_count", snapshot["git"])
+            decision = build_decision_payload(snapshot, root / "evidence.json")
+            self.assertEqual(
+                decision["schema"],
+                "global-governance-consistency-audit/decision.v2",
+            )
+            self.assertNotIn("misplaced_worktrees", decision["counts"])
 
     def rules_update_request(
         self,
@@ -561,7 +574,19 @@ class RuleGraphTests(unittest.TestCase):
                 newline="",
             )
 
-            inventory = agents_rule_graph_inventory(projects_root, codex_home)
+            snapshot_run_git = GOVERNANCE_SNAPSHOT["run_git"]
+            observed_git_arguments = []
+
+            def tracked_run_git(repository, *arguments):
+                observed_git_arguments.append(arguments)
+                return snapshot_run_git(repository, *arguments)
+
+            with mock.patch.dict(
+                GOVERNANCE_SNAPSHOT,
+                {"run_git": tracked_run_git},
+            ):
+                inventory = agents_rule_graph_inventory(projects_root, codex_home)
+                git_state = repo_git_state(main_project, "project")
 
         reported_paths = {stack["path"] for stack in inventory["stacks"]}
         self.assertEqual(
@@ -581,6 +606,20 @@ class RuleGraphTests(unittest.TestCase):
         self.assertNotIn("IGNORED-01", serialized)
         self.assertNotIn("TEMP-01", serialized)
         self.assertNotIn("WORKTREES-TREE-01", serialized)
+        self.assertFalse(
+            any(
+                arguments[:2] == ("worktree", "list")
+                for arguments in observed_git_arguments
+            )
+        )
+        self.assertTrue(
+            {
+                "primary_worktree",
+                "expected_secondary_worktree_root",
+                "worktrees",
+                "misplaced_worktrees",
+            }.isdisjoint(git_state)
+        )
 
     def test_relations_cannot_cross_project_scopes(self):
         first = parse_rule_text(
