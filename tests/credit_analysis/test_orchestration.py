@@ -181,12 +181,12 @@ def test_removed_bounded_action_is_rejected(tmp_path: pathlib.Path) -> None:
         )
 
 
-def test_luna_admission_caps_at_fifty_attempts_and_ten_workers(
+def test_luna_admission_caps_at_seventy_attempts_and_fifteen_workers(
     tmp_path: pathlib.Path,
 ) -> None:
     workflow = load_credit_analysis_workflow_module()
     request, _, _ = credit_analysis_request(
-        tmp_path, extra_completed_turns=52, extra_calls_per_turn=1
+        tmp_path, extra_completed_turns=72, extra_calls_per_turn=1
     )
 
     class ConcurrentRunner(FakeCreditModelRunner):
@@ -195,6 +195,8 @@ def test_luna_admission_caps_at_fifty_attempts_and_ten_workers(
             self.lock = threading.Lock()
             self.active = 0
             self.maximum_active = 0
+            self.started = 0
+            self.first_wave = threading.Barrier(15)
 
         def _luna(
             self,
@@ -205,7 +207,11 @@ def test_luna_admission_caps_at_fifty_attempts_and_ten_workers(
             with self.lock:
                 self.active += 1
                 self.maximum_active = max(self.maximum_active, self.active)
+                self.started += 1
+                wait_for_first_wave = self.started <= 15
             try:
+                if wait_for_first_wave:
+                    self.first_wave.wait(timeout=2)
                 time.sleep(0.01)
                 return super()._luna(task, packet, digest)
             finally:
@@ -221,8 +227,8 @@ def test_luna_admission_caps_at_fifty_attempts_and_ten_workers(
         runner=runner,
         available_models=runner.available_models,
     )
-    assert completed["actual_luna_calls"] == 50
-    assert runner.maximum_active == 10
+    assert completed["actual_luna_calls"] == 70
+    assert runner.maximum_active == 15
     final = json.loads(
         pathlib.Path(completed["final_result_path"]).read_text(encoding="utf-8")
     )
@@ -232,8 +238,8 @@ def test_luna_admission_caps_at_fifty_attempts_and_ten_workers(
     ]
     assert len(capped) == 5
     assert all(item["candidate_ids"] for item in capped)
-    assert final["coverage"]["analyzed_runs"] == 50
-    assert final["coverage"]["eligible_runs"] == 55
+    assert final["coverage"]["analyzed_runs"] == 70
+    assert final["coverage"]["eligible_runs"] == 75
 
 
 def test_luna_schema_retry_is_single_and_omission_is_exact(

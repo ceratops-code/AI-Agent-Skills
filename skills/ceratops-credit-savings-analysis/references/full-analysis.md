@@ -50,15 +50,15 @@ confirmed finding and report every capacity omission.
    maximum effort. Split only an oversized run into the minimum ordered transport
    windows, preserve run order and cross-window metadata, and recombine the
    accepted windows into one run report. Never use calls as independent semantic
-   units or create per-surface Luna tasks. Keep up to ten Luna tasks running
+   units or create per-surface Luna tasks. Keep up to fifteen Luna tasks running
    concurrently without a one-window-per-run admission barrier. Admit at most
-   fifty Luna model-call attempts for one source, including corrective reruns.
+   seventy Luna model-call attempts for one source, including corrective reruns.
    Allocate flexible output bytes per task from the measured downstream Sol
    envelope rather than requiring one fixed output size.
 3. Reject a Luna result only when it violates the frozen schema or output-byte
    envelope, not because it found many supported candidates. Rerun the exact task
    once with a smaller output allowance; if it still cannot fit, record that
-   complete window as omitted and continue within the fifty-attempt cap. Record
+   complete window as omitted and continue within the seventy-attempt cap. Record
    every unlaunched or unaccepted run window as omitted for capacity with its run
    and window identity, record count, evidence bytes, candidate count when known,
    output bytes when produced, and reason. Never split or truncate a run window.

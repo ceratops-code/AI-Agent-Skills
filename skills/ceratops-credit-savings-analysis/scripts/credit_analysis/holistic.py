@@ -7090,7 +7090,7 @@ def _finalize_holistic(
         for task in state["manifest"]["luna_tasks"]
     ):
         raise CreditAnalysisError("Luna coverage ledger is incomplete")
-    if state["model_attempts"]["luna"] > 50:
+    if state["model_attempts"]["luna"] > 70:
         raise CreditAnalysisError("Luna attempt cap was exceeded")
     routing = _routing_value(state)
     expected_sol = sum(

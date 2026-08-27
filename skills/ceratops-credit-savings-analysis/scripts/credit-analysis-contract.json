@@ -27,8 +27,8 @@
     "sol": "max"
   },
   "semantic_call_contract": {
-    "luna_max_attempts": 50,
-    "luna_max_concurrency": 10,
+    "luna_max_attempts": 70,
+    "luna_max_concurrency": 15,
     "sol_target_calls": 5,
     "sol_max_calls": 6,
     "sol_adjudicator_target": 3,

@@ -815,8 +815,8 @@ def _load_contract() -> dict[str, Any]:
         raise CreditAnalysisError("orchestration reasoning effort contract is invalid")
     semantic_calls = contract.get("semantic_call_contract")
     if semantic_calls != {
-        "luna_max_attempts": 50,
-        "luna_max_concurrency": 10,
+        "luna_max_attempts": 70,
+        "luna_max_concurrency": 15,
         "sol_target_calls": 5,
         "sol_max_calls": 6,
         "sol_adjudicator_target": 3,

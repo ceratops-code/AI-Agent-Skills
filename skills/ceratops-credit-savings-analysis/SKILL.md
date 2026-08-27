@@ -73,14 +73,14 @@ applies them.
   children. Accepted calls and attempts retain immutable hashes and resumable
   ledgers.
 - Luna performs high-recall discovery across all five fixed surfaces together.
-  Run up to ten Luna children concurrently and admit no more than fifty Luna
-  model-call attempts for one source, including corrective reruns. Queue ordered
-  run windows without a one-window-per-run scheduling barrier. If a Luna result
-  violates its frozen schema or output-byte envelope, rerun that exact task once
-  with a smaller output allowance; if it still cannot fit, record that complete
-  window as omitted and continue within the fifty-attempt cap. Never truncate a
-  result, split a run window, detach calls from their run context, or create
-  per-surface Luna calls.
+  Run up to fifteen Luna children concurrently and admit no more than seventy
+  Luna model-call attempts for one source, including corrective reruns. Queue
+  ordered run windows without a one-window-per-run scheduling barrier. If a
+  Luna result violates its frozen schema or output-byte envelope, rerun that
+  exact task once with a smaller output allowance; if it still cannot fit,
+  record that complete window as omitted and continue within the seventy-attempt
+  cap. Never truncate a result, split a run window, detach calls from their run
+  context, or create per-surface Luna calls.
 - Measure accepted Luna outputs before Sol planning. Route every retained Luna
   candidate exactly once among three Sol adjudicators; add a fourth only when
   three cannot fit the measured reports. Run one separate Sol audit against one
@@ -98,11 +98,12 @@ applies them.
   duration, visible-token, and reasoning-token telemetry as diagnostics. Run no
   model bookkeeping calls; stop before execution when the finite plan is
   malformed or changes admitted run, window, or candidate coverage.
-- The planner attempts every completed run. If the fifty-Luna or six-Sol hard
-  cap still prevents transport after the allowed Luna correction, retain exact
-  capacity omissions by run and window identity, record count, evidence bytes,
-  candidate count, and output bytes. Continue with every fitting task and never
-  imply that omitted evidence or candidates were semantically reviewed.
+- The planner attempts every completed run. If the seventy-Luna or six-Sol
+  hard cap still prevents transport after the allowed Luna correction, retain
+  exact capacity omissions by run and window identity, record count, evidence
+  bytes, candidate count, and output bytes. Continue with every fitting task
+  and never imply that omitted evidence or candidates were semantically
+  reviewed.
 - Keep session evidence, accepted surface results, the append-only index, and
   the final machine result at their controller-retained paths. Do not echo raw
   session material or caller-local paths unnecessarily.
