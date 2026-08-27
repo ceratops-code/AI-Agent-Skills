@@ -141,5 +141,12 @@ Otherwise change the intervention or report the unresolved decision point.
 
 Report only the selected exact change, why it is better than the current text
 and each material alternative, its regression evidence, the disposition of
-every touched overlap or conflict, and unresolved impact; do not present a
-candidate with an unresolved relationship as accepted.
+every touched relationship or self-review finding, and unresolved impact; do not
+present a candidate with an unresolved relationship as accepted.
+
+For every overlap, limit, or self-review finding such as `self: list-heavy` in
+scope, quote the exact text from each affected rule that creates the finding
+(not necessarily the whole rule), state the behavior those excerpts enforce,
+and propose the smallest repair limited to those excerpts when possible. Use the
+same exact-text, behavior, and repair format for any relation or review type not
+named here.
