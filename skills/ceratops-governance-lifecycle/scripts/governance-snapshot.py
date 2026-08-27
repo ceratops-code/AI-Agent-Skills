@@ -290,25 +290,86 @@ def git_ignore_excludes(path: pathlib.Path) -> bool:
     return result.returncode == 0
 
 
-def iter_project_agents(projects_root: pathlib.Path) -> Iterable[pathlib.Path]:
-    """Yield owned AGENTS sources after tmp and Git-ignore exclusions."""
+def iter_primary_main_project_roots(
+    projects_root: pathlib.Path,
+) -> Iterable[pathlib.Path]:
+    """Yield only authoritative primary Git checkouts currently on ``main``."""
+
     if not projects_root.exists():
         return
     resolved_root = projects_root.resolve()
+    if (resolved_root / ".git").exists():
+        candidates = [resolved_root]
+    else:
+        candidates = [
+            path.resolve()
+            for path in sorted(projects_root.iterdir())
+            if path.is_dir()
+            and path.name.casefold() not in {"tmp", "worktrees"}
+            and (path / ".git").exists()
+        ]
+
+    for candidate in candidates:
+        top_level, top_error = run_git(candidate, "rev-parse", "--show-toplevel")
+        if top_error or not top_level:
+            continue
+        root = pathlib.Path(top_level).resolve()
+        if root != candidate:
+            continue
+        branch, branch_error = run_git(root, "branch", "--show-current")
+        if branch_error or branch != "main":
+            continue
+        worktree_output, worktree_error = run_git(
+            root, "worktree", "list", "--porcelain"
+        )
+        if worktree_error:
+            continue
+        worktrees = parse_worktrees(worktree_output or "")
+        if not worktrees:
+            continue
+        primary_root = pathlib.Path(str(worktrees[0]["path"])).resolve()
+        if primary_root == root:
+            yield root
+
+
+def iter_project_agents(projects_root: pathlib.Path) -> Iterable[pathlib.Path]:
+    """Yield AGENTS sources owned by authoritative primary ``main`` checkouts."""
+
     local_paths: set[pathlib.Path] = set()
-    for path in projects_root.rglob("AGENTS.md"):
-        resolved = path.resolve()
-        try:
-            relative = resolved.relative_to(resolved_root)
-        except ValueError:
+    for project_root in iter_primary_main_project_roots(projects_root):
+        worktree_output, worktree_error = run_git(
+            project_root, "worktree", "list", "--porcelain"
+        )
+        if worktree_error:
             continue
-        if ".git" in relative.parts:
-            continue
-        if relative.parts and relative.parts[0].casefold() == "tmp":
-            continue
-        if git_ignore_excludes(resolved):
-            continue
-        local_paths.add(resolved)
+        linked_roots = {
+            pathlib.Path(str(item["path"])).resolve()
+            for item in parse_worktrees(worktree_output or "")[1:]
+        }
+        for current, directories, filenames in os.walk(
+            project_root, topdown=True, followlinks=False
+        ):
+            current_path = pathlib.Path(current)
+            retained_directories = []
+            for name in directories:
+                candidate = current_path / name
+                resolved_candidate = candidate.resolve()
+                if name == ".git":
+                    continue
+                if resolved_candidate in linked_roots or (candidate / ".git").exists():
+                    continue
+                retained_directories.append(name)
+            directories[:] = sorted(retained_directories)
+            if "AGENTS.md" not in filenames:
+                continue
+            resolved = (current_path / "AGENTS.md").resolve()
+            try:
+                resolved.relative_to(project_root)
+            except ValueError:
+                continue
+            if git_ignore_excludes(resolved):
+                continue
+            local_paths.add(resolved)
     yield from sorted(local_paths)
 
 
