@@ -32,6 +32,7 @@ D_RULE_CHAR_LIMIT = 220
 MEDIUM_REASONING_AUTOMATION_IDS = frozenset(
     {"diskfinventorycheck", "pc-cleanup"}
 )
+RESERVED_PROJECT_TREE_NAMES = frozenset({"tmp", "worktrees"})
 D_RULE_RE = re.compile(r"^\s*-\s+\(D\)\s+(.+)$")
 ALL_BULLETS_FORCE_RE = re.compile(
     r"All instruction bullets in this file are mandatory,\s*blocking,\s*and\s*closure-gating",
@@ -305,7 +306,7 @@ def iter_primary_main_project_roots(
             path.resolve()
             for path in sorted(projects_root.iterdir())
             if path.is_dir()
-            and path.name.casefold() not in {"tmp", "worktrees"}
+            and path.name.casefold() not in RESERVED_PROJECT_TREE_NAMES
             and (path / ".git").exists()
         ]
 
@@ -354,7 +355,7 @@ def iter_project_agents(projects_root: pathlib.Path) -> Iterable[pathlib.Path]:
             for name in directories:
                 candidate = current_path / name
                 resolved_candidate = candidate.resolve()
-                if name == ".git":
+                if name == ".git" or name.casefold() in RESERVED_PROJECT_TREE_NAMES:
                     continue
                 if resolved_candidate in linked_roots or (candidate / ".git").exists():
                     continue

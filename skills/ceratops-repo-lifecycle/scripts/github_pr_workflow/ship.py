@@ -1852,11 +1852,12 @@ def ship(args: argparse.Namespace) -> dict[str, Any]:
         pending_work_identity,
     )
     changes: list[str] = []
-
-    if not _phase_at_least(state, "merged"):
-        _enforce_actions_availability(repository, commit)
+    availability_checked = False
 
     if not _phase_at_least(state, "pr_ready"):
+        _enforce_actions_availability(repository, commit)
+        availability_checked = True
+
         if pending_work_scope is not None:
             findings = _pending_work_findings(repo_root, pending_work_scope)
             if findings:
@@ -1910,6 +1911,9 @@ def ship(args: argparse.Namespace) -> dict[str, Any]:
             changes.append("merged_reconciled")
         elif live.get("state") != "OPEN":
             raise ShipError(f"Live PR state is {live.get('state')!r}, not OPEN.")
+
+    if not _phase_at_least(state, "merged") and not availability_checked:
+        _enforce_actions_availability(repository, commit)
 
     had_review_handoff = state.get("review_replies") is not None
     review_replies = _address_review_replies(

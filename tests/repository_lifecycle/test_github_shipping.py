@@ -680,6 +680,88 @@ def test_ship_stops_before_remote_mutation_on_confirmed_actions_outage(
     }
 
 
+def test_ship_reconciles_merged_pr_before_actions_outage(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ship = load_pr_workflow_module(monkeypatch, "ship")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    head = "a" * 40
+    checkpoint = tmp_path / "ship-checkpoint.json"
+    state = {
+        "phase": "pr_ready",
+        "pr": 24,
+        "url": "https://example.invalid/pull/24",
+        "commit": head,
+    }
+    events: list[str] = []
+
+    monkeypatch.setattr(
+        ship.merge,
+        "restore_unfinished_checkpoints",
+        lambda root: events.append("recover"),
+    )
+    monkeypatch.setattr(
+        ship.actions_availability,
+        "confirmed_actions_outage",
+        lambda: pytest.fail("merged PR reconciliation must bypass outage probing"),
+    )
+    monkeypatch.setattr(ship, "_repository_name", lambda *args: "example/repository")
+    monkeypatch.setattr(ship, "_resolve_commit", lambda *args: head)
+    monkeypatch.setattr(ship, "_load_pending_work_scope", lambda *args: (None, None))
+    monkeypatch.setattr(
+        ship,
+        "_load_or_create_checkpoint",
+        lambda *args: (checkpoint, state),
+    )
+
+    def live_pr(*args: object) -> dict[str, object]:
+        events.append("live")
+        return {
+            "state": "MERGED",
+            "headRefOid": head,
+            "mergedAt": "2026-08-27T00:00:00Z",
+            "mergeCommit": {"oid": "b" * 40},
+        }
+
+    monkeypatch.setattr(ship, "_live_pr", live_pr)
+    monkeypatch.setattr(ship, "_write_checkpoint", lambda *args: None)
+
+    def synchronize(args: argparse.Namespace) -> dict[str, object]:
+        events.append("sync")
+        return {"head": "b" * 40}
+
+    monkeypatch.setattr(ship.sync, "sync_main", synchronize)
+    monkeypatch.setattr(ship, "_remove_completed_pr_checkpoints", lambda *args: [])
+
+    result = ship.ship(
+        argparse.Namespace(
+            repo_root=repo,
+            repo="example/repository",
+            commit=head,
+            head_branch="release/local",
+            base_branch="main",
+            remote_name="origin",
+            title=None,
+            body=None,
+            merge_method="merge",
+            delete_branch=False,
+            reusable_head=False,
+            pending_work_check=False,
+            pending_work_scope=None,
+            ci_wait_seconds=0,
+            review_wait_seconds=0,
+            interval_seconds=0,
+            review_replies_request=None,
+        )
+    )
+
+    assert result["status"] == "shipped"
+    assert result["changes"] == ["merged_reconciled", "synchronized"]
+    assert events == ["recover", "live", "sync"]
+
+
 def test_dependency_finalization_delegates_admin_to_shared_merge(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,

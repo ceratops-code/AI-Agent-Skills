@@ -473,10 +473,14 @@ class RuleGraphTests(unittest.TestCase):
             linked_worktree = projects_root / "linked-worktree"
             nested = main_project / "component" / "AGENTS.md"
             ignored = main_project / "ignored" / "AGENTS.md"
+            temporary = main_project / "tmp" / "AGENTS.md"
+            worktrees_tree = main_project / "worktrees" / "AGENTS.md"
             projects_root.mkdir()
             codex_home.mkdir()
             nested.parent.mkdir(parents=True)
             ignored.parent.mkdir()
+            temporary.parent.mkdir()
+            worktrees_tree.parent.mkdir()
             second_main_project.mkdir()
             alternate_project.mkdir()
             (codex_home / "AGENTS.md").write_text(
@@ -491,6 +495,16 @@ class RuleGraphTests(unittest.TestCase):
             )
             ignored.write_text(
                 "- [IGNORED-01] Never audit this ignored instruction file.\n",
+                encoding="utf-8",
+                newline="",
+            )
+            temporary.write_text(
+                "- [TEMP-01] Never audit this temporary instruction file.\n",
+                encoding="utf-8",
+                newline="",
+            )
+            worktrees_tree.write_text(
+                "- [WORKTREES-TREE-01] Never audit this reserved tree.\n",
                 encoding="utf-8",
                 newline="",
             )
@@ -565,6 +579,8 @@ class RuleGraphTests(unittest.TestCase):
         self.assertNotIn("WORKTREE-ONLY-01", serialized)
         self.assertNotIn("ALTERNATE-01", serialized)
         self.assertNotIn("IGNORED-01", serialized)
+        self.assertNotIn("TEMP-01", serialized)
+        self.assertNotIn("WORKTREES-TREE-01", serialized)
 
     def test_relations_cannot_cross_project_scopes(self):
         first = parse_rule_text(
