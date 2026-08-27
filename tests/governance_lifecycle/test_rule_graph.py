@@ -28,6 +28,8 @@ from rule_graph import (  # noqa: E402
 )
 from validate_rule_candidate import resolve_markdown_policy  # noqa: E402
 
+from tests.support.repositories import run_git  # noqa: E402
+
 GOVERNANCE_SNAPSHOT = runpy.run_path(str(SCRIPTS / "governance-snapshot.py"))
 agents_rule_graph_inventory = GOVERNANCE_SNAPSHOT["agents_rule_graph_inventory"]
 build_snapshot = GOVERNANCE_SNAPSHOT["build_snapshot"]
@@ -460,17 +462,54 @@ class RuleGraphTests(unittest.TestCase):
 
         self.assertEqual(validation["findings"], [])
 
-    def test_non_git_project_root_and_nested_agents_share_stack(self):
+    def test_primary_main_checkouts_exclude_worktrees_and_alternate_branches(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
-            projects_root = root / "project"
+            projects_root = root / "projects"
             codex_home = root / "codex"
-            nested = projects_root / "component" / "AGENTS.md"
+            main_project = projects_root / "main-project"
+            second_main_project = projects_root / "second-main-project"
+            alternate_project = projects_root / "alternate-project"
+            linked_worktree = projects_root / "linked-worktree"
+            nested = main_project / "component" / "AGENTS.md"
+            ignored = main_project / "ignored" / "AGENTS.md"
+            temporary = main_project / "tmp" / "AGENTS.md"
+            worktrees_tree = main_project / "worktrees" / "AGENTS.md"
             projects_root.mkdir()
             codex_home.mkdir()
-            nested.parent.mkdir()
-            (projects_root / "AGENTS.md").write_text(
-                "- [ROOT-01] Apply the project rule.\n",
+            nested.parent.mkdir(parents=True)
+            ignored.parent.mkdir()
+            temporary.parent.mkdir()
+            worktrees_tree.parent.mkdir()
+            second_main_project.mkdir()
+            alternate_project.mkdir()
+            (codex_home / "AGENTS.md").write_text(
+                "- [GLOBAL-01] Apply the global rule.\n",
+                encoding="utf-8",
+                newline="",
+            )
+            (main_project / ".gitignore").write_text(
+                "ignored/\n",
+                encoding="utf-8",
+                newline="",
+            )
+            ignored.write_text(
+                "- [IGNORED-01] Never audit this ignored instruction file.\n",
+                encoding="utf-8",
+                newline="",
+            )
+            temporary.write_text(
+                "- [TEMP-01] Never audit this temporary instruction file.\n",
+                encoding="utf-8",
+                newline="",
+            )
+            worktrees_tree.write_text(
+                "- [WORKTREES-TREE-01] Never audit this reserved tree.\n",
+                encoding="utf-8",
+                newline="",
+            )
+            (main_project / "AGENTS.md").write_text(
+                "- [ROOT-01] Apply the primary project rule.\n",
                 encoding="utf-8",
                 newline="",
             )
@@ -480,20 +519,68 @@ class RuleGraphTests(unittest.TestCase):
                 encoding="utf-8",
                 newline="",
             )
+            (second_main_project / "AGENTS.md").write_text(
+                "- [SECOND-01] Apply the second primary project rule.\n",
+                encoding="utf-8",
+                newline="",
+            )
+            (alternate_project / "AGENTS.md").write_text(
+                "- [ALTERNATE-01] Never audit this alternate branch.\n",
+                encoding="utf-8",
+                newline="",
+            )
+
+            for repository, branch in (
+                (main_project, "main"),
+                (second_main_project, "main"),
+                (alternate_project, "feature"),
+            ):
+                for arguments in (
+                    ("init", "-b", branch),
+                    ("config", "user.email", "test@example.com"),
+                    ("config", "user.name", "Test User"),
+                    ("add", "."),
+                    ("commit", "-m", "initial"),
+                ):
+                    result = run_git(repository, *arguments)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+
+            worktree_result = run_git(
+                main_project,
+                "worktree",
+                "add",
+                "-b",
+                "feature",
+                str(linked_worktree),
+                "main",
+            )
+            self.assertEqual(worktree_result.returncode, 0, worktree_result.stderr)
+            (linked_worktree / "AGENTS.md").write_text(
+                "- [WORKTREE-ONLY-01] Never audit this unmerged worktree rule.\n",
+                encoding="utf-8",
+                newline="",
+            )
 
             inventory = agents_rule_graph_inventory(projects_root, codex_home)
 
-        nested_stack = next(
-            stack for stack in inventory["stacks"] if stack["path"] == str(nested)
-        )
-        self.assertEqual(nested_stack["findings"], [])
+        reported_paths = {stack["path"] for stack in inventory["stacks"]}
         self.assertEqual(
-            nested_stack["stack_paths"],
-            [
-                str(projects_root / "AGENTS.md"),
-                str(nested),
-            ],
+            reported_paths,
+            {
+                str((codex_home / "AGENTS.md").resolve()),
+                str((main_project / "AGENTS.md").resolve()),
+                str(nested.resolve()),
+                str((second_main_project / "AGENTS.md").resolve()),
+            },
         )
+        serialized = json.dumps(inventory)
+        self.assertNotIn(str(linked_worktree.resolve()), serialized)
+        self.assertNotIn(str(alternate_project.resolve()), serialized)
+        self.assertNotIn("WORKTREE-ONLY-01", serialized)
+        self.assertNotIn("ALTERNATE-01", serialized)
+        self.assertNotIn("IGNORED-01", serialized)
+        self.assertNotIn("TEMP-01", serialized)
+        self.assertNotIn("WORKTREES-TREE-01", serialized)
 
     def test_relations_cannot_cross_project_scopes(self):
         first = parse_rule_text(

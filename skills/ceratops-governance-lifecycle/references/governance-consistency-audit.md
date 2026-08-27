@@ -23,9 +23,10 @@ domain audits owned by other lifecycle actions.
 - Reuse the evidence file for later audit decisions until an inventoried
   surface changes; query it instead of rerunning the helper, refresh only after
   such a change, and remove the task-temporary evidence before closing.
-- (D) Project AGENTS discovery always excludes the projects-root `tmp` tree;
-  for every other candidate, the containing Git worktree's ignore resolution
-  is the only exclusion source.
+- (D) Project AGENTS discovery scans each primary Git checkout on `main` that
+  is the selected projects root or one of its direct children. Include every
+  non-ignored `AGENTS.md` in that checkout; never read or report AGENTS sources
+  from linked worktrees, alternate branches, `tmp`, or `worktrees`.
 - Use helper output as cheap-pass evidence for automation metadata, AGENTS
   classification, Git/worktree state, automation ignore coverage, directly
   referenced paths, structured rule-graph facts, and overlong `(D)` rule
@@ -33,10 +34,10 @@ domain audits owned by other lifecycle actions.
 
 ### Scope
 
-- Global `$CODEX_HOME/AGENTS.md` and every project-local or nested `AGENTS.md`
-  under the selected projects root that is outside the root `tmp` tree and not
-  excluded by its containing Git worktree's ignore rules, evaluated through
-  its complete applicable global-to-local instruction stack.
+- Global `$CODEX_HOME/AGENTS.md` and every non-ignored root or nested
+  `AGENTS.md` in each selected primary Git checkout on `main`, excluding linked
+  worktrees and alternate branches, evaluated through the complete applicable
+  global-to-local instruction stack.
 - Installed `$CODEX_HOME/automations/*/automation.toml`, source automation
   definitions and repository controls under `<projects-root>/Codex-Automations`,
   and helpers directly referenced by an in-scope control file.

@@ -41,6 +41,11 @@ def test_integrated_ship_delegates_admin_semantics_to_merge_owner(
         "restore_unfinished_checkpoints",
         lambda root: events.append("recover"),
     )
+    monkeypatch.setattr(
+        ship.actions_availability,
+        "confirmed_actions_outage",
+        lambda: None,
+    )
     monkeypatch.setattr(ship, "_repository_name", lambda *args: "example/repository")
     monkeypatch.setattr(ship, "_resolve_commit", lambda *args: head)
     monkeypatch.setattr(ship, "_load_pending_work_scope", lambda *args: (None, None))
@@ -503,6 +508,258 @@ def test_integrated_ship_delegates_admin_semantics_to_merge_owner(
     assert missing_payload["diagnostic"]["checks_diagnostic"].startswith(
         "no checks reported"
     )
+
+
+def test_actions_availability_classifies_only_confirmed_outages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    availability = load_pr_workflow_module(monkeypatch, "actions_availability")
+
+    class Response:
+        def __init__(self, payload: dict[str, Any]) -> None:
+            self.raw = json.dumps(payload).encode("utf-8")
+
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self, limit: int) -> bytes:
+            assert limit == availability.MAX_STATUS_BYTES + 1
+            return self.raw
+
+    def payload(status: str) -> dict[str, Any]:
+        return {
+            "page": {"updated_at": "2026-08-26T18:01:30Z"},
+            "components": [
+                {
+                    "id": availability.ACTIONS_COMPONENT_ID,
+                    "name": "Actions",
+                    "status": status,
+                    "updated_at": "2026-08-26T17:54:33Z",
+                }
+            ],
+            "incidents": [
+                {
+                    "id": "incident-1",
+                    "name": "Incident with Actions",
+                    "status": "investigating",
+                    "impact": "critical",
+                    "shortlink": "https://status.example/incident-1",
+                    "updated_at": "2026-08-26T17:55:00Z",
+                    "components": [
+                        {
+                            "id": availability.ACTIONS_COMPONENT_ID,
+                            "name": "Actions",
+                        }
+                    ],
+                }
+            ],
+        }
+
+    calls: list[tuple[str, float]] = []
+
+    def probe(value: dict[str, Any]) -> dict[str, Any] | None:
+        def opener(request: Any, *, timeout: float) -> Response:
+            calls.append((request.full_url, timeout))
+            return Response(value)
+
+        return availability.confirmed_actions_outage(opener=opener)
+
+    assert probe(payload("operational")) is None
+    assert probe(payload("degraded_performance")) is None
+    outage = probe(payload("major_outage"))
+    assert outage == {
+        "source": availability.STATUS_SUMMARY_URL,
+        "page_updated_at": "2026-08-26T18:01:30Z",
+        "component": {
+            "id": availability.ACTIONS_COMPONENT_ID,
+            "name": "Actions",
+            "status": "major_outage",
+            "updated_at": "2026-08-26T17:54:33Z",
+        },
+        "incident": {
+            "id": "incident-1",
+            "name": "Incident with Actions",
+            "status": "investigating",
+            "impact": "critical",
+            "url": "https://status.example/incident-1",
+            "updated_at": "2026-08-26T17:55:00Z",
+        },
+    }
+    assert availability.confirmed_actions_outage(
+        opener=lambda *args, **kwargs: (_ for _ in ()).throw(OSError("offline"))
+    ) is None
+    assert calls == [
+        (availability.STATUS_SUMMARY_URL, availability.DEFAULT_TIMEOUT_SECONDS),
+        (availability.STATUS_SUMMARY_URL, availability.DEFAULT_TIMEOUT_SECONDS),
+        (availability.STATUS_SUMMARY_URL, availability.DEFAULT_TIMEOUT_SECONDS),
+    ]
+
+
+def test_ship_stops_before_remote_mutation_on_confirmed_actions_outage(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ship = load_pr_workflow_module(monkeypatch, "ship")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    head = "a" * 40
+    checkpoint = tmp_path / "ship-checkpoint.json"
+    state = {"phase": "prepared", "commit": head}
+    evidence: dict[str, object] = {
+        "source": "https://www.githubstatus.com/api/v2/summary.json",
+        "component": {"name": "Actions", "status": "major_outage"},
+        "incident": None,
+    }
+    events: list[str] = []
+
+    def confirmed_actions_outage() -> dict[str, object]:
+        events.append("probe")
+        return evidence
+
+    monkeypatch.setattr(
+        ship.merge,
+        "restore_unfinished_checkpoints",
+        lambda root: events.append("recover"),
+    )
+    monkeypatch.setattr(ship, "_repository_name", lambda *args: "example/repository")
+    monkeypatch.setattr(ship, "_resolve_commit", lambda *args: head)
+    monkeypatch.setattr(ship, "_load_pending_work_scope", lambda *args: (None, None))
+    monkeypatch.setattr(
+        ship,
+        "_load_or_create_checkpoint",
+        lambda *args: (checkpoint, state),
+    )
+    monkeypatch.setattr(
+        ship.actions_availability,
+        "confirmed_actions_outage",
+        confirmed_actions_outage,
+    )
+    monkeypatch.setattr(
+        ship.ensure_pr,
+        "ensure_pr",
+        lambda *args, **kwargs: pytest.fail("outage must stop before PR mutation"),
+    )
+    with pytest.raises(ship.ShipBlocked) as blocked:
+        ship.ship(
+            argparse.Namespace(
+                repo_root=repo,
+                repo="example/repository",
+                commit=head,
+                head_branch="release/local",
+                base_branch="main",
+                remote_name="origin",
+                title=None,
+                body=None,
+                merge_method="merge",
+                delete_branch=False,
+                reusable_head=False,
+                pending_work_check=False,
+                pending_work_scope=None,
+                ci_wait_seconds=900,
+                review_wait_seconds=260,
+                interval_seconds=10,
+                review_replies_request=None,
+            )
+        )
+    assert events == ["recover", "probe"]
+    assert blocked.value.payload == {
+        "status": "blocked",
+        "message": "GitHub Actions has a confirmed outage; shipping stopped.",
+        "phase": "gates",
+        "remote_mutation": False,
+        "blocker": {
+            "kind": "external_service_outage",
+            "service": "github_actions",
+            "repository": "example/repository",
+            "head_oid": head,
+            "evidence": evidence,
+        },
+    }
+
+
+def test_ship_reconciles_merged_pr_before_actions_outage(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ship = load_pr_workflow_module(monkeypatch, "ship")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    head = "a" * 40
+    checkpoint = tmp_path / "ship-checkpoint.json"
+    state = {
+        "phase": "pr_ready",
+        "pr": 24,
+        "url": "https://example.invalid/pull/24",
+        "commit": head,
+    }
+    events: list[str] = []
+
+    monkeypatch.setattr(
+        ship.merge,
+        "restore_unfinished_checkpoints",
+        lambda root: events.append("recover"),
+    )
+    monkeypatch.setattr(
+        ship.actions_availability,
+        "confirmed_actions_outage",
+        lambda: pytest.fail("merged PR reconciliation must bypass outage probing"),
+    )
+    monkeypatch.setattr(ship, "_repository_name", lambda *args: "example/repository")
+    monkeypatch.setattr(ship, "_resolve_commit", lambda *args: head)
+    monkeypatch.setattr(ship, "_load_pending_work_scope", lambda *args: (None, None))
+    monkeypatch.setattr(
+        ship,
+        "_load_or_create_checkpoint",
+        lambda *args: (checkpoint, state),
+    )
+
+    def live_pr(*args: object) -> dict[str, object]:
+        events.append("live")
+        return {
+            "state": "MERGED",
+            "headRefOid": head,
+            "mergedAt": "2026-08-27T00:00:00Z",
+            "mergeCommit": {"oid": "b" * 40},
+        }
+
+    monkeypatch.setattr(ship, "_live_pr", live_pr)
+    monkeypatch.setattr(ship, "_write_checkpoint", lambda *args: None)
+
+    def synchronize(args: argparse.Namespace) -> dict[str, object]:
+        events.append("sync")
+        return {"head": "b" * 40}
+
+    monkeypatch.setattr(ship.sync, "sync_main", synchronize)
+    monkeypatch.setattr(ship, "_remove_completed_pr_checkpoints", lambda *args: [])
+
+    result = ship.ship(
+        argparse.Namespace(
+            repo_root=repo,
+            repo="example/repository",
+            commit=head,
+            head_branch="release/local",
+            base_branch="main",
+            remote_name="origin",
+            title=None,
+            body=None,
+            merge_method="merge",
+            delete_branch=False,
+            reusable_head=False,
+            pending_work_check=False,
+            pending_work_scope=None,
+            ci_wait_seconds=0,
+            review_wait_seconds=0,
+            interval_seconds=0,
+            review_replies_request=None,
+        )
+    )
+
+    assert result["status"] == "shipped"
+    assert result["changes"] == ["merged_reconciled", "synchronized"]
+    assert events == ["recover", "live", "sync"]
 
 
 def test_dependency_finalization_delegates_admin_to_shared_merge(

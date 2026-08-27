@@ -345,6 +345,13 @@ class ShipTests(unittest.TestCase):
         )
         recovery.start()
         self.addCleanup(recovery.stop)
+        actions_status = mock.patch.object(
+            ship.actions_availability,
+            "confirmed_actions_outage",
+            return_value=None,
+        )
+        actions_status.start()
+        self.addCleanup(actions_status.stop)
 
     def git(self, repo_root: pathlib.Path, *arguments: str) -> str:
         completed = subprocess.run(
