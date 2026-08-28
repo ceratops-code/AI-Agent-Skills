@@ -44,7 +44,7 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
         - state["model_specs"]["luna"]["evidence_byte_budget"]
         == state["model_specs"]["luna"]["visible_task_reserve_bytes"]
     )
-    assert len(manifest["sol_tasks"]) == 6
+    assert len(manifest["sol_tasks"]) == 8
     assert state["execution_context"]["instruction_chains"]
     chains_by_cwd = {
         chain["cwd"]: chain
@@ -67,7 +67,7 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
     phases = [call["phase"] for call in runner.calls]
     assert completed["complete"] is True
     assert phases.count("sol-adjudication") == 3
-    assert phases.count("sol-audit") == 1
+    assert phases.count("sol-direct-evidence") == 1
     assert phases.count("sol-final") == 1
     final_call = next(call for call in runner.calls if call["phase"] == "sol-final")
     assert final_call["input_payload"]["canonical_state"] == []
@@ -79,7 +79,7 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
     )
     prior_findings = [
         finding
-        for task in manifest["sol_tasks"][:4]
+        for task in manifest["sol_tasks"][:6]
         if completed_state["execution"][task["task_id"]]["status"] == "complete"
         for finding in json.loads(
             pathlib.Path(
@@ -111,7 +111,7 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
     assert final["coverage"]["analyzed_runs"] == final["coverage"]["eligible_runs"]
     assert final["omissions"] == []
     report = pathlib.Path(completed["report_path"]).read_text(encoding="utf-8")
-    assert "| Run | Window | Records | Input bytes |" in report
+    assert "| Run | Part | Records | Input bytes |" in report
     assert "| Completed run | Total model calls |" in report
     assert "| Proposed control | Calls saved per affected run |" in report
 
@@ -222,6 +222,59 @@ def test_luna_admission_caps_at_seventy_attempts_and_fifteen_workers(
     plan = workflow.command_plan_orchestration(
         request, available_models=runner.available_models
     )
+    planned_state = json.loads(
+        pathlib.Path(plan["state_path"]).read_text(encoding="utf-8")
+    )
+    admitted = [
+        task
+        for task in planned_state["manifest"]["luna_tasks"]
+        if planned_state["execution"][task["task_id"]]["status"] == "pending"
+    ]
+    output_allocator = workflow.command_plan_orchestration.__globals__[
+        "luna_output_allowance"
+    ]
+    assert {task["output_byte_limit"] for task in admitted} == {
+        output_allocator(
+            admitted_tasks=70,
+            sol_reviewer_capacity_bytes=max(
+                16_000,
+                planned_state["model_specs"]["sol"]["evidence_byte_budget"]
+                - 64_000,
+            ),
+            maximum_reviewers=6,
+        )
+    }
+    selector = workflow.command_plan_orchestration.__globals__["select_luna_tasks"]
+    priority_tasks = [
+        {
+            "task_id": "a.1",
+            "turn_id": "a",
+            "run_window_ordinal": 1,
+            "input_bytes": 100,
+            "evidence_bytes": 100,
+            "capacity_omitted": False,
+        },
+        *[
+            {
+                "task_id": f"b.{ordinal}",
+                "turn_id": "b",
+                "run_window_ordinal": ordinal,
+                "input_bytes": 1_000,
+                "evidence_bytes": 1_000,
+                "capacity_omitted": False,
+            }
+            for ordinal in range(1, 4)
+        ],
+        {
+            "task_id": "c.1",
+            "turn_id": "c",
+            "run_window_ordinal": 1,
+            "input_bytes": 200,
+            "evidence_bytes": 200,
+            "capacity_omitted": False,
+        },
+    ]
+    assert selector(priority_tasks, maximum_attempts=2) == {"b.1", "c.1"}
     completed = workflow.command_execute_orchestration(
         pathlib.Path(plan["state_path"]),
         runner=runner,
@@ -369,9 +422,10 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     assert plan["mode"] == "full-analysis"
     assert plan["analysis_scope_label"] == "full all-run analysis"
     assert plan["projected_luna_calls"] == 6
-    assert plan["projected_sol_calls"] == 5
-    assert plan["projected_semantic_calls"] == 11
-    assert plan["shared_candidate_count"] > 8
+    assert plan["projected_sol_calls"] == 7
+    assert plan["maximum_sol_calls"] == 8
+    assert plan["projected_semantic_calls"] == 13
+    assert plan["candidate_count"] > 8
     assert len(json.dumps(plan)) < 20_000
 
     state_path = pathlib.Path(plan["state_path"])
@@ -566,8 +620,8 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     assert completed["complete"] is True
     assert all(call["reasoning_effort"] == "max" for call in runner.calls)
     assert sum(call["phase"] == "luna-discovery" for call in runner.calls) == 6
-    assert sum(call["phase"] == "sol-adjudication" for call in runner.calls) == 3
-    assert sum(call["phase"] == "sol-audit" for call in runner.calls) == 1
+    assert sum(call["phase"] == "sol-adjudication" for call in runner.calls) == 6
+    assert sum(call["phase"] == "sol-direct-evidence" for call in runner.calls) == 1
     assert sum(call["phase"] == "sol-final" for call in runner.calls) == 1
     assert sum(
         call["input_sha256"] == orphan_digest for call in runner.calls
@@ -615,8 +669,10 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
         and "CERATOPS_CREDIT_ANALYSIS_CHILD" not in call["prompt"]
         for call in runner.calls
     )
-    assert any(
-        "frozen current canonical state" in call["prompt"]
+    assert all(
+        "Do not independently re-read the source evidence" in call["prompt"]
+        and call["input_payload"]["candidate_original_evidence"] == []
+        and call["input_payload"]["canonical_state"] == []
         for call in runner.calls
         if call["phase"] == "sol-adjudication"
     )
@@ -668,7 +724,7 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
         task = tasks_by_id[task_id]
         for attempt in execution["attempts"]:
             assert attempt["execution_cwd"] == task["execution_cwd"]
-            assert attempt["ephemeral"] is (task["phase"] == "luna-discovery")
+            assert attempt["ephemeral"] is False
             assert (
                 attempt["instruction_chain_sha256"]
                 == task["instruction_chain_sha256"]
@@ -716,9 +772,9 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     )
     assert final["model_calls"] == {
         "actual_luna": 6,
-        "actual_sol": 5,
+        "actual_sol": 8,
         "accepted_luna": 6,
-        "accepted_sol": 5,
+        "accepted_sol": 8,
         "bookkeeping": 0,
     }
     assert final["manifest"]["unclassified_calls"] == 0
@@ -732,7 +788,7 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
             "reviewed_no_confirmed_waste",
             "unassessed",
         )
-    ) == final["manifest"]["shared_candidate_count"]
+    ) == final["manifest"]["candidate_count"]
     assert {
         review["disposition"] for review in final["temporary_control_reviews"]
     } == {
@@ -847,6 +903,9 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
         for task_id in (
             "sol.adjudication.0002",
             "sol.adjudication.0003",
-            "sol.audit",
+            "sol.adjudication.0004",
+            "sol.adjudication.0005",
+            "sol.adjudication.0006",
+            "sol.direct-evidence",
         )
     )

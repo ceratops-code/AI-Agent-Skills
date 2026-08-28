@@ -1,10 +1,10 @@
-"""Deterministic projections and lineage loading for prior analysis evidence.
+"""Deterministic projections and descendant-source lineage handling.
 
 This module owns bounded semantic projections, discovery of explicitly
-referenced orchestration state, and read-only loading of retained prior-analysis
-artifacts. Complete artifacts stay at their controller-owned paths; later
-analyses receive only hash-validated bounded projections and never gain mutation
-authority or native Luna rollout state.
+referenced orchestration state, and normalization of retained child sessions as
+ordinary source runs. Controller state resolves identity, provenance, and
+attribution only; retained prompts, results, and event excerpts are never copied
+into shared model inputs.
 """
 # ruff: noqa: F401,F403,F405,I001
 
@@ -308,60 +308,15 @@ def _holistic_raw_state_paths_by_call(
     return indexed
 
 
-def _retained_text_projection(
-    artifact: Any,
-    *,
-    limit: int,
-    surface_ids: Sequence[str],
-) -> dict[str, Any]:
-    """Load retained text only when its controller-recorded hash still matches."""
-
-    if not isinstance(artifact, Mapping):
-        return {"mode": "unavailable", "reason": "artifact-metadata-missing"}
-    path_value = artifact.get("path")
-    expected_hash = artifact.get("sha256")
-    if (
-        not isinstance(path_value, str)
-        or not path_value
-        or not isinstance(expected_hash, str)
-        or re.fullmatch(r"[0-9a-f]{64}", expected_hash) is None
-    ):
-        return {"mode": "unavailable", "reason": "artifact-metadata-invalid"}
-    try:
-        path = pathlib.Path(path_value).expanduser().resolve(strict=True)
-    except OSError:
-        return {"mode": "unavailable", "reason": "artifact-missing"}
-    if path.is_symlink() or not path.is_file():
-        return {"mode": "unavailable", "reason": "artifact-not-regular"}
-    if _file_hash(path) != expected_hash:
-        return {"mode": "unavailable", "reason": "artifact-hash-mismatch"}
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        return {"mode": "unavailable", "reason": "artifact-unreadable"}
-    return {
-        "mode": "verified",
-        "artifact_sha256": expected_hash,
-        "projection_limit_chars": limit,
-        "projection": _holistic_projection(
-            text,
-            limit=limit,
-            surface_ids=surface_ids,
-        ),
-    }
-
-
-def _holistic_prior_analysis_activity(
+def _holistic_prior_analysis_sources(
     evidence: Mapping[str, Any],
     *,
     current_analysis_id: str,
-    surface_ids: Sequence[str],
-    text_limit: int,
     raw_state_paths_by_call: Mapping[str, Sequence[pathlib.Path]],
 ) -> tuple[list[dict[str, Any]], set[str]]:
-    """Load referenced earlier controller telemetry without prompt-text markers."""
+    """Resolve earlier controller descendants without copying their artifacts."""
 
-    activities: list[dict[str, Any]] = []
+    sources: list[dict[str, Any]] = []
     analysis_call_ids: set[str] = set()
     seen_analyses: set[str] = set()
     review_index = _review_record_index(evidence)
@@ -400,7 +355,8 @@ def _holistic_prior_analysis_activity(
             if analysis_id in seen_analyses:
                 continue
             seen_analyses.add(analysis_id)
-            tasks: list[dict[str, Any]] = []
+            descendants: list[dict[str, Any]] = []
+            seen_sessions: set[str] = set()
             execution = prior.get("execution")
             order = prior.get("task_order")
             if isinstance(execution, Mapping) and isinstance(order, list):
@@ -411,95 +367,284 @@ def _holistic_prior_analysis_activity(
                         or not isinstance(task_state, Mapping)
                     ):
                         continue
-                    attempts: list[dict[str, Any]] = []
                     for attempt in task_state.get("attempts", []):
                         if not isinstance(attempt, Mapping):
                             continue
-                        artifacts = attempt.get("artifacts")
-                        prompt_projection = None
-                        result_projection = None
-                        luna_event_stream = None
-                        if isinstance(artifacts, Mapping):
-                            prompt_artifact = artifacts.get("prompt")
-                            if isinstance(prompt_artifact, Mapping):
-                                prompt_path = pathlib.Path(
-                                    str(prompt_artifact.get("path", ""))
-                                )
-                                if (
-                                    prompt_path.is_file()
-                                    and not prompt_path.is_symlink()
-                                ):
-                                    prompt_projection = _holistic_projection(
-                                        prompt_path.read_text(encoding="utf-8"),
-                                        limit=text_limit,
-                                        surface_ids=surface_ids,
-                                    )
-                            output_artifact = artifacts.get("raw_output")
-                            if isinstance(output_artifact, Mapping):
-                                output_path = pathlib.Path(
-                                    str(output_artifact.get("path", ""))
-                                )
-                                if (
-                                    output_path.is_file()
-                                    and not output_path.is_symlink()
-                                ):
-                                    result_projection = _holistic_projection(
-                                        output_path.read_text(encoding="utf-8"),
-                                        limit=text_limit,
-                                        surface_ids=surface_ids,
-                                    )
-                            if task_id.startswith("luna."):
-                                luna_event_stream = _retained_text_projection(
-                                    artifacts.get("events"),
-                                    limit=text_limit,
-                                    surface_ids=surface_ids,
-                                )
-                        attempts.append(
-                            {
-                                "attempt_number": attempt.get("attempt_number"),
-                                "model": attempt.get("model"),
-                                "reasoning_effort": attempt.get("reasoning_effort"),
-                                "duration_ms": attempt.get("duration_ms"),
-                                "exit_code": attempt.get("exit_code"),
-                                "timed_out": attempt.get("timed_out"),
-                                "terminated": attempt.get("terminated"),
-                                "error": attempt.get("error"),
-                                "event_summary": attempt.get("event_summary"),
-                                "prompt": prompt_projection,
-                                "result": result_projection,
-                                "luna_event_stream": luna_event_stream,
-                            }
+                        summary = attempt.get("event_summary")
+                        child_ids = (
+                            summary.get("child_session_ids", [])
+                            if isinstance(summary, Mapping)
+                            else []
                         )
-                    tasks.append(
+                        if not isinstance(child_ids, list):
+                            continue
+                        for session_id in child_ids:
+                            if (
+                                not isinstance(session_id, str)
+                                or not session_id
+                                or session_id in seen_sessions
+                            ):
+                                continue
+                            seen_sessions.add(session_id)
+                            descendants.append(
+                                {
+                                    "session_id": session_id,
+                                    "task_id": task_id,
+                                    "attempt_number": attempt.get("attempt_number"),
+                                    "model": attempt.get("model"),
+                                    "phase": attempt.get("phase") or task_state.get("phase"),
+                                    "execution_cwd": attempt.get("execution_cwd"),
+                                    "ephemeral": bool(attempt.get("ephemeral")),
+                                }
+                            )
+            for child in prior.get("child_lineage", []):
+                if not isinstance(child, Mapping):
+                    continue
+                child_ids = child.get("child_session_ids", [])
+                if not isinstance(child_ids, list):
+                    continue
+                for session_id in child_ids:
+                    if (
+                        not isinstance(session_id, str)
+                        or not session_id
+                        or session_id in seen_sessions
+                    ):
+                        continue
+                    seen_sessions.add(session_id)
+                    descendants.append(
                         {
-                            "task_id": task_id,
-                            "status": task_state.get("status"),
-                            "result_identity": task_state.get("result"),
-                            "attempts": attempts,
+                            "session_id": session_id,
+                            "task_id": child.get("task_id"),
+                            "attempt_number": child.get("attempt_number"),
+                            "model": None,
+                            "phase": None,
+                            "execution_cwd": child.get("execution_cwd"),
+                            "ephemeral": bool(child.get("ephemeral")),
                         }
                     )
-            activities.append(
+            sources.append(
                 {
                     "analysis_id": analysis_id,
                     "source_call_id": call_id,
                     "state_sha256": _file_hash(state_path),
-                    "phase": prior.get("phase"),
-                    "model_calls": prior.get("model_calls"),
-                    "model_attempts": prior.get("model_attempts"),
-                    "tasks": tasks,
-                    "evidence_ref": f"analysis://{analysis_id}",
+                    "descendants": descendants,
                 }
             )
-    return activities, analysis_call_ids
+    return sources, analysis_call_ids
+
+
+def _namespace_descendant_evidence(
+    evidence: Mapping[str, Any],
+    *,
+    session_id: str,
+    analysis_id: str,
+    source_cwd: str,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Give one child session collision-free ordinary-run identities."""
+
+    value = json.loads(json.dumps(evidence, ensure_ascii=False, default=str))
+    prefix = f"thread.{hashlib.sha256(session_id.encode('utf-8')).hexdigest()[:12]}"
+    turn_ids = {
+        str(run["turn_id"]): f"{prefix}:{run['turn_id']}"
+        for run in value.get("runs", [])
+    }
+    message_ids = {
+        str(message["message_id"]): f"{prefix}:{message['message_id']}"
+        for run in value.get("runs", [])
+        for message in run.get("user_messages", [])
+    }
+    call_ids = {
+        str(call["call_id"]): f"{prefix}:{call['call_id']}"
+        for run in value.get("runs", [])
+        for call in run.get("calls", [])
+    }
+    review_ids = {
+        str(record["record_id"]): f"{prefix}:{record['record_id']}"
+        for record in value.get("model_review", {}).get("records", [])
+    }
+    for run in value.get("runs", []):
+        original_turn_id = str(run["turn_id"])
+        run["turn_id"] = turn_ids[original_turn_id]
+        run["source_session_id"] = session_id
+        run["source_analysis_id"] = analysis_id
+        run["source_cwd"] = source_cwd
+        for message in run.get("user_messages", []):
+            message["message_id"] = message_ids[str(message["message_id"])]
+        for call in run.get("calls", []):
+            call["call_id"] = call_ids[str(call["call_id"])]
+            call["turn_id"] = turn_ids[str(call["turn_id"])]
+            call["user_message_ids"] = [
+                message_ids[str(message_id)]
+                for message_id in call.get("user_message_ids", [])
+            ]
+            call["model_review_record_ids"] = [
+                review_ids[str(record_id)]
+                for record_id in call.get("model_review_record_ids", [])
+            ]
+    model_review = value.get("model_review", {})
+    for record in model_review.get("records", []):
+        record["record_id"] = review_ids[str(record["record_id"])]
+        if record.get("turn_id") is not None:
+            record["turn_id"] = turn_ids[str(record["turn_id"])]
+    model_review["global_record_ids"] = [
+        review_ids[str(record_id)]
+        for record_id in model_review.get("global_record_ids", [])
+    ]
+    model_review["call_record_ids"] = {
+        turn_ids[str(turn_id)]: {
+            str(index): [review_ids[str(record_id)] for record_id in record_ids]
+            for index, record_ids in calls.items()
+        }
+        for turn_id, calls in model_review.get("call_record_ids", {}).items()
+    }
+    value["call_inventory"] = [
+        call_ids[str(call_id)] for call_id in value.get("call_inventory", [])
+    ]
+    coverage = value.get("semantic_coverage", {})
+    coverage["run_ids"] = [
+        turn_ids[str(turn_id)] for turn_id in coverage.get("run_ids", [])
+    ]
+    value["thread_source"] = {
+        "session_id": session_id,
+        "analysis_id": analysis_id,
+        "source_cwd": source_cwd,
+    }
+    return value, turn_ids
+
+
+def _merge_numeric_totals(values: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Aggregate deterministic usage totals across independently read sessions."""
+
+    percentage_keys = {
+        "input_of_total_pct",
+        "cache_rate_pct",
+        "output_of_total_pct",
+        "reasoning_of_output_pct",
+    }
+    result: dict[str, Any] = {}
+    for key in values[0]:
+        if key in percentage_keys:
+            continue
+        items = [value.get(key) for value in values]
+        if all(item is None for item in items):
+            result[key] = None
+        elif all(
+            item is None or isinstance(item, (int, float)) and not isinstance(item, bool)
+            for item in items
+        ):
+            result[key] = sum(item for item in items if item is not None)
+        else:
+            result[key] = items[0]
+    input_tokens = int(result.get("input_tokens") or 0)
+    cached_tokens = int(result.get("cached_input_tokens") or 0)
+    output_tokens = int(result.get("output_tokens") or 0)
+    reasoning_tokens = int(result.get("reasoning_output_tokens") or 0)
+    total_tokens = int(result.get("total_tokens") or input_tokens + output_tokens)
+    result.update(
+        {
+            "input_of_total_pct": round(100 * input_tokens / total_tokens, 2)
+            if total_tokens
+            else 0.0,
+            "cache_rate_pct": round(100 * cached_tokens / input_tokens, 2)
+            if input_tokens
+            else 0.0,
+            "output_of_total_pct": round(100 * output_tokens / total_tokens, 2)
+            if total_tokens
+            else 0.0,
+            "reasoning_of_output_pct": round(100 * reasoning_tokens / output_tokens, 2)
+            if output_tokens
+            else 0.0,
+        }
+    )
+    return result
+
+
+def _merge_thread_evidence(
+    primary: Mapping[str, Any],
+    descendants: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Merge namespaced child sessions into one ordinary frozen run inventory."""
+
+    merged = json.loads(json.dumps(primary, ensure_ascii=False, default=str))
+    if not descendants:
+        return merged
+    all_values = [merged, *descendants]
+    merged["runs"] = [run for value in all_values for run in value.get("runs", [])]
+    merged["call_inventory"] = [
+        call_id for value in all_values for call_id in value.get("call_inventory", [])
+    ]
+    merged["collection"] = {
+        key: sum(int(value.get("collection", {}).get(key) or 0) for value in all_values)
+        for key in (
+            "session_reads",
+            "completed_runs",
+            "model_calls",
+            "user_messages",
+            "model_review_records",
+        )
+    }
+    merged["semantic_coverage"] = {
+        "mode": "complete",
+        "threshold_percent": 100,
+        "run_ids": [str(run["turn_id"]) for run in merged["runs"]],
+        "covered_calls": len(merged["call_inventory"]),
+        "total_calls": len(merged["call_inventory"]),
+        "covered_percent": 100.0,
+    }
+    merged["totals"] = _merge_numeric_totals(
+        [value["totals"] for value in all_values]
+    )
+    repeated: dict[tuple[str, str], dict[str, Any]] = {}
+    for value in all_values:
+        for group in value.get("repeated_tool_calls", []):
+            key = (str(group.get("name")), str(group.get("fingerprint")))
+            if key not in repeated:
+                repeated[key] = dict(group)
+            else:
+                repeated[key]["count"] = int(repeated[key].get("count") or 0) + int(
+                    group.get("count") or 0
+                )
+    merged["repeated_tool_calls"] = list(repeated.values())
+    reviews = [value["model_review"] for value in all_values]
+    merged_review = merged["model_review"]
+    merged_review["records"] = [
+        record for review in reviews for record in review.get("records", [])
+    ]
+    merged_review["global_record_ids"] = [
+        record_id
+        for review in reviews
+        for record_id in review.get("global_record_ids", [])
+    ]
+    merged_review["call_record_ids"] = {
+        str(turn_id): calls
+        for review in reviews
+        for turn_id, calls in review.get("call_record_ids", {}).items()
+    }
+    canonical: dict[str, Any] = {}
+    for review in reviews:
+        for item in review.get("canonical_path_references", []):
+            canonical.setdefault(
+                json.dumps(item, sort_keys=True, separators=(",", ":")), item
+            )
+    merged_review["canonical_path_references"] = list(canonical.values())
+    merged["source_fingerprint"] = _content_hash(
+        [value.get("source_fingerprint") for value in all_values]
+    )
+    merged["window_fingerprint"] = _content_hash(
+        [value.get("window_fingerprint") for value in all_values]
+    )
+    return merged
 
 
 __all__ = (
     "OUTCOME_KEYS",
     "SURFACE_EVIDENCE_KEYWORDS",
-    "_holistic_prior_analysis_activity",
+    "_holistic_prior_analysis_sources",
     "_holistic_projection",
     "_holistic_raw_state_paths_by_call",
     "_holistic_state_paths",
+    "_merge_thread_evidence",
+    "_namespace_descendant_evidence",
     "_relevant_segments",
     "_review_record_index",
     "_shared_relevant_segments",

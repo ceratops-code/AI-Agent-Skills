@@ -14,6 +14,7 @@ from tests.credit_analysis.sessions import (
     _attach_prior_analysis_state,
     credit_analysis_request,
     finding_record,
+    indexed_credit_analysis_session,
     surface_result_record,
     write_json_file,
 )
@@ -22,6 +23,7 @@ from tests.credit_analysis.workflow import run_credit_analysis_workflow
 
 def test_credit_analysis_lineage_allows_later_meta_analysis_without_recursion(
     tmp_path: pathlib.Path,
+    monkeypatch,
 ) -> None:
     workflow = load_credit_analysis_workflow_module()
     a_root = tmp_path / "a"
@@ -45,12 +47,49 @@ def test_credit_analysis_lineage_allows_later_meta_analysis_without_recursion(
     )
     assert complete_a["complete"] is True
 
+    codex_home = tmp_path / "codex-home"
+    luna_thread_id = "019a0000-0000-7000-8000-000000000001"
+    sol_thread_id = "019a0000-0000-7000-8000-000000000002"
+    indexed_credit_analysis_session(
+        codex_home,
+        thread_id=luna_thread_id,
+        thread_name="retained Luna child",
+        updated_at="2026-08-01T00:00:01Z",
+        project_name="retained-luna",
+    )
+    indexed_credit_analysis_session(
+        codex_home,
+        thread_id=sol_thread_id,
+        thread_name="retained Sol child",
+        updated_at="2026-08-01T00:00:02Z",
+        project_name="retained-sol",
+    )
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    prior_state_path = pathlib.Path(plan_a["state_path"])
+    state_a = json.loads(prior_state_path.read_text(encoding="utf-8"))
+    luna_task_id = next(
+        task_id for task_id in state_a["task_order"] if task_id.startswith("luna.")
+    )
+    sol_task_id = next(
+        task_id
+        for task_id in state_a["task_order"]
+        if task_id.startswith("sol.adjudication.")
+        and state_a["execution"][task_id]["status"] == "complete"
+    )
+    for task_id, thread_id in (
+        (luna_task_id, luna_thread_id),
+        (sol_task_id, sol_thread_id),
+    ):
+        attempt = state_a["execution"][task_id]["attempts"][0]
+        attempt["ephemeral"] = False
+        attempt["event_summary"]["child_session_ids"] = [thread_id]
+    write_json_file(prior_state_path, state_a)
+
     request_b, session_b, _ = credit_analysis_request(
         b_root,
         extra_completed_turns=1,
         extra_calls_per_turn=2,
     )
-    prior_state_path = pathlib.Path(plan_a["state_path"])
     _attach_prior_analysis_state(session_b, prior_state_path)
     raw_rows = [
         json.loads(line)
@@ -73,32 +112,21 @@ def test_credit_analysis_lineage_allows_later_meta_analysis_without_recursion(
         plan_a["analysis_id"]
     ]
     assert evidence_b["analysis_lineage"]["source_selection_uses_prompt_markers"] is False
-    assert evidence_b["analysis_generated_activity"][0]["analysis_id"] == plan_a[
-        "analysis_id"
+    assert evidence_b["analysis_lineage"]["included_session_reads"] == 3
+    assert {
+        item["session_id"]
+        for item in evidence_b["analysis_lineage"]["included_descendant_sessions"]
+    } == {luna_thread_id, sol_thread_id}
+    assert evidence_b["analysis_lineage"]["unresolved_descendant_sessions"] == []
+    assert "analysis_generated_activity" not in evidence_b
+    assert "luna_event_stream" not in json.dumps(evidence_b)
+    descendant_runs = [
+        run for run in evidence_b["runs"] if str(run["turn_id"]).startswith("thread.")
     ]
-    assert any(
-        attempt["prompt"] is not None
-        and attempt["event_summary"]["usage"] is not None
-        for task in evidence_b["analysis_generated_activity"][0]["tasks"]
-        for attempt in task["attempts"]
-    )
-    luna_attempts = [
-        attempt
-        for task in evidence_b["analysis_generated_activity"][0]["tasks"]
-        if task["task_id"].startswith("luna.")
-        for attempt in task["attempts"]
-    ]
-    assert luna_attempts
-    assert all(
-        attempt["luna_event_stream"]["mode"] == "verified"
-        and attempt["luna_event_stream"]["projection_limit_chars"] == 900
-        for attempt in luna_attempts
-    )
-    assert any(
-        "fake.semantic.completed"
-        in attempt["luna_event_stream"]["projection"]["value"]
-        for attempt in luna_attempts
-    )
+    assert len(descendant_runs) == 6
+    assert {run["source_analysis_id"] for run in descendant_runs} == {
+        plan_a["analysis_id"]
+    }
     manifest_b = json.loads(
         pathlib.Path(plan_b["manifest_path"]).read_text(encoding="utf-8")
     )
@@ -141,20 +169,11 @@ def test_credit_analysis_lineage_allows_later_meta_analysis_without_recursion(
     ]
     assert sum(analysis_totals.values()) == len(analysis_records)
 
-    state_a = json.loads(prior_state_path.read_text(encoding="utf-8"))
-    luna_task_id = next(
-        task_id for task_id in state_a["task_order"] if task_id.startswith("luna.")
-    )
-    event_path = pathlib.Path(
-        state_a["execution"][luna_task_id]["attempts"][0]["artifacts"]["events"][
-            "path"
-        ]
-    )
-    event_path.write_text(
-        event_path.read_text(encoding="utf-8") + "{}\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+    unavailable_thread_id = "019a0000-0000-7000-8000-000000000003"
+    state_a["execution"][luna_task_id]["attempts"][0]["event_summary"][
+        "child_session_ids"
+    ].append(unavailable_thread_id)
+    write_json_file(prior_state_path, state_a)
     c_root = tmp_path / "c"
     c_root.mkdir()
     request_c, session_c, _ = credit_analysis_request(
@@ -170,17 +189,13 @@ def test_credit_analysis_lineage_allows_later_meta_analysis_without_recursion(
     evidence_c = json.loads(
         pathlib.Path(plan_c["evidence_path"]).read_text(encoding="utf-8")
     )
-    tampered_luna_attempts = [
-        attempt
-        for task in evidence_c["analysis_generated_activity"][0]["tasks"]
-        if task["task_id"].startswith("luna.")
-        for attempt in task["attempts"]
-    ]
+    unresolved = evidence_c["analysis_lineage"]["unresolved_descendant_sessions"]
     assert any(
-        attempt["luna_event_stream"]
-        == {"mode": "unavailable", "reason": "artifact-hash-mismatch"}
-        for attempt in tampered_luna_attempts
+        item["session_id"] == unavailable_thread_id
+        and item["reason"] == "session-unavailable"
+        for item in unresolved
     )
+    assert "analysis_generated_activity" not in evidence_c
 
 
 def test_credit_analysis_workflow_standalone_zero_findings_is_isolated(

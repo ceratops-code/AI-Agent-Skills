@@ -817,10 +817,10 @@ def _load_contract() -> dict[str, Any]:
     if semantic_calls != {
         "luna_max_attempts": 70,
         "luna_max_concurrency": 15,
-        "sol_target_calls": 5,
-        "sol_max_calls": 6,
-        "sol_adjudicator_target": 3,
-        "sol_adjudicator_max": 4,
+        "sol_target_calls": 7,
+        "sol_max_calls": 8,
+        "sol_adjudicator_target": 6,
+        "sol_adjudicator_max": 6,
         "bookkeeping_calls": 0,
     }:
         raise CreditAnalysisError("semantic call contract is invalid")

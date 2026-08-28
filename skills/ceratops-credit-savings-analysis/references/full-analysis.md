@@ -4,12 +4,12 @@
 
 Run the all-run controller plan. Treat every completed run as one semantic unit,
 use Luna for high-recall discovery across all five surfaces together, then use
-capacity-sized Sol adjudication, audit, and final synthesis. Preserve every
-confirmed finding and report every capacity omission.
+capacity-sized Sol review, direct-evidence inspection, and final synthesis.
+Preserve every confirmed finding and report every capacity omission.
 
 ## Inputs And Constraints
 
-- Use the source, completed-run window, task temporary root, retained evidence
+- Use the source, completed-run selection, task temporary root, retained evidence
   path inside that root, optional pricing profile, and contract version required
   by the parent.
 - For one source, accept an explicit thread ID or session path, the current
@@ -28,66 +28,74 @@ confirmed finding and report every capacity omission.
 - Prepare with action and mode `full-analysis`. Do not run a standalone surface
   in parallel or collect another bundle.
 - Execute only frozen controller tasks. Luna discovers across the fixed surface
-  set; Sol adjudicators, the separate audit, and the final merge remain internal
-  phases of `full-analysis`.
+  set; Sol report reviewers, the direct-evidence review, and the final merge
+  remain internal phases of `full-analysis`.
 
 ## Workflow
 
-1. Run controller `run --request REQUEST`. On a fresh request it resolves,
-   collects, and parses the selected session once; freezes its cutoff and exact
-   lineage before children; retains complete evidence from every completed run,
-   including corrective follow-ups, and read-only canonical snapshots; separates
-   prior analysis-generated activity from producer work; resolves and hashes the
-   effective global and run-local `AGENTS.md` chain; and builds one ordered
-   semantic run record per completed run. Measure UTF-8 bytes, not characters,
-   and retain each run's record count, evidence bytes, planned Luna-output bytes,
-   and actual output bytes. Reserve the visible controller prompt and output
-   schema inside each child input envelope. Analysis A excludes only its own
-   descendants; a later B may inspect A's retained analysis activity, including
-   one hash-validated bounded projection of every retained Luna JSON event stream,
-   and excludes only B's. Keep each complete stream at its retained path.
-2. The same controller run executes the frozen plan without recollection. In the
-   normal case it sends one complete run record to one `gpt-5.6-luna` task at
-   maximum effort. Split only an oversized run into the minimum ordered transport
-   windows, preserve run order and cross-window metadata, and recombine the
-   accepted windows into one run report. Never use calls as independent semantic
-   units or create per-surface Luna tasks. Keep up to fifteen Luna tasks running
-   concurrently without a one-window-per-run admission barrier. Admit at most
-   seventy Luna model-call attempts for one source, including corrective reruns.
-   Allocate flexible output bytes per task from the measured downstream Sol
-   envelope rather than requiring one fixed output size.
+1. Run controller `run --request REQUEST`. On a fresh request it resolves the
+   selected source as a frozen thread tree, reads each included session once,
+   and
+   freezes the cutoff and exact lineage before creating children. Treat
+   completed
+   descendant Luna and Sol threads from an earlier credit analysis as ordinary
+   runs under the same preparation, capacity, heuristic, and semantic rules as
+   every other descendant. Retained controller state may resolve child
+   identities,
+   provenance, and attribution but never supplies shared prompt, result, or
+   event
+   excerpts to model inputs. Exclude only descendants created by the current
+   analysis. Retain complete run evidence, read-only canonical snapshots,
+   effective global and run-local `AGENTS.md` chains, record counts, UTF-8 input
+   bytes, planned Luna-output bytes, and actual output bytes.
+2. The same controller run executes the frozen plan without recollection. Keep
+   each completed run as one semantic unit. Divide only an oversized run into
+   the
+   minimum ordered input parts that each fit Luna, preserve run order and
+   cross-part context, and recombine accepted parts into one run report. If all
+   prepared evidence needs no more than seventy Luna attempts, admit every part.
+   Otherwise prioritize the largest runs and their immediate successors, admit
+   as
+   many ordered parts as the remaining slots allow, and record the exact
+   unreviewed remainder. Never use calls as independent semantic units or create
+   per-surface Luna tasks. Run up to fifteen Luna tasks concurrently and no more
+   than seventy attempts including corrective reruns. Launch Luna with retained
+   native sessions. Let `W` be admitted Luna tasks, `A` be `min(6, W)`, and `X`
+   be usable Luna-report input bytes per Sol reviewer after fixed reserves. Size
+   Luna outputs so every reviewer's assigned reports fit `X`; a uniform safe
+   allowance is `floor(X / ceil(W / A))` minus per-report framing.
 3. Reject a Luna result only when it violates the frozen schema or output-byte
-   envelope, not because it found many supported candidates. Rerun the exact task
-   once with a smaller output allowance; if it still cannot fit, record that
-   complete window as omitted and continue within the seventy-attempt cap. Record
-   every unlaunched or unaccepted run window as omitted for capacity with its run
-   and window identity, record count, evidence bytes, candidate count when known,
-   output bytes when produced, and reason. Never split or truncate a run window.
-4. Measure the retained Luna reports before Sol assignment. Route every retained
-   candidate exactly once to one of three `gpt-5.6-sol` adjudicators at maximum
-   effort. Each receives self-contained Luna reports and their embedded evidence
-   references, not the complete source thread. A candidate with one or more
-   confirmed subclaims uses `confirmed-finding` and may also link separate
-   plausible risks from the same candidate. Require at least one
-   temporary-control review for every temporary-control candidate; preserve
-   multiple reviews when they describe distinct owner/control pairs.
-   Add a fourth adjudicator only when
-   the measured reports cannot fit three. In parallel, run one separate audit Sol
-   against one unsurfaced raw window from the largest run and one
-   deterministically highest-signal unsurfaced raw window. The three adjudicators
-   plus audit normally form four concurrent first-stage Sol tasks; overflow uses
-   four adjudicators plus audit.
+   allowance, not because it found many supported candidates. Rerun that exact
+   task once with a smaller allowance; if it still fails, report that run part
+   as
+   unreviewed and continue within the seventy-attempt cap. Record every
+   unlaunched
+   or unaccepted run part with its run and part identity, record count, input
+   bytes, candidate count when known, output bytes when produced, and reason.
+   Never truncate a result.
+4. Measure the accepted Luna reports before Sol assignment. Route every retained
+   candidate exactly once to one of up to six parallel `gpt-5.6-sol` reviewers
+   at
+   maximum effort. Each receives only its assigned Luna reports and embedded
+   evidence references. A candidate with confirmed subclaims may also link
+   separate plausible risks, and every temporary-control candidate receives the
+   required owner/control review. When deterministic size, signal, correction,
+   or
+   partial-coverage evidence selects one important run, run one additional
+   direct-evidence Sol against that prepared run evidence rather than Luna's
+   description.
 5. Apply the unassessed-call ceiling to the complete routed call set, never to
-   one preliminary Sol shard in isolation. Run one dependent final Sol after all
-   first-stage Sol tasks finish. It merges compact judgments, temporary-control
-   reviews, classifications, risks, and ROI
-   inputs. Deduplicate likely owner/control identity before ranking, then deeply
-   verify and expand the top three findings against exact raw evidence. The final
-   Sol does not re-adjudicate every candidate, and the top-three review is not a
-   cap on confirmed findings or presentation. A normal plan uses five total Sol
-   calls; measured-output overflow uses six. Never exceed six. If six cannot fit,
-   omit only deterministic overflow, retain its exact run/window/candidate and
-   byte inventory, and never claim it was adjudicated.
+   one preliminary Sol result in isolation. After the parallel reviewers and any
+   direct-evidence review finish, run one dependent final Sol. It merges compact
+   judgments, temporary-control reviews, classifications, risks, and ROI inputs;
+   deduplicates likely owner/control identity; and deeply verifies and expands
+   the
+   top three findings without suppressing other confirmed findings. Use no more
+   than six Luna-output reviewers, one direct-evidence reviewer, and one final
+   merger: eight Sol calls total. If that capacity cannot preserve every
+   accepted
+   candidate, retain the exact unreviewed candidate and byte inventory and never
+   claim it was adjudicated.
 6. Persist immutable identities, prompts, results, attempts, latency, and usage.
    Before surfacing one parallel sibling failure, record every already-completed
    sibling attempt. On resume, revalidate complete task-owned attempt artifacts
@@ -100,8 +108,8 @@ confirmed finding and report every capacity omission.
 Every child Codex execution uses an explicit model, a read-only sandbox, no
 approvals, a self-contained no-tools prompt, and controller-owned schema, event,
 and result files. Launch Luna from the verified source cwd for its run with
-ephemeral state. Launch Sol from the source's primary cwd without ephemeral
-state, and include retained effective-rule hashes plus the text of any differing
+retained native state. Launch Sol from the source's primary cwd with retained
+native state, and include retained effective-rule hashes plus the text of any differing
 run-local rules in its handoff. Bind the applicable rule-chain hash to every task
 and attempt. The controller waits internally and emits periodic
 non-model progress. Resume the exact request. Alternatively use
@@ -114,14 +122,15 @@ ordinary holistic child per selected thread. For the pending child returned by
 result to `advance-batch`. Repeat until the batch-summary phase, satisfy that
 existing summary contract, advance it, and run `finalize-batch`. This preserves
 the existing batch manifest and summary contracts and does not expose Luna
-windows, Sol adjudication, audit, or merge as public actions. Never collect a
-child through a parallel controller or create a temporary discovery script.
+input parts, Sol review, direct-evidence inspection, or merge as public actions.
+Never collect a child through a parallel controller or create a temporary
+discovery script.
 
 ## Completion Gate
 
-Complete only when orchestration status reports `complete: true` and retained
+Complete only when controller status reports `complete: true` and retained
 evidence contains the frozen manifest; the identity, byte accounting, and result
-of every admitted Luna window and Sol task; one disposition for every retained
+of every admitted Luna part and Sol task; one disposition for every retained
 Luna candidate; every confirmed finding, plausible risk, temporary-control
 review and merge, call classification, producer group, and ROI input; and the
 exact inventory of every capacity omission. Label semantic coverage incomplete
@@ -132,10 +141,10 @@ once before batch finalization succeeds.
 ## Output Contract
 
 Start with coverage: completed runs and semantic run units; planned, reviewed,
-and omitted windows; evidence bytes reviewed and total; coverage percentage;
-actual Luna and Sol calls; and one row per window with records, input bytes,
+and omitted run parts; evidence bytes reviewed and total; coverage percentage;
+actual Luna and Sol calls; and one row per part with records, input bytes,
 output allowance, actual output bytes, and status. For every omission, show
-`Run | Window | Records | Evidence bytes | Candidate count | Output bytes |
+`Run | Part | Records | Evidence bytes | Candidate count | Output bytes |
 Reason`. Do not render a capacity omission as zero findings or zero avoidable
 calls.
 
