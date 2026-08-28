@@ -82,6 +82,23 @@ def test_credit_analysis_lineage_allows_later_meta_analysis_without_recursion(
         for task in evidence_b["analysis_generated_activity"][0]["tasks"]
         for attempt in task["attempts"]
     )
+    luna_attempts = [
+        attempt
+        for task in evidence_b["analysis_generated_activity"][0]["tasks"]
+        if task["task_id"].startswith("luna.")
+        for attempt in task["attempts"]
+    ]
+    assert luna_attempts
+    assert all(
+        attempt["luna_event_stream"]["mode"] == "verified"
+        and attempt["luna_event_stream"]["projection_limit_chars"] == 900
+        for attempt in luna_attempts
+    )
+    assert any(
+        "fake.semantic.completed"
+        in attempt["luna_event_stream"]["projection"]["value"]
+        for attempt in luna_attempts
+    )
     manifest_b = json.loads(
         pathlib.Path(plan_b["manifest_path"]).read_text(encoding="utf-8")
     )
@@ -123,6 +140,47 @@ def test_credit_analysis_lineage_allows_later_meta_analysis_without_recursion(
         "analysis-overhead"
     ]
     assert sum(analysis_totals.values()) == len(analysis_records)
+
+    state_a = json.loads(prior_state_path.read_text(encoding="utf-8"))
+    luna_task_id = next(
+        task_id for task_id in state_a["task_order"] if task_id.startswith("luna.")
+    )
+    event_path = pathlib.Path(
+        state_a["execution"][luna_task_id]["attempts"][0]["artifacts"]["events"][
+            "path"
+        ]
+    )
+    event_path.write_text(
+        event_path.read_text(encoding="utf-8") + "{}\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    c_root = tmp_path / "c"
+    c_root.mkdir()
+    request_c, session_c, _ = credit_analysis_request(
+        c_root,
+        extra_completed_turns=1,
+        extra_calls_per_turn=2,
+    )
+    _attach_prior_analysis_state(session_c, prior_state_path)
+    plan_c = workflow.command_plan_orchestration(
+        request_c,
+        available_models=runner_b.available_models,
+    )
+    evidence_c = json.loads(
+        pathlib.Path(plan_c["evidence_path"]).read_text(encoding="utf-8")
+    )
+    tampered_luna_attempts = [
+        attempt
+        for task in evidence_c["analysis_generated_activity"][0]["tasks"]
+        if task["task_id"].startswith("luna.")
+        for attempt in task["attempts"]
+    ]
+    assert any(
+        attempt["luna_event_stream"]
+        == {"mode": "unavailable", "reason": "artifact-hash-mismatch"}
+        for attempt in tampered_luna_attempts
+    )
 
 
 def test_credit_analysis_workflow_standalone_zero_findings_is_isolated(

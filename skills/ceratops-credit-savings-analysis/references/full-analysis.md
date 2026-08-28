@@ -43,8 +43,9 @@ confirmed finding and report every capacity omission.
    and retain each run's record count, evidence bytes, planned Luna-output bytes,
    and actual output bytes. Reserve the visible controller prompt and output
    schema inside each child input envelope. Analysis A excludes only its own
-   descendants; a later B may inspect A's retained analysis activity and excludes
-   only B's.
+   descendants; a later B may inspect A's retained analysis activity, including
+   one hash-validated bounded projection of every retained Luna JSON event stream,
+   and excludes only B's. Keep each complete stream at its retained path.
 2. The same controller run executes the frozen plan without recollection. In the
    normal case it sends one complete run record to one `gpt-5.6-luna` task at
    maximum effort. Split only an oversized run into the minimum ordered transport

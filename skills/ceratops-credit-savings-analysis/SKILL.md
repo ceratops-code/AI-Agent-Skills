@@ -41,9 +41,11 @@ applies them.
   Planning collects and parses the selected session exactly once, freezes its
   cutoff before child execution, and assigns exact controller lineage. Analysis
   A excludes only its own recorded descendants. A later analysis B may inspect
-  A's retained prompts, model calls, latency, failures, token usage, and
-  orchestration while excluding only B's descendants. Keep analysis-generated
-  work separate from producer work and savings attribution.
+  A's retained prompts, results, model calls, latency, failures, token usage,
+  orchestration, and one hash-validated bounded projection of every retained Luna
+  JSON event stream while excluding only B's descendants. Keep complete event
+  streams at their retained paths and keep analysis-generated work separate from
+  producer work and savings attribution.
 - Planning retains complete protected evidence and read-only canonical
   snapshots. Full analysis treats every completed run as one semantic unit,
   freezes run order and UTF-8 byte counts, and partitions only an oversized run
