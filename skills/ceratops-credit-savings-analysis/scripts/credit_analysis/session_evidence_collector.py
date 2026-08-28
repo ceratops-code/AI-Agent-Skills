@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Resolve Codex thread sources and emit a compact judgment-free call ledger.
+"""Resolve Codex thread sources and collect judgment-free analysis evidence.
 
-The ledger groups automatic continuations by turn ID, includes only completed
+The collector groups automatic continuations by turn ID, includes only completed
 runs, and fingerprints top-level tool arguments instead of reproducing
 potentially sensitive input. For ``functions.exec``, statically declared shell
 children retain a bounded redacted command label and exact observable failure
@@ -12,7 +12,7 @@ call inventory in one invocation and creates no cleanup artifact. Repeated
 ``--include-run`` requires ``--semantic-evidence-output``. The helper writes
 selected redacted actions to a separate versioned sidecar and emits only
 selected-run IDs and counts. The
-ordinary ledger remains fingerprint-only. Summary mode writes versioned
+ordinary evidence remains fingerprint-only. Summary mode writes versioned
 per-turn usage and structured result evidence while emitting only compact
 totals and top-turn rankings. The
 same helper validates a caller-owned classification file before reporting,
@@ -37,11 +37,11 @@ import uuid
 from collections import Counter
 from typing import Any
 
-SCHEMA = "ceratops-model-call-ledger.v1"
-SUMMARY_SCHEMA = "ceratops-model-call-ledger-summary.v1"
+SCHEMA = "ceratops-session-evidence.v1"
+SUMMARY_SCHEMA = "ceratops-session-evidence-summary.v1"
 SEMANTIC_EVIDENCE_SCHEMA = "ceratops-model-call-semantic-evidence.v1"
 SEMANTIC_SUMMARY_SCHEMA = "ceratops-model-call-semantic-summary.v1"
-CLOSURE_SCHEMA = "ceratops-model-call-ledger-closure.v1"
+CLOSURE_SCHEMA = "ceratops-session-evidence-closure.v1"
 CLASSIFICATIONS_SCHEMA = "ceratops-model-call-classifications.v1"
 CLASSIFIED_SUMMARY_SCHEMA = "ceratops-model-call-classified-summary.v1"
 USAGE_EVIDENCE_SCHEMA = "ceratops-model-call-usage-evidence.v1"
@@ -157,7 +157,7 @@ NESTED_COMMAND_LABEL_LIMIT = 500
 FAILURE_REASON_LABEL_LIMIT = 420
 
 
-class LedgerError(RuntimeError):
+class EvidenceCollectionError(RuntimeError):
     """Report invalid session evidence without exposing raw record contents."""
 
 
@@ -174,11 +174,11 @@ def safe_rate(value: Any, field: str, *, positive: bool = False) -> float:
     """Validate one finite pricing rate without accepting booleans or strings."""
 
     if not isinstance(value, (int, float)) or isinstance(value, bool):
-        raise LedgerError(f"pricing field {field} must be a number")
+        raise EvidenceCollectionError(f"pricing field {field} must be a number")
     parsed = float(value)
     if not math.isfinite(parsed) or parsed < 0 or (positive and parsed == 0):
         qualifier = "positive finite" if positive else "non-negative finite"
-        raise LedgerError(f"pricing field {field} must be {qualifier}")
+        raise EvidenceCollectionError(f"pricing field {field} must be {qualifier}")
     return parsed
 
 
@@ -188,20 +188,20 @@ def load_pricing_profile(path: pathlib.Path) -> dict[str, float | str]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except OSError as exc:
-        raise LedgerError(f"could not read pricing profile: {exc}") from exc
+        raise EvidenceCollectionError(f"could not read pricing profile: {exc}") from exc
     except json.JSONDecodeError as exc:
-        raise LedgerError("pricing profile is not valid JSON") from exc
+        raise EvidenceCollectionError("pricing profile is not valid JSON") from exc
     if not isinstance(value, dict):
-        raise LedgerError("pricing profile must be a JSON object")
+        raise EvidenceCollectionError("pricing profile must be a JSON object")
     expected = {"schema", *PRICING_FIELDS}
     missing = sorted(expected - value.keys())
     extra = sorted(value.keys() - expected)
     if missing:
-        raise LedgerError(f"pricing profile is missing field: {missing[0]}")
+        raise EvidenceCollectionError(f"pricing profile is missing field: {missing[0]}")
     if extra:
-        raise LedgerError(f"pricing profile has unsupported field: {extra[0]}")
+        raise EvidenceCollectionError(f"pricing profile has unsupported field: {extra[0]}")
     if value.get("schema") != PRICING_PROFILE_SCHEMA:
-        raise LedgerError(f"pricing profile schema must be {PRICING_PROFILE_SCHEMA}")
+        raise EvidenceCollectionError(f"pricing profile schema must be {PRICING_PROFILE_SCHEMA}")
     return {
         "schema": PRICING_PROFILE_SCHEMA,
         "input_per_million_tokens": safe_rate(
@@ -249,16 +249,16 @@ def load_rows_with_fingerprint(
                     line = raw_line.decode("utf-8")
                     row = json.loads(line)
                 except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         f"invalid JSON on session line {line_number}"
                     ) from exc
                 if not isinstance(row, dict):
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         f"session line {line_number} is not a JSON object"
                     )
                 rows.append(row)
     except OSError as exc:
-        raise LedgerError(f"could not read session: {exc}") from exc
+        raise EvidenceCollectionError(f"could not read session: {exc}") from exc
     return rows, digest.hexdigest()
 
 
@@ -275,7 +275,7 @@ def canonical_thread_id(value: str) -> str:
     try:
         return str(uuid.UUID(value))
     except ValueError as exc:
-        raise LedgerError("thread ID must be a UUID") from exc
+        raise EvidenceCollectionError("thread ID must be a UUID") from exc
 
 
 def codex_home() -> pathlib.Path:
@@ -305,9 +305,9 @@ def resolve_thread_session(thread_id: str) -> pathlib.Path:
             if candidate.is_file()
         )
     if not matches:
-        raise LedgerError(f"session not found for thread ID: {canonical_id}")
+        raise EvidenceCollectionError(f"session not found for thread ID: {canonical_id}")
     if len(matches) > 1:
-        raise LedgerError(f"multiple sessions found for thread ID: {canonical_id}")
+        raise EvidenceCollectionError(f"multiple sessions found for thread ID: {canonical_id}")
     return matches.pop()
 
 
@@ -315,16 +315,16 @@ def parse_utc_timestamp(value: object, label: str) -> dt.datetime:
     """Parse one timezone-aware timestamp and normalize it to UTC."""
 
     if not isinstance(value, str) or not value.strip():
-        raise LedgerError(f"{label} must be a nonempty timestamp")
+        raise EvidenceCollectionError(f"{label} must be a nonempty timestamp")
     text = value.strip()
     if text.endswith("Z"):
         text = text[:-1] + "+00:00"
     try:
         parsed = dt.datetime.fromisoformat(text)
     except ValueError as exc:
-        raise LedgerError(f"{label} is not a valid ISO-8601 timestamp") from exc
+        raise EvidenceCollectionError(f"{label} is not a valid ISO-8601 timestamp") from exc
     if parsed.tzinfo is None:
-        raise LedgerError(f"{label} must include a timezone")
+        raise EvidenceCollectionError(f"{label} must include a timezone")
     return parsed.astimezone(dt.timezone.utc)
 
 
@@ -333,7 +333,7 @@ def load_thread_index() -> dict[str, Any]:
 
     path = codex_home() / "session_index.jsonl"
     if not path.is_file() or path.is_symlink():
-        raise LedgerError(f"Codex thread index is unavailable: {path}")
+        raise EvidenceCollectionError(f"Codex thread index is unavailable: {path}")
     digest = hashlib.sha256()
     latest: dict[str, tuple[dt.datetime, int, dict[str, str]]] = {}
     try:
@@ -341,28 +341,28 @@ def load_thread_index() -> dict[str, Any]:
             for line_number, raw_line in enumerate(handle, start=1):
                 digest.update(raw_line)
                 if not raw_line.strip():
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         f"Codex thread index has a blank record at line {line_number}"
                     )
                 try:
                     raw = json.loads(raw_line)
                 except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         f"Codex thread index has invalid JSON at line {line_number}"
                     ) from exc
                 if not isinstance(raw, dict):
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         f"Codex thread index record {line_number} is not an object"
                     )
                 try:
                     thread_id = canonical_thread_id(str(raw.get("id") or ""))
-                except LedgerError as exc:
-                    raise LedgerError(
+                except EvidenceCollectionError as exc:
+                    raise EvidenceCollectionError(
                         f"Codex thread index record {line_number} has an invalid ID"
                     ) from exc
                 thread_name = raw.get("thread_name")
                 if not isinstance(thread_name, str) or not thread_name.strip():
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         f"Codex thread index record {line_number} has no thread name"
                     )
                 updated_at = parse_utc_timestamp(
@@ -381,7 +381,7 @@ def load_thread_index() -> dict[str, Any]:
                 ):
                     latest[thread_id] = (updated_at, line_number, record)
     except OSError as exc:
-        raise LedgerError(f"could not read Codex thread index: {exc}") from exc
+        raise EvidenceCollectionError(f"could not read Codex thread index: {exc}") from exc
     entries = [record for _, _, record in latest.values()]
     entries.sort(
         key=lambda item: (
@@ -401,7 +401,7 @@ def resolve_current_thread_source() -> tuple[str, pathlib.Path]:
 
     thread_id = os.environ.get("CODEX_THREAD_ID")
     if not thread_id:
-        raise LedgerError(
+        raise EvidenceCollectionError(
             "current thread is unavailable because CODEX_THREAD_ID is not set"
         )
     canonical_id = canonical_thread_id(thread_id)
@@ -415,7 +415,7 @@ def resolve_named_thread_source(
 
     normalized = thread_name.strip().casefold()
     if not normalized:
-        raise LedgerError("thread name must be nonempty")
+        raise EvidenceCollectionError("thread name must be nonempty")
     index = load_thread_index()
     matches = [
         entry
@@ -423,10 +423,10 @@ def resolve_named_thread_source(
         if entry["thread_name"].casefold() == normalized
     ]
     if not matches:
-        raise LedgerError(f"thread name was not found: {thread_name.strip()}")
+        raise EvidenceCollectionError(f"thread name was not found: {thread_name.strip()}")
     if len(matches) > 1:
         ids = ", ".join(entry["thread_id"] for entry in matches[:3])
-        raise LedgerError(f"thread name is ambiguous; matching IDs: {ids}")
+        raise EvidenceCollectionError(f"thread name is ambiguous; matching IDs: {ids}")
     thread_id = matches[0]["thread_id"]
     return thread_id, resolve_thread_session(thread_id), str(index["fingerprint"])
 
@@ -440,23 +440,23 @@ def session_source_metadata(
 
     metadata = next((row for row in rows if row.get("type") == "session_meta"), None)
     if not isinstance(metadata, dict) or not isinstance(metadata.get("payload"), dict):
-        raise LedgerError("session lacks a valid session_meta record")
+        raise EvidenceCollectionError("session lacks a valid session_meta record")
     payload = metadata["payload"]
     raw_id = payload.get("id") or payload.get("session_id")
     thread_id = canonical_thread_id(str(raw_id or ""))
     if thread_id != canonical_thread_id(expected_thread_id):
-        raise LedgerError("session metadata thread ID does not match the index")
+        raise EvidenceCollectionError("session metadata thread ID does not match the index")
     cwd = payload.get("cwd")
     if cwd is not None and (not isinstance(cwd, str) or not cwd.strip()):
-        raise LedgerError("session metadata cwd is invalid")
+        raise EvidenceCollectionError("session metadata cwd is invalid")
     git = payload.get("git")
     if git is not None and not isinstance(git, dict):
-        raise LedgerError("session metadata git value is invalid")
+        raise EvidenceCollectionError("session metadata git value is invalid")
     repository_url = git.get("repository_url") if isinstance(git, dict) else None
     if repository_url is not None and (
         not isinstance(repository_url, str) or not repository_url.strip()
     ):
-        raise LedgerError("session metadata repository URL is invalid")
+        raise EvidenceCollectionError("session metadata repository URL is invalid")
     normalized_repository = (
         repository_url.strip().rstrip("/").removesuffix(".git").casefold()
         if isinstance(repository_url, str)
@@ -509,21 +509,21 @@ def read_session_source_metadata(
                 try:
                     row = json.loads(line)
                 except json.JSONDecodeError as exc:
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         f"invalid JSON on session line {line_number}"
                     ) from exc
                 if not isinstance(row, dict):
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         f"session line {line_number} is not a JSON object"
                     )
                 if row.get("type") == "session_meta":
                     return session_source_metadata(
                         [row], expected_thread_id=expected_thread_id
                     )
-                raise LedgerError("session metadata must be the first JSON record")
+                raise EvidenceCollectionError("session metadata must be the first JSON record")
     except OSError as exc:
-        raise LedgerError(f"could not read session metadata: {exc}") from exc
-    raise LedgerError("session lacks a session_meta record")
+        raise EvidenceCollectionError(f"could not read session metadata: {exc}") from exc
+    raise EvidenceCollectionError("session lacks a session_meta record")
 
 
 def stable_payload(value: Any) -> str:
@@ -539,7 +539,7 @@ def stable_payload(value: Any) -> str:
 
 
 def payload_fingerprint(value: Any) -> str:
-    """Hash tool arguments so the ledger does not echo commands or secrets."""
+    """Hash tool arguments so retained evidence omits commands and secrets."""
 
     return hashlib.sha256(stable_payload(value).encode("utf-8")).hexdigest()[:16]
 
@@ -1444,7 +1444,7 @@ def token_usage(payload: dict[str, Any]) -> dict[str, int]:
     return usage
 
 
-def build_ledger(
+def build_session_evidence(
     rows: list[dict[str, Any]],
     *,
     session: pathlib.Path,
@@ -1545,22 +1545,22 @@ def build_ledger(
                 }
             )
     if last_runs is not None and completed_turn_ids is not None:
-        raise LedgerError("completed turn IDs do not accept a last-runs window")
+        raise EvidenceCollectionError("completed turn IDs do not accept a last-runs window")
     if completed_turn_ids is not None:
         if not completed_turn_ids or len(completed_turn_ids) != len(
             set(completed_turn_ids)
         ):
-            raise LedgerError("completed turn IDs must be a nonempty unique list")
+            raise EvidenceCollectionError("completed turn IDs must be a nonempty unique list")
         completed_ids = [run["turn_id"] for run in completed]
         requested = set(completed_turn_ids)
         unknown = [turn_id for turn_id in completed_turn_ids if turn_id not in completed_ids]
         if unknown:
-            raise LedgerError(
+            raise EvidenceCollectionError(
                 f"requested run is not completed in the session: {unknown[0]}"
             )
         ordered_requested = [turn_id for turn_id in completed_ids if turn_id in requested]
         if ordered_requested != completed_turn_ids:
-            raise LedgerError("completed turn IDs are not in session order")
+            raise EvidenceCollectionError("completed turn IDs are not in session order")
         completed_by_id = {run["turn_id"]: run for run in completed}
         selected = [completed_by_id[turn_id] for turn_id in completed_turn_ids]
     elif last_runs is not None:
@@ -1623,18 +1623,18 @@ def build_ledger(
 
 def build_semantic_runs(
     rows: list[dict[str, Any]],
-    ledger: dict[str, Any],
+    session_evidence: dict[str, Any],
     include_runs: list[str],
 ) -> list[dict[str, Any]]:
     """Build redacted actions and ordered user messages for requested runs."""
 
     if not include_runs:
         return []
-    runs_by_id = {run["turn_id"]: run for run in ledger["runs"]}
+    runs_by_id = {run["turn_id"]: run for run in session_evidence["runs"]}
     requested = list(dict.fromkeys(include_runs))
     unknown = sorted(set(requested) - runs_by_id.keys())
     if unknown:
-        raise LedgerError(f"requested run is outside the completed window: {unknown[0]}")
+        raise EvidenceCollectionError(f"requested run is outside the completed window: {unknown[0]}")
 
     requested_set = set(requested)
     call_limits = {
@@ -1739,7 +1739,9 @@ def build_semantic_runs(
         run = runs_by_id[turn_id]
         calls = calls_by_id[turn_id]
         if len(calls) != run["model_calls"]:
-            raise LedgerError(f"semantic call count does not match ledger: {turn_id}")
+            raise EvidenceCollectionError(
+                f"semantic call count does not match session evidence: {turn_id}"
+            )
         result.append(
             {
                 "turn_id": turn_id,
@@ -1754,13 +1756,13 @@ def build_semantic_runs(
 
 def build_model_review_evidence(
     rows: list[dict[str, Any]],
-    ledger: dict[str, Any],
+    session_evidence: dict[str, Any],
 ) -> dict[str, Any]:
     """Retain complete prepared semantic evidence without private reasoning."""
 
-    selected_turns = {run["turn_id"] for run in ledger["runs"]}
+    selected_turns = {run["turn_id"] for run in session_evidence["runs"]}
     call_limits = {
-        run["turn_id"]: run["model_calls"] for run in ledger["runs"]
+        run["turn_id"]: run["model_calls"] for run in session_evidence["runs"]
     }
     completed_calls = {turn_id: 0 for turn_id in selected_turns}
     record_ids_by_call: dict[str, dict[int, list[str]]] = {
@@ -2219,13 +2221,13 @@ def build_model_review_evidence(
 
 
 def selected_runs_with_semantics(
-    ledger: dict[str, Any],
+    session_evidence: dict[str, Any],
     include_runs: list[str],
     semantic_runs: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Preserve selected-run details and add redacted model-review evidence."""
 
-    runs_by_id = {run["turn_id"]: run for run in ledger["runs"]}
+    runs_by_id = {run["turn_id"]: run for run in session_evidence["runs"]}
     semantic_by_id = {run["turn_id"]: run for run in semantic_runs}
     selected: list[dict[str, Any]] = []
     for turn_id in include_runs:
@@ -2256,21 +2258,21 @@ def selected_runs_with_semantics(
 
 
 def build_summary(
-    ledger: dict[str, Any],
+    session_evidence: dict[str, Any],
     *,
     evidence_output: pathlib.Path,
 ) -> dict[str, Any]:
     """Keep ordinary stdout free of selected-run semantic details."""
 
-    runs = ledger["runs"]
+    runs = session_evidence["runs"]
     return {
         "schema": SUMMARY_SCHEMA,
-        "evidence_schema": ledger["schema"],
+        "evidence_schema": session_evidence["schema"],
         "classification_input": classification_input_contract(),
         "evidence_output": str(evidence_output),
-        "window": ledger["window"],
-        "totals": ledger["totals"],
-        "repeated_tool_calls": ledger["repeated_tool_calls"],
+        "window": session_evidence["window"],
+        "totals": session_evidence["totals"],
+        "repeated_tool_calls": session_evidence["repeated_tool_calls"],
         "runs": [
             {
                 "turn_id": run["turn_id"],
@@ -2285,7 +2287,7 @@ def build_summary(
 
 
 def build_semantic_evidence(
-    ledger: dict[str, Any],
+    session_evidence: dict[str, Any],
     include_runs: list[str],
     semantic_runs: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -2293,11 +2295,11 @@ def build_semantic_evidence(
 
     return {
         "schema": SEMANTIC_EVIDENCE_SCHEMA,
-        "ledger_schema": ledger["schema"],
+        "session_evidence_schema": session_evidence["schema"],
         "redaction": redaction_contract(),
-        "window": ledger["window"],
+        "window": session_evidence["window"],
         "selected_runs": selected_runs_with_semantics(
-            ledger,
+            session_evidence,
             list(dict.fromkeys(include_runs)),
             semantic_runs,
         ),
@@ -2305,7 +2307,7 @@ def build_semantic_evidence(
 
 
 def build_semantic_summary(
-    ledger: dict[str, Any],
+    session_evidence: dict[str, Any],
     semantic_evidence: dict[str, Any],
 ) -> dict[str, Any]:
     """Emit only the decision-sized receipt for the two written artifacts."""
@@ -2314,11 +2316,11 @@ def build_semantic_summary(
     return {
         "schema": SEMANTIC_SUMMARY_SCHEMA,
         "evidence_schemas": {
-            "ledger": ledger["schema"],
+            "session_evidence": session_evidence["schema"],
             "semantic": semantic_evidence["schema"],
         },
-        "written": {"ledger": True, "semantic": True},
-        "window": ledger["window"],
+        "written": {"session_evidence": True, "semantic": True},
+        "window": session_evidence["window"],
         "totals": {
             "selected_runs": len(selected_runs),
             "selected_model_calls": sum(
@@ -2336,19 +2338,19 @@ def build_semantic_summary(
 
 
 def build_closure_summary(
-    ledger: dict[str, Any],
+    session_evidence: dict[str, Any],
     semantic_runs: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Emit all completed calls without per-call token or temporary-file noise."""
 
     result = {
         "schema": CLOSURE_SCHEMA,
-        "evidence_schema": ledger["schema"],
+        "evidence_schema": session_evidence["schema"],
         "classification_input": classification_input_contract(),
-        "session": ledger["session"],
-        "window": ledger["window"],
-        "totals": ledger["totals"],
-        "repeated_tool_calls": ledger["repeated_tool_calls"],
+        "session": session_evidence["session"],
+        "window": session_evidence["window"],
+        "totals": session_evidence["totals"],
+        "repeated_tool_calls": session_evidence["repeated_tool_calls"],
         "runs": [
             {
                 "turn_id": run["turn_id"],
@@ -2363,7 +2365,7 @@ def build_closure_summary(
                     for call in run["calls"]
                 ],
             }
-            for run in ledger["runs"]
+            for run in session_evidence["runs"]
         ],
     }
     if semantic_runs:
@@ -2397,7 +2399,7 @@ def estimated_credit_cost(
     ) / 1_000_000
     result = raw_cost * float(pricing["mode_multiplier"])
     if not math.isfinite(result):
-        raise LedgerError("pricing profile produces a non-finite credit cost")
+        raise EvidenceCollectionError("pricing profile produces a non-finite credit cost")
     return round(result, 12)
 
 
@@ -2506,13 +2508,13 @@ def public_tool_action(action: dict[str, Any]) -> dict[str, Any]:
 
 def build_usage_evidence(
     rows: list[dict[str, Any]],
-    ledger: dict[str, Any],
+    session_evidence: dict[str, Any],
     pricing: dict[str, float | str] | None,
 ) -> dict[str, Any]:
     """Build redacted per-turn metrics and structured top-level outcomes."""
 
     run_states: dict[str, dict[str, Any]] = {}
-    for order, run in enumerate(ledger["runs"]):
+    for order, run in enumerate(session_evidence["runs"]):
         run_states[run["turn_id"]] = {
             "order": order,
             "turn_id": run["turn_id"],
@@ -2722,12 +2724,12 @@ def build_usage_evidence(
         (action["name"], action["fingerprint"]) for action in all_actions
     }
     thread_tokens = {
-        field: ledger["totals"][field]
+        field: session_evidence["totals"][field]
         for field in TOKEN_FIELDS
     }
     thread_metrics = usage_metrics(
         tokens=thread_tokens,
-        model_calls=ledger["totals"]["model_calls"],
+        model_calls=session_evidence["totals"]["model_calls"],
         duration_ms=(duration_total if duration_covered_turns else None),
         actions=total_actions,
         tool_actions=all_actions,
@@ -2781,11 +2783,11 @@ def build_usage_evidence(
     return {
         "schema": USAGE_EVIDENCE_SCHEMA,
         "redaction": redaction_contract(),
-        "window": ledger["window"],
+        "window": session_evidence["window"],
         "pricing": pricing_contract,
         "totals": thread_metrics,
         "runs": evidence_runs,
-        "repeated_tool_calls": ledger["repeated_tool_calls"],
+        "repeated_tool_calls": session_evidence["repeated_tool_calls"],
         "telemetry": {
             "action_scope": "top_level_response_items",
             "duration_source": "task_complete.duration_ms",
@@ -2852,36 +2854,36 @@ def collect_session_evidence_from_rows(
 
     resolved_session = session.expanduser().resolve(strict=True)
     if not re.fullmatch(r"[0-9a-f]{64}", source_fingerprint):
-        raise LedgerError("source fingerprint must be a SHA-256 digest")
+        raise EvidenceCollectionError("source fingerprint must be a SHA-256 digest")
     pricing = (
         load_pricing_profile(pricing_profile.expanduser().resolve(strict=True))
         if pricing_profile is not None
         else None
     )
-    ledger = build_ledger(
+    session_evidence = build_session_evidence(
         rows,
         session=resolved_session,
         last_runs=last_runs,
         completed_turn_ids=completed_turn_ids,
     )
-    run_ids = [run["turn_id"] for run in ledger["runs"]]
-    semantic_runs = build_semantic_runs(rows, ledger, run_ids)
-    model_review = build_model_review_evidence(rows, ledger)
-    usage = build_usage_evidence(rows, ledger, pricing)
+    run_ids = [run["turn_id"] for run in session_evidence["runs"]]
+    semantic_runs = build_semantic_runs(rows, session_evidence, run_ids)
+    model_review = build_model_review_evidence(rows, session_evidence)
+    usage = build_usage_evidence(rows, session_evidence, pricing)
     semantic_by_run = {run["turn_id"]: run for run in semantic_runs}
     usage_by_run = {run["turn_id"]: run for run in usage["runs"]}
 
     calls: list[dict[str, Any]] = []
     collected_runs: list[dict[str, Any]] = []
-    for ledger_run in ledger["runs"]:
-        turn_id = ledger_run["turn_id"]
+    for session_evidence_run in session_evidence["runs"]:
+        turn_id = session_evidence_run["turn_id"]
         semantic_run = semantic_by_run[turn_id]
         usage_run = usage_by_run[turn_id]
         semantic_by_index = {
             call["index"]: call for call in semantic_run["calls"]
         }
         tools_by_call: dict[int, list[dict[str, Any]]] = {
-            index: [] for index in range(1, ledger_run["model_calls"] + 1)
+            index: [] for index in range(1, session_evidence_run["model_calls"] + 1)
         }
         for action in usage_run["tool_action_results"]:
             model_call_index = action.get("model_call_index")
@@ -2889,7 +2891,7 @@ def collect_session_evidence_from_rows(
                 tools_by_call[model_call_index].append(action)
 
         run_calls: list[dict[str, Any]] = []
-        for call in ledger_run["calls"]:
+        for call in session_evidence_run["calls"]:
             call_id = f"{turn_id}:{call['index']}"
             call_record = {
                 "call_id": call_id,
@@ -2916,8 +2918,8 @@ def collect_session_evidence_from_rows(
         collected_runs.append(
             {
                 "turn_id": turn_id,
-                "started_at": ledger_run["started_at"],
-                "model_calls": ledger_run["model_calls"],
+                "started_at": session_evidence_run["started_at"],
+                "model_calls": session_evidence_run["model_calls"],
                 "totals": usage_run["totals"],
                 "tool_counts": usage_run["tool_counts"],
                 "user_messages": semantic_run["user_messages"],
@@ -2928,13 +2930,13 @@ def collect_session_evidence_from_rows(
     window_fingerprint = _canonical_hash(
         {
             "source_fingerprint": source_fingerprint,
-            "window": ledger["window"],
+            "window": session_evidence["window"],
             "turns": [
                 {
                     "turn_id": run["turn_id"],
                     "model_calls": run["model_calls"],
                 }
-                for run in ledger["runs"]
+                for run in session_evidence["runs"]
             ],
         }
     )
@@ -2944,7 +2946,7 @@ def collect_session_evidence_from_rows(
         "source_fingerprint": source_fingerprint,
         "window_fingerprint": window_fingerprint,
         "redaction": redaction_contract(),
-        "window": ledger["window"],
+        "window": session_evidence["window"],
         "collection": {
             "session_reads": 1,
             "completed_runs": len(collected_runs),
@@ -3089,7 +3091,7 @@ def classification_input_contract() -> dict[str, Any]:
         "categories": list(CLASSIFICATION_CATEGORIES),
         "shape": {
             "schema": CLASSIFICATIONS_SCHEMA,
-            "session": "<exact ledger session>",
+            "session": "<exact session_evidence session>",
             "runs": [
                 {
                     "turn_id": "<selected turn ID>",
@@ -3112,89 +3114,91 @@ def load_classifications(path: pathlib.Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except OSError as exc:
-        raise LedgerError(f"could not read classifications: {exc}") from exc
+        raise EvidenceCollectionError(f"could not read classifications: {exc}") from exc
     except json.JSONDecodeError as exc:
-        raise LedgerError("classifications are not valid JSON") from exc
+        raise EvidenceCollectionError("classifications are not valid JSON") from exc
     if not isinstance(value, dict):
-        raise LedgerError("classifications must be a JSON object")
+        raise EvidenceCollectionError("classifications must be a JSON object")
     return value
 
 
 def build_classified_summary(
-    ledger: dict[str, Any],
+    session_evidence: dict[str, Any],
     classifications: dict[str, Any],
 ) -> dict[str, Any]:
     """Require every selected call to have exactly one supported classification."""
 
     if classifications.get("schema") != CLASSIFICATIONS_SCHEMA:
-        raise LedgerError(
+        raise EvidenceCollectionError(
             f"classifications schema must be {CLASSIFICATIONS_SCHEMA}"
         )
     try:
         classified_session = pathlib.Path(
             str(classifications.get("session") or "")
         ).expanduser().resolve(strict=True)
-        ledger_session = pathlib.Path(ledger["session"]).resolve(strict=True)
+        session_evidence_session = pathlib.Path(session_evidence["session"]).resolve(strict=True)
     except OSError as exc:
-        raise LedgerError(f"could not resolve classified session: {exc}") from exc
-    if classified_session != ledger_session:
-        raise LedgerError("classifications session does not match the ledger")
+        raise EvidenceCollectionError(f"could not resolve classified session: {exc}") from exc
+    if classified_session != session_evidence_session:
+        raise EvidenceCollectionError(
+            "classifications session does not match the collected evidence"
+        )
 
     raw_runs = classifications.get("runs")
     if not isinstance(raw_runs, list):
-        raise LedgerError("classifications must contain a runs list")
+        raise EvidenceCollectionError("classifications must contain a runs list")
     classified_runs: dict[str, dict[str, Any]] = {}
     for raw_run in raw_runs:
         if not isinstance(raw_run, dict):
-            raise LedgerError("each classified run must be an object")
+            raise EvidenceCollectionError("each classified run must be an object")
         turn_id = raw_run.get("turn_id")
         if not isinstance(turn_id, str) or not turn_id:
-            raise LedgerError("each classified run needs a turn_id")
+            raise EvidenceCollectionError("each classified run needs a turn_id")
         if turn_id in classified_runs:
-            raise LedgerError(f"duplicate classified run: {turn_id}")
+            raise EvidenceCollectionError(f"duplicate classified run: {turn_id}")
         classified_runs[turn_id] = raw_run
 
-    ledger_runs = {run["turn_id"]: run for run in ledger["runs"]}
-    missing_runs = sorted(ledger_runs.keys() - classified_runs.keys())
-    extra_runs = sorted(classified_runs.keys() - ledger_runs.keys())
+    session_evidence_runs = {run["turn_id"]: run for run in session_evidence["runs"]}
+    missing_runs = sorted(session_evidence_runs.keys() - classified_runs.keys())
+    extra_runs = sorted(classified_runs.keys() - session_evidence_runs.keys())
     if missing_runs:
-        raise LedgerError(f"missing classified run: {missing_runs[0]}")
+        raise EvidenceCollectionError(f"missing classified run: {missing_runs[0]}")
     if extra_runs:
-        raise LedgerError(f"classified run is outside the window: {extra_runs[0]}")
+        raise EvidenceCollectionError(f"classified run is outside the window: {extra_runs[0]}")
 
     totals: Counter[str] = Counter()
     control_totals: Counter[tuple[str, str]] = Counter()
     summarized_runs: list[dict[str, Any]] = []
-    for turn_id, ledger_run in ledger_runs.items():
+    for turn_id, session_evidence_run in session_evidence_runs.items():
         raw_groups = classified_runs[turn_id].get("groups")
         if not isinstance(raw_groups, list) or not raw_groups:
-            raise LedgerError(f"classified run has no groups: {turn_id}")
+            raise EvidenceCollectionError(f"classified run has no groups: {turn_id}")
         assigned: dict[int, str] = {}
         category_counts: Counter[str] = Counter()
         for group in raw_groups:
             if not isinstance(group, dict):
-                raise LedgerError(f"classification group is not an object: {turn_id}")
+                raise EvidenceCollectionError(f"classification group is not an object: {turn_id}")
             category = group.get("category")
             if category not in CLASSIFICATION_CATEGORIES:
-                raise LedgerError(
+                raise EvidenceCollectionError(
                     f"unsupported classification category in run: {turn_id}"
                 )
             control = group.get("control")
             control_name: str | None = None
             if category == "necessary":
                 if control not in (None, ""):
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         f"necessary calls must not name a control: {turn_id}"
                     )
             elif not isinstance(control, str) or not control.strip():
-                raise LedgerError(
+                raise EvidenceCollectionError(
                     f"avoidable calls must name their controlling fix: {turn_id}"
                 )
             else:
                 control_name = control.strip()
             raw_indices = group.get("indices")
             if not isinstance(raw_indices, list) or not raw_indices:
-                raise LedgerError(
+                raise EvidenceCollectionError(
                     f"classification group has no call indices: {turn_id}"
                 )
             for index in raw_indices:
@@ -3202,13 +3206,13 @@ def build_classified_summary(
                     not isinstance(index, int)
                     or isinstance(index, bool)
                     or index < 1
-                    or index > ledger_run["model_calls"]
+                    or index > session_evidence_run["model_calls"]
                 ):
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         f"classified call index is outside run {turn_id}"
                     )
                 if index in assigned:
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         f"call {index} is classified more than once in run {turn_id}"
                     )
                 assigned[index] = category
@@ -3218,17 +3222,17 @@ def build_classified_summary(
                     assert control_name is not None
                     control_totals[(category, control_name)] += 1
 
-        expected = set(range(1, ledger_run["model_calls"] + 1))
+        expected = set(range(1, session_evidence_run["model_calls"] + 1))
         missing_calls = sorted(expected - assigned.keys())
         if missing_calls:
-            raise LedgerError(
+            raise EvidenceCollectionError(
                 f"call {missing_calls[0]} is unclassified in run {turn_id}"
             )
         summarized_runs.append(
             {
                 "turn_id": turn_id,
-                "started_at": ledger_run["started_at"],
-                "model_calls": ledger_run["model_calls"],
+                "started_at": session_evidence_run["started_at"],
+                "model_calls": session_evidence_run["model_calls"],
                 "necessary": category_counts["necessary"],
                 "avoidable_with_implemented_fix": category_counts[
                     "avoidable_implemented"
@@ -3239,18 +3243,18 @@ def build_classified_summary(
             }
         )
 
-    model_calls = ledger["totals"]["model_calls"]
+    model_calls = session_evidence["totals"]["model_calls"]
     classified_calls = sum(totals.values())
     if classified_calls != model_calls:
-        raise LedgerError(
+        raise EvidenceCollectionError(
             f"classified call total {classified_calls} does not match {model_calls}"
         )
     return {
         "schema": CLASSIFIED_SUMMARY_SCHEMA,
-        "evidence_schema": ledger["schema"],
+        "evidence_schema": session_evidence["schema"],
         "classification_schema": CLASSIFICATIONS_SCHEMA,
-        "session": ledger["session"],
-        "window": ledger["window"],
+        "session": session_evidence["session"],
+        "window": session_evidence["window"],
         "totals": {
             "model_calls": model_calls,
             "necessary": totals["necessary"],
@@ -3261,7 +3265,7 @@ def build_classified_summary(
                 "avoidable_unimplemented"
             ],
             **{
-                field: ledger["totals"][field]
+                field: session_evidence["totals"][field]
                 for field in TOKEN_FIELDS
             },
         },
@@ -3273,19 +3277,19 @@ def build_classified_summary(
     }
 
 
-def write_evidence(path: pathlib.Path, ledger: dict[str, Any]) -> None:
+def write_evidence(path: pathlib.Path, session_evidence: dict[str, Any]) -> None:
     """Write redacted call evidence only to the caller-authorized path."""
 
     if not path.parent.is_dir():
-        raise LedgerError(f"evidence output directory does not exist: {path.parent}")
+        raise EvidenceCollectionError(f"evidence output directory does not exist: {path.parent}")
     try:
         path.write_text(
-            json.dumps(ledger, separators=(",", ":")) + "\n",
+            json.dumps(session_evidence, separators=(",", ":")) + "\n",
             encoding="utf-8",
             newline="\n",
         )
     except OSError as exc:
-        raise LedgerError(f"could not write evidence output: {exc}") from exc
+        raise EvidenceCollectionError(f"could not write evidence output: {exc}") from exc
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -3359,99 +3363,99 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run one preserved ledger mode or the additive compact usage summary."""
+    """Run one evidence-collection mode or the compact usage summary."""
 
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
         if args.summary and args.closure:
-            raise LedgerError("--summary does not accept --closure")
+            raise EvidenceCollectionError("--summary does not accept --closure")
         if args.summary:
             if args.classifications is not None:
-                raise LedgerError("--summary does not accept --classifications")
+                raise EvidenceCollectionError("--summary does not accept --classifications")
             if args.include_run:
-                raise LedgerError("--summary does not accept --include-run")
+                raise EvidenceCollectionError("--summary does not accept --include-run")
             if args.semantic_evidence_output is not None:
-                raise LedgerError(
+                raise EvidenceCollectionError(
                     "--summary does not accept --semantic-evidence-output"
                 )
             if args.evidence_output is None:
-                raise LedgerError("--summary requires --evidence-output")
+                raise EvidenceCollectionError("--summary requires --evidence-output")
         elif args.classifications is not None:
             if args.evidence_output is not None:
-                raise LedgerError(
+                raise EvidenceCollectionError(
                     "--classifications does not accept --evidence-output"
                 )
             if args.include_run:
-                raise LedgerError(
+                raise EvidenceCollectionError(
                     "--classifications validates every completed run"
                 )
             if args.semantic_evidence_output is not None:
-                raise LedgerError(
+                raise EvidenceCollectionError(
                     "--classifications does not accept --semantic-evidence-output"
                 )
         elif args.closure:
             if args.evidence_output is not None:
-                raise LedgerError("--closure does not accept --evidence-output")
+                raise EvidenceCollectionError("--closure does not accept --evidence-output")
             if args.semantic_evidence_output is not None:
-                raise LedgerError(
+                raise EvidenceCollectionError(
                     "--closure does not accept --semantic-evidence-output"
                 )
         else:
             if args.evidence_output is None:
-                raise LedgerError("ordinary mode requires --evidence-output")
+                raise EvidenceCollectionError("ordinary mode requires --evidence-output")
             if args.semantic_evidence_output is not None and not args.include_run:
-                raise LedgerError(
+                raise EvidenceCollectionError(
                     "--semantic-evidence-output requires --include-run"
                 )
             if args.include_run and args.semantic_evidence_output is None:
-                raise LedgerError(
+                raise EvidenceCollectionError(
                     "--include-run requires --semantic-evidence-output"
                 )
 
         if not args.summary and args.top is not None:
-            raise LedgerError("--top requires --summary")
+            raise EvidenceCollectionError("--top requires --summary")
         if not args.summary and args.pricing_profile is not None:
-            raise LedgerError("--pricing-profile requires --summary")
+            raise EvidenceCollectionError("--pricing-profile requires --summary")
 
         if args.thread_id is not None:
             session = resolve_thread_session(args.thread_id)
         else:
             if args.session is None:
-                raise LedgerError("session path is required")
+                raise EvidenceCollectionError("session path is required")
             session = args.session.expanduser().resolve(strict=True)
         rows = load_rows(session)
-        ledger = build_ledger(
+        session_evidence = build_session_evidence(
             rows,
             session=session,
             last_runs=args.last_runs,
         )
-        semantic_runs = build_semantic_runs(rows, ledger, args.include_run)
+        semantic_runs = build_semantic_runs(rows, session_evidence, args.include_run)
         if args.classifications is not None:
             classification_path = args.classifications.expanduser().resolve(
                 strict=True
             )
             result = build_classified_summary(
-                ledger,
+                session_evidence,
                 load_classifications(classification_path),
             )
         elif args.closure:
-            result = build_closure_summary(ledger, semantic_runs)
+            result = build_closure_summary(session_evidence, semantic_runs)
         elif args.summary:
             if args.evidence_output is None:
-                raise LedgerError("--summary requires --evidence-output")
+                raise EvidenceCollectionError("--summary requires --evidence-output")
             evidence_output = args.evidence_output.expanduser().resolve()
             if evidence_output == session:
-                raise LedgerError("evidence output must not overwrite the session")
+                raise EvidenceCollectionError("evidence output must not overwrite the session")
             pricing: dict[str, float | str] | None = None
             if args.pricing_profile is not None:
                 pricing_path = args.pricing_profile.expanduser().resolve(strict=True)
                 if evidence_output == pricing_path:
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         "evidence output must not overwrite the pricing profile"
                     )
                 pricing = load_pricing_profile(pricing_path)
-            evidence = build_usage_evidence(rows, ledger, pricing)
+            evidence = build_usage_evidence(rows, session_evidence, pricing)
             result = build_usage_summary(
                 evidence,
                 top_n=args.top or DEFAULT_TOP,
@@ -3459,47 +3463,47 @@ def main(argv: list[str] | None = None) -> int:
             write_evidence(evidence_output, evidence)
         else:
             if args.evidence_output is None:
-                raise LedgerError("ordinary mode requires --evidence-output")
+                raise EvidenceCollectionError("ordinary mode requires --evidence-output")
             evidence_output = args.evidence_output.expanduser().resolve()
             if evidence_output == session:
-                raise LedgerError("evidence output must not overwrite the session")
+                raise EvidenceCollectionError("evidence output must not overwrite the session")
             if args.semantic_evidence_output is None:
                 result = build_summary(
-                    ledger,
+                    session_evidence,
                     evidence_output=evidence_output,
                 )
-                write_evidence(evidence_output, ledger)
+                write_evidence(evidence_output, session_evidence)
             else:
                 semantic_output = (
                     args.semantic_evidence_output.expanduser().resolve()
                 )
                 if semantic_output == session:
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         "semantic evidence output must not overwrite the session"
                     )
                 if semantic_output == evidence_output:
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         "semantic evidence output must differ from evidence output"
                     )
                 if not evidence_output.parent.is_dir():
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         "evidence output directory does not exist: "
                         f"{evidence_output.parent}"
                     )
                 if not semantic_output.parent.is_dir():
-                    raise LedgerError(
+                    raise EvidenceCollectionError(
                         "semantic evidence output directory does not exist: "
                         f"{semantic_output.parent}"
                     )
                 semantic_evidence = build_semantic_evidence(
-                    ledger,
+                    session_evidence,
                     args.include_run,
                     semantic_runs,
                 )
-                result = build_semantic_summary(ledger, semantic_evidence)
-                write_evidence(evidence_output, ledger)
+                result = build_semantic_summary(session_evidence, semantic_evidence)
+                write_evidence(evidence_output, session_evidence)
                 write_evidence(semantic_output, semantic_evidence)
-    except (LedgerError, OSError) as exc:
+    except (EvidenceCollectionError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(result, separators=(",", ":")))

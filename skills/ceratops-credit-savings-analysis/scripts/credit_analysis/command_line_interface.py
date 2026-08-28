@@ -3,9 +3,9 @@
 
 from __future__ import annotations
 
-from .batch import *
-from .core import *
-from .holistic import *
+from .luna_sol_analysis import *
+from .multi_thread_analysis import *
+from .single_thread_analysis import *
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)

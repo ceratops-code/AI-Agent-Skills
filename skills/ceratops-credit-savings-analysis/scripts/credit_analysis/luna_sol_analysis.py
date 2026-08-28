@@ -5,10 +5,14 @@ from __future__ import annotations
 
 import concurrent.futures
 
-from .batch import *
-from .capacity import *
-from .core import *
-from .prior_activity import *
+from .analysis_contract_snapshot import (
+    freeze_contract_snapshot,
+    load_contract_snapshot,
+)
+from .model_capacity_planning import *
+from .multi_thread_analysis import *
+from .prior_analysis_runs import *
+from .single_thread_analysis import *
 
 def _exclusive_text(path: pathlib.Path, value: str, label: str) -> None:
     """Create one immutable UTF-8 controller artifact."""
@@ -304,7 +308,7 @@ def _collect_canonical_state_snapshot(
     evidence: Mapping[str, Any],
     path_roots: list[tuple[str, str]],
     orchestration_root: pathlib.Path,
-    ledger: ModuleType,
+    collector: ModuleType,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     """Read referenced final artifacts once and retain protected immutable evidence."""
 
@@ -401,7 +405,7 @@ def _collect_canonical_state_snapshot(
                             {"status": "read-error", "kind": "directory-listing"}
                         )
                     else:
-                        protected = ledger.prepare_review_text(listing, path_roots)
+                        protected = collector.prepare_review_text(listing, path_roots)
                         snapshot_path = payload_root / f"{artifact_id}.txt"
                         _exclusive_text(
                             snapshot_path,
@@ -434,7 +438,7 @@ def _collect_canonical_state_snapshot(
                                 {"status": "captured", "kind": "binary-hash"}
                             )
                         else:
-                            protected = ledger.prepare_review_text(decoded, path_roots)
+                            protected = collector.prepare_review_text(decoded, path_roots)
                             snapshot_path = payload_root / f"{artifact_id}.txt"
                             _exclusive_text(
                                 snapshot_path,
@@ -1802,18 +1806,19 @@ def _collect_holistic_evidence(
     *,
     request: Mapping[str, Any],
     contract: Mapping[str, Any],
-    ledger: ModuleType,
+    collector: ModuleType,
     analysis_id: str,
+    contract_path: pathlib.Path,
 ) -> tuple[dict[str, Any], str, str, list[tuple[str, str]], set[str]]:
     """Read a frozen source thread tree once and normalize every child run."""
 
     cutoff = dt.datetime.now(dt.timezone.utc).isoformat(timespec="microseconds")
     try:
-        rows, source_fingerprint = ledger.load_rows_with_fingerprint(request["session"])
+        rows, source_fingerprint = collector.load_rows_with_fingerprint(request["session"])
         raw_state_paths_by_call = _holistic_raw_state_paths_by_call(rows)
         execution_context = _source_execution_context(rows)
-        path_roots = ledger.review_path_roots(rows)
-        collected = ledger.collect_session_evidence_from_rows(
+        path_roots = collector.review_path_roots(rows)
+        collected = collector.collect_session_evidence_from_rows(
             rows,
             session=request["session"],
             source_fingerprint=source_fingerprint,
@@ -1849,16 +1854,16 @@ def _collect_holistic_evidence(
                 continue
             seen_sessions.add(session_id)
             try:
-                child_session = ledger.resolve_thread_session(session_id).resolve(
+                child_session = collector.resolve_thread_session(session_id).resolve(
                     strict=True
                 )
                 if child_session == root_session:
                     raise CreditAnalysisError("descendant resolves to the source session")
-                child_rows, child_fingerprint = ledger.load_rows_with_fingerprint(
+                child_rows, child_fingerprint = collector.load_rows_with_fingerprint(
                     child_session
                 )
                 child_context = _source_execution_context(child_rows)
-                child_collected = ledger.collect_session_evidence_from_rows(
+                child_collected = collector.collect_session_evidence_from_rows(
                     child_rows,
                     session=child_session,
                     source_fingerprint=child_fingerprint,
@@ -1898,7 +1903,7 @@ def _collect_holistic_evidence(
             )
             descendants.append(namespaced)
             analysis_call_ids.update(namespaced["call_inventory"])
-            path_roots.extend(ledger.review_path_roots(child_rows))
+            path_roots.extend(collector.review_path_roots(child_rows))
             for chain in child_context["instruction_chains"]:
                 cwd = str(chain["cwd"])
                 if cwd in instruction_chains and instruction_chains[cwd] != chain:
@@ -1931,7 +1936,7 @@ def _collect_holistic_evidence(
         "source": request["source"],
         "requested_window": request["window"],
         "surface_contract_version": contract["surface_contract_version"],
-        "surface_contract_hash": _file_hash(CONTRACT_PATH),
+        "surface_contract_hash": _file_hash(contract_path),
         "mutation_authority": False,
         "execution_context": execution_context,
     }
@@ -2453,6 +2458,7 @@ def command_plan_orchestration(
     *,
     available_models: set[str] | Mapping[str, Mapping[str, Any]] | None = None,
     task_root_boundary: pathlib.Path | None = None,
+    contract_path: pathlib.Path | None = None,
 ) -> dict[str, Any]:
     """Collect once and freeze the finite holistic Luna-plus-Sol plan.
 
@@ -2460,14 +2466,19 @@ def command_plan_orchestration(
     omit it and must provide a canonical repository-bound task root directly.
     """
 
-    contract = _load_contract()
+    contract_source = (
+        CONTRACT_PATH
+        if contract_path is None
+        else contract_path.expanduser().resolve(strict=True)
+    )
+    contract = _load_contract(contract_source)
     catalog = _codex_model_catalog() if available_models is None else available_models
     model_specs = _holistic_model_specs(contract, catalog)
-    ledger = _load_ledger()
+    collector = _load_evidence_collector()
     request = _validate_request(
         request_path,
         contract,
-        ledger,
+        collector,
         task_root_boundary=task_root_boundary,
     )
     surface_order = _surface_order_for_request(request, contract)
@@ -2476,8 +2487,9 @@ def command_plan_orchestration(
         _collect_holistic_evidence(
             request=request,
             contract=contract,
-            ledger=ledger,
+            collector=collector,
             analysis_id=analysis_id,
+            contract_path=contract_source,
         )
     )
     orchestration_root = pathlib.Path(request["task_root"]) / "orchestration"
@@ -2485,11 +2497,16 @@ def command_plan_orchestration(
         raise CreditAnalysisError("task root already contains orchestration state")
     for name in ("inputs", "prompts", "schemas", "results", "attempts", "transient"):
         (orchestration_root / name).mkdir(parents=True, exist_ok=False)
+    contract_record = freeze_contract_snapshot(
+        contract_source,
+        orchestration_root / "surface-contract.json",
+        task_root=pathlib.Path(request["task_root"]),
+    )
     canonical_state, canonical_record = _collect_canonical_state_snapshot(
         evidence=evidence,
         path_roots=path_roots,
         orchestration_root=orchestration_root,
-        ledger=ledger,
+        collector=collector,
     )
     eligible_bundle = _holistic_compact_bundle(
         analysis_id=analysis_id,
@@ -2699,7 +2716,7 @@ def command_plan_orchestration(
         "manifest": {**manifest, "path": str(manifest_path), "sha256": _file_hash(manifest_path)},
         "immutable_artifacts": {
             "request": {"path": str(request["request_path"]), "sha256": request["request_hash"]},
-            "surface_contract": {"path": str(CONTRACT_PATH), "sha256": _file_hash(CONTRACT_PATH)},
+            "surface_contract": contract_record,
             "evidence": {"path": str(request["evidence_path"]), "sha256": evidence_sha},
             "manifest": {"path": str(manifest_path), "sha256": _file_hash(manifest_path)},
             "compact_evidence": manifest["compact_evidence"],
@@ -2792,7 +2809,16 @@ def _holistic_read_state(
         raise CreditAnalysisError("holistic state mutation authority changed")
     if state.get("mode") not in {"full-analysis", "standalone"}:
         raise CreditAnalysisError("holistic state mode changed")
-    contract = _load_contract()
+    immutable = state.get("immutable_artifacts")
+    if not isinstance(immutable, Mapping):
+        raise CreditAnalysisError("holistic immutable artifact index is invalid")
+    contract_record = immutable.get("surface_contract")
+    if not isinstance(contract_record, Mapping):
+        raise CreditAnalysisError(
+            "holistic immutable artifact is missing: surface_contract"
+        )
+    load_contract_snapshot(contract_record, task_root=resolved.parent)
+    contract = _load_contract(pathlib.Path(str(contract_record["path"])))
     expected_action = (
         state["mode"] if state["mode"] == "full-analysis" else None
     )
@@ -2806,12 +2832,8 @@ def _holistic_read_state(
         raise CreditAnalysisError("holistic state action changed")
     if state.get("surface_contract_version") != contract["surface_contract_version"]:
         raise CreditAnalysisError("holistic state contract version changed")
-    immutable = state.get("immutable_artifacts")
-    if not isinstance(immutable, Mapping):
-        raise CreditAnalysisError("holistic immutable artifact index is invalid")
     immutable_labels = [
         "request",
-        "surface_contract",
         "evidence",
         "manifest",
         "compact_evidence",
@@ -2876,7 +2898,7 @@ def _holistic_read_state(
             raise CreditAnalysisError("holistic task status is invalid")
         attempts = task_state["attempts"]
         if not isinstance(attempts, list):
-            raise CreditAnalysisError("holistic attempt ledger is invalid")
+            raise CreditAnalysisError("Luna/Sol attempt record is invalid")
         for attempt in attempts:
             if not isinstance(attempt, Mapping):
                 raise CreditAnalysisError("holistic attempt record is invalid")
@@ -4166,7 +4188,6 @@ def _holistic_sol_input(
     for result in luna_results:
         for candidate in result["candidates"]:
             candidates.append({**candidate, "source_task_id": result["task_id"]})
-    record_index = {record["candidate_id"]: record for record in compact["records"]}
     candidate_evidence: list[dict[str, Any]] = []
     high_signal: list[dict[str, Any]] = []
     inventory = [
@@ -5767,7 +5788,7 @@ def _holistic_role(task: Mapping[str, Any]) -> str:
 
 
 def _holistic_sync_child_lineage(state: dict[str, Any]) -> None:
-    """Rebuild exact child-attempt lineage from the durable attempt ledger."""
+    """Rebuild exact child-attempt lineage from durable attempt records."""
 
     lineage: list[dict[str, Any]] = []
     for task_id in state["task_order"]:
@@ -6560,20 +6581,21 @@ def _finalize_holistic(
     evidence: Mapping[str, Any],
     compact: Mapping[str, Any],
 ) -> None:
-    contract = _load_contract()
+    contract = _load_contract(
+        pathlib.Path(state["immutable_artifacts"]["surface_contract"]["path"])
+    )
     if any(
         state["execution"][task["task_id"]]["status"]
         not in {"complete", "omitted"}
         for task in state["manifest"]["luna_tasks"]
     ):
-        raise CreditAnalysisError("Luna coverage ledger is incomplete")
+        raise CreditAnalysisError("Luna coverage record is incomplete")
     if state["model_attempts"]["luna"] > 70:
         raise CreditAnalysisError("Luna attempt cap was exceeded")
     if state["model_attempts"]["sol"] > int(
         contract["semantic_call_contract"]["sol_max_calls"]
     ):
         raise CreditAnalysisError("Sol attempt cap was exceeded")
-    routing = _routing_value(state)
     expected_sol = sum(
         state["execution"][task["task_id"]]["status"] == "complete"
         for task in state["manifest"]["sol_tasks"]

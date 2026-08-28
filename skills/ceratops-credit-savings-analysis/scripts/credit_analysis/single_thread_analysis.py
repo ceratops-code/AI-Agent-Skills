@@ -15,7 +15,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
-import importlib.util
 import json
 import math
 import os
@@ -33,11 +32,16 @@ from collections.abc import Mapping, Sequence
 from types import ModuleType
 from typing import Any
 
+from . import session_evidence_collector
+from .analysis_contract_snapshot import (
+    freeze_contract_snapshot,
+    load_contract_snapshot,
+)
+
 PACKAGE_DIR = pathlib.Path(__file__).resolve().parent
 SCRIPT_DIR = PACKAGE_DIR.parent
 SKILL_DIR = SCRIPT_DIR.parent
 CONTRACT_PATH = SCRIPT_DIR / "credit-analysis-contract.json"
-LEDGER_PATH = SCRIPT_DIR / "model-call-ledger.py"
 STATE_SCHEMA = "ceratops-credit-analysis-state.v1"
 CONTEXT_SCHEMA = "ceratops-credit-analysis-context.v1"
 PASS_PACKET_SCHEMA = "ceratops-credit-analysis-pass-packet.v1"
@@ -654,27 +658,21 @@ def _exclusive_json(path: pathlib.Path, value: Any, label: str) -> None:
         raise CreditAnalysisError(f"could not write {label}: {exc}") from exc
 
 
-def _load_ledger() -> ModuleType:
-    spec = importlib.util.spec_from_file_location(
-        "ceratops_credit_model_call_ledger",
-        LEDGER_PATH,
-    )
-    if spec is None or spec.loader is None:
-        raise CreditAnalysisError("could not load model-call-ledger.py")
-    module = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(module)
-    except (ImportError, OSError, SyntaxError) as exc:
-        raise CreditAnalysisError(f"could not import model-call-ledger.py: {exc}") from exc
-    return module
+def _load_evidence_collector() -> ModuleType:
+    """Return the package-owned session evidence collector."""
+
+    return session_evidence_collector
 
 
 def _action_title(action_id: str) -> str:
     return " ".join(part.capitalize() for part in action_id.split("-"))
 
 
-def _load_contract() -> dict[str, Any]:
-    contract = _read_json(CONTRACT_PATH, "surface contract")
+def _load_contract(path: pathlib.Path | None = None) -> dict[str, Any]:
+    contract = _read_json(
+        CONTRACT_PATH if path is None else path,
+        "surface contract",
+    )
     if contract.get("schema") != "ceratops-credit-analysis-contract.v1":
         raise CreditAnalysisError("unsupported surface contract schema")
     version = contract.get("surface_contract_version")
@@ -896,7 +894,7 @@ def _load_contract() -> dict[str, Any]:
 
 def _request_source(
     raw: Any,
-    ledger: ModuleType,
+    collector: ModuleType,
 ) -> tuple[dict[str, Any], pathlib.Path]:
     if not isinstance(raw, dict):
         raise CreditAnalysisError("source must be an object")
@@ -925,19 +923,19 @@ def _request_source(
         )
     try:
         if isinstance(thread_id, str) and thread_id:
-            canonical_id = ledger.canonical_thread_id(thread_id)
-            resolved = ledger.resolve_thread_session(canonical_id)
+            canonical_id = collector.canonical_thread_id(thread_id)
+            resolved = collector.resolve_thread_session(canonical_id)
             descriptor = {"kind": "thread_id", "value": canonical_id}
         elif isinstance(session, str) and session:
             resolved = pathlib.Path(str(session)).expanduser().resolve(strict=True)
             descriptor = {"kind": "session", "value": str(resolved)}
         elif current_thread is True:
-            canonical_id, resolved = ledger.resolve_current_thread_source()
+            canonical_id, resolved = collector.resolve_current_thread_source()
             descriptor = {"kind": "current_thread", "value": canonical_id}
         else:
             assert isinstance(thread_name, str)
             canonical_id, resolved, index_fingerprint = (
-                ledger.resolve_named_thread_source(thread_name)
+                collector.resolve_named_thread_source(thread_name)
             )
             descriptor = {
                 "kind": "thread_name",
@@ -983,7 +981,7 @@ def _request_window(raw: Any) -> tuple[dict[str, Any], dict[str, Any]]:
 def _validate_request(
     request_path: pathlib.Path,
     contract: dict[str, Any],
-    ledger: ModuleType,
+    collector: ModuleType,
     *,
     task_root_boundary: pathlib.Path | None = None,
 ) -> dict[str, Any]:
@@ -1004,7 +1002,7 @@ def _validate_request(
         "surface_contract_version"
     ]:
         raise CreditAnalysisError("surface contract version mismatch")
-    source, session = _request_source(request.get("source"), ledger)
+    source, session = _request_source(request.get("source"), collector)
     window, collector_window = _request_window(request.get("window"))
     task_root = _task_directory(
         request.get("task_temp_root"),
@@ -2413,6 +2411,11 @@ def _initialize_analysis(
     """Persist one validated controller from an already collected evidence set."""
 
     analysis_id = secrets.token_hex(12)
+    contract_record = freeze_contract_snapshot(
+        CONTRACT_PATH,
+        pathlib.Path(request["task_root"]) / "surface-contract.json",
+        task_root=pathlib.Path(request["task_root"]),
+    )
     if collected["collection"]["model_calls"] < 1:
         raise CreditAnalysisError("selected completed-run window has no model calls")
     collector_schema = collected.pop("schema")
@@ -2424,7 +2427,7 @@ def _initialize_analysis(
         "source": request["source"],
         "requested_window": request["window"],
         "surface_contract_version": contract["surface_contract_version"],
-        "surface_contract_hash": _file_hash(CONTRACT_PATH),
+        "surface_contract_hash": contract_record["sha256"],
         "mutation_authority": False,
     }
     fingerprint = _content_hash(evidence)
@@ -2466,10 +2469,7 @@ def _initialize_analysis(
                 "path": str(request["request_path"]),
                 "sha256": request["request_hash"],
             },
-            "surface_contract": {
-                "path": str(CONTRACT_PATH),
-                "sha256": _file_hash(CONTRACT_PATH),
-            },
+            "surface_contract": contract_record,
             "evidence": {
                 "path": str(request["evidence_path"]),
                 "sha256": evidence_hash,
@@ -2499,15 +2499,15 @@ def _initialize_analysis(
 
 def command_prepare(request_path: pathlib.Path) -> dict[str, Any]:
     contract = _load_contract()
-    ledger = _load_ledger()
-    request = _validate_request(request_path, contract, ledger)
+    collector = _load_evidence_collector()
+    request = _validate_request(request_path, contract, collector)
     if request["mode"] == "full-analysis":
         raise CreditAnalysisError(
             "full-analysis requires the run/plan/execute controller"
         )
     collector_window = request["collector_window"]
     try:
-        collected = ledger.collect_session_evidence(
+        collected = collector.collect_session_evidence(
             request["session"],
             last_runs=collector_window["last_runs"],
             completed_turn_ids=collector_window["completed_turn_ids"],
@@ -2632,7 +2632,14 @@ def _load_state(
     for key, expected in expected_paths.items():
         if pathlib.Path(str(paths[key])).resolve() != expected.resolve():
             raise CreditAnalysisError(f"state {key} path escapes controller ownership")
-    contract = _load_contract()
+    artifacts = state.get("immutable_artifacts")
+    if not isinstance(artifacts, dict):
+        raise CreditAnalysisError("state immutable artifacts are invalid")
+    contract_record = artifacts.get("surface_contract")
+    if not isinstance(contract_record, dict):
+        raise CreditAnalysisError("state surface_contract artifact is invalid")
+    load_contract_snapshot(contract_record, task_root=task_root)
+    contract = _load_contract(pathlib.Path(contract_record["path"]))
     if state.get("surface_contract_version") != contract["surface_contract_version"]:
         raise CreditAnalysisError("state surface contract version is stale")
     queue = state.get("queue")
@@ -2651,10 +2658,7 @@ def _load_state(
         or current_index > len(queue)
     ):
         raise CreditAnalysisError("state current index is invalid")
-    artifacts = state.get("immutable_artifacts")
-    if not isinstance(artifacts, dict):
-        raise CreditAnalysisError("state immutable artifacts are invalid")
-    for label in ("request", "surface_contract", "evidence"):
+    for label in ("request", "evidence"):
         record = artifacts.get(label)
         if not isinstance(record, dict):
             raise CreditAnalysisError(f"state {label} artifact is invalid")
@@ -5113,7 +5117,6 @@ __all__ = (
     "HOLISTIC_TASK_SCHEMA",
     "IDENTIFIER_RE",
     "INDEX_SCHEMA",
-    "LEDGER_PATH",
     "MODEL_PROGRESS_SECONDS",
     "Mapping",
     "ModuleType",
@@ -5192,7 +5195,7 @@ __all__ = (
     "_initialize_analysis",
     "_json_chars",
     "_load_contract",
-    "_load_ledger",
+    "_load_evidence_collector",
     "_load_state",
     "_model_review_records_for_calls",
     "_new_file",
@@ -5244,7 +5247,6 @@ __all__ = (
     "defaultdict",
     "dt",
     "hashlib",
-    "importlib",
     "json",
     "math",
     "os",

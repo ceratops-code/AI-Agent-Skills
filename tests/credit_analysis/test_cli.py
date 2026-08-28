@@ -11,7 +11,7 @@ from tests.credit_analysis.models import (
     load_credit_analysis_workflow_module,
 )
 from tests.credit_analysis.paths import (
-    MODEL_CALL_LEDGER,
+    SESSION_EVIDENCE_COLLECTOR,
 )
 
 
@@ -19,7 +19,7 @@ def test_model_call_ledger_keeps_full_evidence_out_of_stdout(
     tmp_path: pathlib.Path,
 ) -> None:
     session = tmp_path / "session.jsonl"
-    evidence = tmp_path / "ledger.json"
+    evidence = tmp_path / "session-evidence.json"
     semantic_evidence = tmp_path / "semantic.json"
     local_path = str(tmp_path / "private" / "command.txt")
     user_message_text = (
@@ -102,7 +102,7 @@ def test_model_call_ledger_keeps_full_evidence_out_of_stdout(
     compact = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--session",
             str(session),
             "--evidence-output",
@@ -115,19 +115,19 @@ def test_model_call_ledger_keeps_full_evidence_out_of_stdout(
 
     assert compact.returncode == 0, compact.stderr
     summary = json.loads(compact.stdout)
-    assert summary["schema"] == "ceratops-model-call-ledger-summary.v1"
+    assert summary["schema"] == "ceratops-session-evidence-summary.v1"
     assert summary["totals"]["model_calls"] == 2
     assert summary["runs"][0]["turn_id"] == "turn-1"
     assert summary["selected_runs"] == []
     assert "calls" not in summary["runs"][0]
-    ledger = json.loads(evidence.read_text(encoding="utf-8"))
-    assert len(ledger["runs"][0]["calls"]) == 2
+    session_evidence = json.loads(evidence.read_text(encoding="utf-8"))
+    assert len(session_evidence["runs"][0]["calls"]) == 2
     assert "sentinel-secret" not in evidence.read_text(encoding="utf-8")
 
     missing_sidecar = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--session",
             str(session),
             "--evidence-output",
@@ -149,7 +149,7 @@ def test_model_call_ledger_keeps_full_evidence_out_of_stdout(
     sidecar = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--session",
             str(session),
             "--evidence-output",
@@ -171,10 +171,13 @@ def test_model_call_ledger_keeps_full_evidence_out_of_stdout(
         "ceratops-model-call-semantic-summary.v1"
     )
     assert sidecar_summary["evidence_schemas"] == {
-        "ledger": "ceratops-model-call-ledger.v1",
+        "session_evidence": "ceratops-session-evidence.v1",
         "semantic": "ceratops-model-call-semantic-evidence.v1",
     }
-    assert sidecar_summary["written"] == {"ledger": True, "semantic": True}
+    assert sidecar_summary["written"] == {
+        "session_evidence": True,
+        "semantic": True,
+    }
     assert sidecar_summary["totals"] == {
         "selected_runs": 1,
         "selected_model_calls": 2,
@@ -184,7 +187,7 @@ def test_model_call_ledger_keeps_full_evidence_out_of_stdout(
     ]
     assert "evidence_output" not in sidecar_summary
     assert json.loads(evidence.read_text(encoding="utf-8"))["schema"] == (
-        "ceratops-model-call-ledger.v1"
+        "ceratops-session-evidence.v1"
     )
     semantic_detail = json.loads(semantic_evidence.read_text(encoding="utf-8"))
     assert semantic_detail["schema"] == (
@@ -214,7 +217,7 @@ def test_model_call_ledger_keeps_full_evidence_out_of_stdout(
     missing_selection = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--session",
             str(session),
             "--evidence-output",
@@ -252,7 +255,7 @@ def test_model_call_ledger_keeps_full_evidence_out_of_stdout(
     classified = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--session",
             str(session),
             "--classifications",
@@ -274,9 +277,9 @@ def test_model_call_ledger_keeps_full_evidence_out_of_stdout(
 def test_model_call_ledger_usage_summary_is_ranked_and_evidence_based(
     tmp_path: pathlib.Path,
 ) -> None:
-    ledger = load_credit_analysis_workflow_module()._load_ledger()
+    collector = load_credit_analysis_workflow_module()._load_evidence_collector()
     assert (
-        ledger.bounded_command_label("rg sentinel <user-home><local-path>")
+        collector.bounded_command_label("rg sentinel <user-home><local-path>")
         == "rg sentinel <local-path>"
     )
     session = tmp_path / "session.jsonl"
@@ -643,7 +646,7 @@ def test_model_call_ledger_usage_summary_is_ranked_and_evidence_based(
     completed = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--session",
             str(session),
             "--summary",
@@ -771,7 +774,7 @@ def test_model_call_ledger_usage_summary_is_ranked_and_evidence_based(
     unpriced = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--session",
             str(session),
             "--summary",
@@ -794,7 +797,7 @@ def test_model_call_ledger_usage_summary_is_ranked_and_evidence_based(
     invalid = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--session",
             str(session),
             "--summary",
@@ -823,7 +826,7 @@ def test_model_call_ledger_usage_summary_is_ranked_and_evidence_based(
     rejected_pricing = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--session",
             str(session),
             "--summary",
@@ -1014,7 +1017,7 @@ def test_model_call_ledger_closure_mode_is_artifact_free(
     closure = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--closure",
             "--thread-id",
             thread_id,
@@ -1035,7 +1038,7 @@ def test_model_call_ledger_closure_mode_is_artifact_free(
     ):
         assert secret not in closure.stdout
     summary = json.loads(closure.stdout)
-    assert summary["schema"] == "ceratops-model-call-ledger-closure.v1"
+    assert summary["schema"] == "ceratops-session-evidence-closure.v1"
     assert summary["totals"]["runs"] == 2
     assert summary["totals"]["model_calls"] == 3
     assert [run["turn_id"] for run in summary["runs"]] == ["turn-1", "turn-2"]
@@ -1047,7 +1050,7 @@ def test_model_call_ledger_closure_mode_is_artifact_free(
     usage = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--summary",
             "--thread-id",
             thread_id,
@@ -1069,16 +1072,16 @@ def test_model_call_ledger_closure_mode_is_artifact_free(
         "ceratops-model-call-usage-evidence.v1"
     )
 
-    thread_ledger = tmp_path / "thread-ledger.json"
+    thread_evidence = tmp_path / "thread-evidence.json"
     thread_semantic_evidence = tmp_path / "thread-semantic.json"
     thread_semantic = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--thread-id",
             thread_id,
             "--evidence-output",
-            str(thread_ledger),
+            str(thread_evidence),
             "--semantic-evidence-output",
             str(thread_semantic_evidence),
             "--include-run",
@@ -1095,7 +1098,7 @@ def test_model_call_ledger_closure_mode_is_artifact_free(
         {"turn_id": "turn-1", "model_calls": 2}
     ]
     assert pathlib.Path(
-        json.loads(thread_ledger.read_text(encoding="utf-8"))["session"]
+        json.loads(thread_evidence.read_text(encoding="utf-8"))["session"]
     ) == session.resolve()
     assert json.loads(
         thread_semantic_evidence.read_text(encoding="utf-8")
@@ -1104,7 +1107,7 @@ def test_model_call_ledger_closure_mode_is_artifact_free(
     semantic = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--closure",
             "--session",
             str(session),
@@ -1147,7 +1150,7 @@ def test_model_call_ledger_closure_mode_is_artifact_free(
     bounded = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--closure",
             "--session",
             str(session),
@@ -1194,7 +1197,7 @@ def test_model_call_ledger_closure_mode_is_artifact_free(
         invalid = subprocess.run(
             [
                 sys.executable,
-                str(MODEL_CALL_LEDGER),
+                str(SESSION_EVIDENCE_COLLECTOR),
                 "--closure",
                 "--session",
                 str(session),
@@ -1218,7 +1221,7 @@ def test_model_call_ledger_closure_mode_is_artifact_free(
     ambiguous = subprocess.run(
         [
             sys.executable,
-            str(MODEL_CALL_LEDGER),
+            str(SESSION_EVIDENCE_COLLECTOR),
             "--closure",
             "--thread-id",
             thread_id,

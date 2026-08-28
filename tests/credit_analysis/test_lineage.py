@@ -200,6 +200,7 @@ def test_credit_analysis_lineage_allows_later_meta_analysis_without_recursion(
 
 def test_credit_analysis_workflow_standalone_zero_findings_is_isolated(
     tmp_path: pathlib.Path,
+    monkeypatch,
 ) -> None:
     request, _, task_root = credit_analysis_request(
         tmp_path,
@@ -223,6 +224,25 @@ def test_credit_analysis_workflow_standalone_zero_findings_is_isolated(
     assert prepared.returncode == 0, prepared.stderr
     status = json.loads(prepared.stdout)
     assert status["pending_surface"] == "context-evidence"
+    prepared_state = json.loads(
+        pathlib.Path(status["state_path"]).read_text(encoding="utf-8")
+    )
+    contract_record = prepared_state["immutable_artifacts"]["surface_contract"]
+    contract_snapshot = pathlib.Path(contract_record["path"])
+    assert contract_snapshot == task_root / "surface-contract.json"
+    assert contract_snapshot != CREDIT_ANALYSIS_CONTRACT
+    changed_contract = tmp_path / "later-installed-contract.json"
+    changed_contract_value = json.loads(
+        CREDIT_ANALYSIS_CONTRACT.read_text(encoding="utf-8")
+    )
+    changed_contract_value["surface_contract_version"] += 1
+    write_json_file(changed_contract, changed_contract_value)
+    workflow = load_credit_analysis_workflow_module()
+    monkeypatch.setattr(workflow, "CONTRACT_PATH", changed_contract)
+    _, _, resumed_contract = workflow._load_state(pathlib.Path(status["state_path"]))
+    assert resumed_contract["surface_contract_version"] != changed_contract_value[
+        "surface_contract_version"
+    ]
     evidence = json.loads(pathlib.Path(status["evidence_path"]).read_text(encoding="utf-8"))
     context = json.loads(pathlib.Path(status["context_path"]).read_text(encoding="utf-8"))
     result = surface_result_record(

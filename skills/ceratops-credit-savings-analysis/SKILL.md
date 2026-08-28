@@ -32,12 +32,15 @@ applies them.
   contract. An incremental closure begins strictly after the previous completed
   closure; active runs and the boundary run are excluded.
 - For a single-thread full or standalone analysis, run
-  `python scripts/credit-analysis-workflow.py run --request REQUEST`. On a fresh
-  request, the controller plans once; rerunning the exact request resumes its
-  state. Require mutation authority `false`, current contract versions, and a
-  caller-selected task root under
-  `<repo-parent>/tmp/<repo-name>/<thread-name>`. Keep retained evidence inside
-  that task root.
+  `python scripts/credit-analysis-workflow.py run --request REQUEST`.
+- On every fresh single-thread or per-thread-batch plan, validate the current
+  installed contract, copy its exact bytes inside the caller-selected task
+  root, and bind state to that frozen copy. Resume from the frozen task-local
+  contract even after the installed skill changes; require current contract
+  versions only for fresh planning. Reject a missing, changed, linked, or
+  out-of-root frozen copy. Require mutation authority `false`, use a task root
+  under `<repo-parent>/tmp/<repo-name>/<thread-name>`, and keep retained
+  evidence inside it.
   Planning resolves the selected source as a frozen thread tree, reads each
   included session exactly once, freezes the cutoff before child execution, and
   assigns exact lineage. Treat completed descendant Luna and Sol threads from an
@@ -79,7 +82,7 @@ applies them.
   controller owns waiting, timeout, process-tree termination, non-model progress,
   prompts, evidence, results, and telemetry, and never spends model calls polling
   children. Accepted calls and attempts retain immutable hashes and resumable
-  ledgers.
+  attempt records.
 - Luna performs high-recall discovery across all five fixed surfaces together.
   Run up to fifteen Luna children concurrently and admit no more than seventy
   Luna attempts for one frozen thread tree, including corrective reruns. Launch

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from .core import *
+from .single_thread_analysis import *
 
 
 def _capacity_json_bytes(value: Any) -> int:

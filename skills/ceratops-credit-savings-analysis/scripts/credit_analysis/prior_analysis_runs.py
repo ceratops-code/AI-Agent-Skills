@@ -10,7 +10,7 @@ into shared model inputs.
 
 from __future__ import annotations
 
-from .core import *
+from .single_thread_analysis import *
 
 
 def _review_record_index(evidence: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
