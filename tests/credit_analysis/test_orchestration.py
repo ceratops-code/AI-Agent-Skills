@@ -621,7 +621,7 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     assert all(call["reasoning_effort"] == "max" for call in runner.calls)
     assert sum(call["phase"] == "luna-discovery" for call in runner.calls) == 6
     assert sum(call["phase"] == "sol-adjudication" for call in runner.calls) == 6
-    assert sum(call["phase"] == "sol-direct-evidence" for call in runner.calls) == 1
+    assert sum(call["phase"] == "sol-direct-evidence" for call in runner.calls) == 0
     assert sum(call["phase"] == "sol-final" for call in runner.calls) == 1
     assert sum(
         call["input_sha256"] == orphan_digest for call in runner.calls
@@ -772,9 +772,9 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     )
     assert final["model_calls"] == {
         "actual_luna": 6,
-        "actual_sol": 8,
+        "actual_sol": 7,
         "accepted_luna": 6,
-        "accepted_sol": 8,
+        "accepted_sol": 7,
         "bookkeeping": 0,
     }
     assert final["manifest"]["unclassified_calls"] == 0
@@ -872,6 +872,76 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     )
 
     class OneInvalidSolRunner(FakeCreditModelRunner):
+        def __init__(self) -> None:
+            super().__init__()
+            self.invalidated = False
+
+        def _sol(
+            self,
+            task: Mapping[str, Any],
+            packet: Mapping[str, Any],
+            digest: str,
+        ) -> dict[str, Any]:
+            result = super()._sol(task, packet, digest)
+            if (
+                task["task_id"] == "sol.adjudication.0001"
+                and not self.invalidated
+            ):
+                self.invalidated = True
+                result["candidate_decisions"][0]["reason"] = "x" * 321
+            return result
+
+    failure_runner = OneInvalidSolRunner()
+    failure_state_path = pathlib.Path(failure_plan["state_path"])
+    recovered = workflow.command_execute_orchestration(
+        failure_state_path,
+        runner=failure_runner,
+        available_models=failure_runner.available_models,
+    )
+    assert recovered["complete"] is True
+    failure_state = json.loads(failure_state_path.read_text(encoding="utf-8"))
+    assert [
+        attempt["outcome"]
+        for attempt in failure_state["execution"]["sol.adjudication.0001"][
+            "attempts"
+        ]
+    ] == ["validation-error", "accepted"]
+    assert all(
+        failure_state["execution"][task_id]["status"] == "complete"
+        for task_id in (
+            "sol.adjudication.0001",
+            "sol.adjudication.0002",
+            "sol.adjudication.0003",
+            "sol.adjudication.0004",
+            "sol.adjudication.0005",
+            "sol.adjudication.0006",
+            "sol.final",
+        )
+    )
+    assert failure_state["execution"]["sol.direct-evidence"]["status"] == "skipped"
+    assert failure_state["model_attempts"]["sol"] == 8
+    assert failure_state["omissions"] == []
+    failure_call_count = len(failure_runner.calls)
+    assert workflow.command_execute_orchestration(
+        failure_state_path,
+        runner=failure_runner,
+        available_models=failure_runner.available_models,
+    )["complete"] is True
+    assert len(failure_runner.calls) == failure_call_count
+
+    persistent_root = tmp_path / "persistent-invalid-sol"
+    persistent_root.mkdir()
+    persistent_request, _, _ = credit_analysis_request(
+        persistent_root,
+        extra_completed_turns=3,
+        extra_calls_per_turn=4,
+    )
+    persistent_plan = workflow.command_plan_orchestration(
+        persistent_request,
+        available_models=holistic_model_catalog(),
+    )
+
+    class PersistentInvalidSolRunner(FakeCreditModelRunner):
         def _sol(
             self,
             task: Mapping[str, Any],
@@ -883,29 +953,40 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
                 result["candidate_decisions"][0]["reason"] = "x" * 321
             return result
 
-    failure_runner = OneInvalidSolRunner()
-    failure_state_path = pathlib.Path(failure_plan["state_path"])
-    with pytest.raises(
-        workflow.CreditAnalysisError,
-        match="320-character semantic bound",
-    ):
-        workflow.command_execute_orchestration(
-            failure_state_path,
-            runner=failure_runner,
-            available_models=failure_runner.available_models,
-        )
-    failure_state = json.loads(failure_state_path.read_text(encoding="utf-8"))
-    assert failure_state["execution"]["sol.adjudication.0001"]["attempts"][0][
-        "outcome"
-    ] == "validation-error"
-    assert all(
-        failure_state["execution"][task_id]["status"] == "complete"
-        for task_id in (
-            "sol.adjudication.0002",
-            "sol.adjudication.0003",
-            "sol.adjudication.0004",
-            "sol.adjudication.0005",
-            "sol.adjudication.0006",
-            "sol.direct-evidence",
+    persistent_runner = PersistentInvalidSolRunner()
+    persistent_state_path = pathlib.Path(persistent_plan["state_path"])
+    persistent_status = workflow.command_execute_orchestration(
+        persistent_state_path,
+        runner=persistent_runner,
+        available_models=persistent_runner.available_models,
+    )
+    assert persistent_status["complete"] is True
+    persistent_state = json.loads(
+        persistent_state_path.read_text(encoding="utf-8")
+    )
+    rejected_execution = persistent_state["execution"]["sol.adjudication.0001"]
+    assert rejected_execution["status"] == "omitted"
+    assert [attempt["outcome"] for attempt in rejected_execution["attempts"]] == [
+        "validation-error",
+        "validation-error",
+    ]
+    invalid_omission = next(
+        omission
+        for omission in persistent_state["omissions"]
+        if omission.get("task_id") == "sol.adjudication.0001"
+    )
+    assert invalid_omission["reason"] == "sol-invalid-output"
+    assert invalid_omission["candidate_ids"]
+    assert invalid_omission["call_ids"]
+    assert invalid_omission["input_bytes"] > 0
+    assert invalid_omission["output_bytes"] > 0
+    assert persistent_state["execution"]["sol.final"]["status"] == "complete"
+    assert persistent_state["model_attempts"]["sol"] == 8
+    persistent_final = json.loads(
+        pathlib.Path(persistent_status["final_result_path"]).read_text(
+            encoding="utf-8"
         )
     )
+    assert persistent_final["coverage"]["analyzed_calls"] < persistent_final[
+        "coverage"
+    ]["eligible_calls"]

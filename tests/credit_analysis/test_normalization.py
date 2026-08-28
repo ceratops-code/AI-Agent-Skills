@@ -510,16 +510,8 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
         for review in final["temporary_control_reviews"]
         if review["disposition"] == "transient-by-design"
     )
-    assert all(
-        decision["disposition"] != "confirmed-finding"
-        or all(
-            final_findings[finding_id]["implementation_status"] == "implemented"
-            for finding_id in decision["finding_ids"]
-        )
-        for decision in final["candidate_decisions"]
-        if decision["luna_candidate_id"]
-        in transient_review["source_luna_candidate_ids"]
-    )
+    assert transient_review["finding_id"] is None
+    assert transient_review["no_finding_reason"]
     assert all(
         finding["observed_avoidable_call_count"]
         == len(finding["affected_call_ids"])
@@ -528,18 +520,26 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
     )
     normalized_review = next(
         item
-        for item in final["temporary_control_reviews"]
+        for item in shard["temporary_control_reviews"]
         if item["disposition"] == "permanently-implemented"
     )
     assert normalized_review["finding_id"] is None
     assert normalized_review["no_finding_reason"]
     normalized_decision = next(
         item
-        for item in final["candidate_decisions"]
+        for item in shard["candidate_decisions"]
         if item["luna_candidate_id"]
         == normalized_review["source_luna_candidate_ids"][0]
     )
-    assert normalized_decision["disposition"] == "dismissed-candidate"
+    assert normalized_decision["disposition"] == "confirmed-finding"
+    assert normalized_decision["finding_ids"]
+    shard_findings = {
+        finding["id"]: finding for finding in shard["confirmed_findings"]
+    }
+    assert any(
+        shard_findings[finding_id]["implementation_status"] == "unimplemented"
+        for finding_id in normalized_decision["finding_ids"]
+    )
     assert all(
         merge["control_key"] != "implemented-control-is-not-a-gap"
         for merge in final["temporary_control_merges"]

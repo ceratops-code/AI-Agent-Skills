@@ -73,29 +73,29 @@ Preserve every confirmed finding and report every capacity omission.
    or unaccepted run part with its run and part identity, record count, input
    bytes, candidate count when known, output bytes when produced, and reason.
    Never truncate a result.
-4. Measure the accepted Luna reports before Sol assignment. Route every retained
-   candidate exactly once to one of up to six parallel `gpt-5.6-sol` reviewers
-   at
-   maximum effort. Each receives only its assigned Luna reports and embedded
-   evidence references. A candidate with confirmed subclaims may also link
-   separate plausible risks, and every temporary-control candidate receives the
-   required owner/control review. When deterministic size, signal, correction,
-   or
-   partial-coverage evidence selects one important run, run one additional
-   direct-evidence Sol against that prepared run evidence rather than Luna's
-   description.
+4. Measure the accepted Luna reports before Sol assignment. A temporary-control
+   review governs only its described owner/control subclaim and does not veto an
+   independent finding carried by the same candidate. Route every retained
+   candidate exactly once among up to six Luna-output reviewers using
+   `gpt-5.6-sol` at maximum effort. Each receives only its assigned Luna reports
+   and embedded evidence references. Select one additional direct-evidence Sol
+   only when
+   deterministic signals identify an important run and scheduling it leaves
+   capacity for the final merger and one corrective Sol retry.
 5. Apply the unassessed-call ceiling to the complete routed call set, never to
    one preliminary Sol result in isolation. After the parallel reviewers and any
    direct-evidence review finish, run one dependent final Sol. It merges compact
    judgments, temporary-control reviews, classifications, risks, and ROI inputs;
    deduplicates likely owner/control identity; and deeply verifies and expands
    the
-   top three findings without suppressing other confirmed findings. Use no more
-   than six Luna-output reviewers, one direct-evidence reviewer, and one final
-   merger: eight Sol calls total. If that capacity cannot preserve every
-   accepted
-   candidate, retain the exact unreviewed candidate and byte inventory and never
-   claim it was adjudicated.
+   top three findings without suppressing other confirmed findings. Each
+   rejected Sol task receives one automatic corrective retry when the
+   eight-attempt ceiling permits. After a non-final task fails validation twice,
+   mark its exact candidate, call, and byte inventory unreviewed and continue to
+   the final merger. A revalidated retained result completes its task without a
+   new model call; an invalid retained result follows the same automatic retry
+   and omission policy. Use no more than eight Sol calls total, counting every
+   attempt.
 6. Persist immutable identities, prompts, results, attempts, latency, and usage.
    Before surfacing one parallel sibling failure, record every already-completed
    sibling attempt. On resume, revalidate complete task-owned attempt artifacts

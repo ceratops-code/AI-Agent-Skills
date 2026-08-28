@@ -3777,9 +3777,16 @@ def _freeze_sol_routing(
             -int(window["ordinal"]),
         )
 
-    preferred_audit_windows = [
-        max(retained_window_tasks, key=direct_evidence_rank)
-    ]
+    retry_reserve = int(limits["sol_max_validation_retries_per_task"])
+    direct_evidence_fits_call_budget = (
+        adjudicator_count + 1 + retry_reserve + 1
+        <= int(limits["sol_max_calls"])
+    )
+    preferred_audit_windows = (
+        [max(retained_window_tasks, key=direct_evidence_rank)]
+        if direct_evidence_fits_call_budget
+        else []
+    )
 
     def audit_identity(window: Mapping[str, Any]) -> dict[str, Any]:
         return {
@@ -3899,6 +3906,18 @@ def _routing_value(state: Mapping[str, Any]) -> dict[str, Any]:
     return _read_json(pathlib.Path(str(routing["path"])), "Sol routing manifest")
 
 
+def _completed_routing_shards(
+    state: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Return only shards whose Sol reviewer produced an accepted result."""
+
+    return [
+        dict(shard)
+        for shard in _routing_value(state)["shards"]
+        if state["execution"][shard["task_id"]]["status"] == "complete"
+    ]
+
+
 def _namespaced_adjudication_result(
     result: Mapping[str, Any], task_id: str
 ) -> dict[str, Any]:
@@ -3973,7 +3992,7 @@ def _holistic_runtime_task(
 def _routed_call_ids(state: Mapping[str, Any]) -> list[str]:
     routed = {
         call_id
-        for shard in _routing_value(state)["shards"]
+        for shard in _completed_routing_shards(state)
         for call_id in shard["call_ids"]
     }
     return [
@@ -4063,7 +4082,7 @@ def _holistic_sol_input(
     elif task["phase"] == "sol-final":
         routed_luna_task_ids = {
             task_id
-            for shard in _routing_value(state)["shards"]
+            for shard in _completed_routing_shards(state)
             for task_id in shard["luna_task_ids"]
         }
         luna_results = [
@@ -4086,7 +4105,7 @@ def _holistic_sol_input(
         }
         for shard_task in state["manifest"]["sol_tasks"][:6]:
             execution = state["execution"][shard_task["task_id"]]
-            if execution["status"] == "skipped":
+            if execution["status"] in {"skipped", "omitted"}:
                 continue
             result_record = execution["result"]
             if not isinstance(result_record, Mapping):
@@ -4102,7 +4121,7 @@ def _holistic_sol_input(
             )
         audit_execution = state["execution"]["sol.direct-evidence"]
         audit_record = audit_execution["result"]
-        if audit_execution["status"] != "skipped":
+        if audit_execution["status"] not in {"skipped", "omitted"}:
             if not isinstance(audit_record, Mapping):
                 raise CreditAnalysisError("final Sol requires the audit result")
             audit_result = _read_json(
@@ -5158,33 +5177,6 @@ def _validate_holistic_sol_result(
         raise CreditAnalysisError(
             "temporary-control review coverage is missing"
         )
-    nonfinding_temporary_sources = {
-        candidate_id
-        for review in review_by_id.values()
-        if review["finding_id"] is None
-        for candidate_id in review["source_luna_candidate_ids"]
-    }
-    for decision in decisions:
-        if (
-            decision["luna_candidate_id"] in nonfinding_temporary_sources
-            and decision["disposition"] == "confirmed-finding"
-        ):
-            implemented_finding_ids = [
-                finding_id
-                for finding_id in decision["finding_ids"]
-                if finding_by_id[finding_id]["implementation_status"]
-                == "implemented"
-            ]
-            if implemented_finding_ids:
-                decision["finding_ids"] = implemented_finding_ids
-            else:
-                decision["disposition"] = "dismissed-candidate"
-                decision["finding_ids"] = []
-                decision["risk_ids"] = []
-                decision["reason"] = (
-                    "The mandatory temporary-control disposition records no "
-                    "missing durable control."
-                )
     referenced_findings = {
         finding_id for decision in decisions for finding_id in decision["finding_ids"]
     }
@@ -5290,7 +5282,7 @@ def _validate_holistic_sol_result(
         prior_results = []
         for shard_task in state["manifest"]["sol_tasks"][:6]:
             shard_execution = state["execution"][shard_task["task_id"]]
-            if shard_execution["status"] == "skipped":
+            if shard_execution["status"] in {"skipped", "omitted"}:
                 continue
             shard_record = shard_execution["result"]
             if isinstance(shard_record, Mapping):
@@ -6043,18 +6035,18 @@ def _holistic_final(
     discovery_kinds = Counter(
         candidate["kind"] for result in luna_results for candidate in result["candidates"]
     )
-    routing = _routing_value(state)
+    reviewed_shards = _completed_routing_shards(state)
     analyzed_turn_ids = [
         turn_id
-        for shard in routing["shards"]
+        for shard in reviewed_shards
         for turn_id in shard["turn_ids"]
     ]
     analyzed_call_ids = {
-        call_id for shard in routing["shards"] for call_id in shard["call_ids"]
+        call_id for shard in reviewed_shards for call_id in shard["call_ids"]
     }
     reviewed_luna_task_ids = {
         task_id
-        for shard in routing["shards"]
+        for shard in reviewed_shards
         for task_id in shard["luna_task_ids"]
     }
     luna_task_by_id = {
@@ -6577,6 +6569,10 @@ def _finalize_holistic(
         raise CreditAnalysisError("Luna coverage ledger is incomplete")
     if state["model_attempts"]["luna"] > 70:
         raise CreditAnalysisError("Luna attempt cap was exceeded")
+    if state["model_attempts"]["sol"] > int(
+        contract["semantic_call_contract"]["sol_max_calls"]
+    ):
+        raise CreditAnalysisError("Sol attempt cap was exceeded")
     routing = _routing_value(state)
     expected_sol = sum(
         state["execution"][task["task_id"]]["status"] == "complete"
@@ -6667,6 +6663,52 @@ def _diagnosed_luna_retry(error: CreditAnalysisError) -> bool:
             "too few items",
         )
     )
+
+
+def _sol_validation_error_count(execution: Mapping[str, Any]) -> int:
+    """Count rejected semantic results without treating runner failures as data."""
+
+    return sum(
+        attempt.get("outcome") == "validation-error"
+        for attempt in execution["attempts"]
+    )
+
+
+def _sol_attempt_capacity(
+    state: Mapping[str, Any],
+    contract: Mapping[str, Any],
+    task: Mapping[str, Any],
+) -> int:
+    """Return launchable Sol attempts while preserving the dependent final slot."""
+
+    maximum = int(contract["semantic_call_contract"]["sol_max_calls"])
+    reserve_final = int(
+        task["phase"] != "sol-final"
+        and state["execution"]["sol.final"]["status"] == "pending"
+    )
+    return max(
+        0,
+        maximum - int(state["model_attempts"]["sol"]) - reserve_final,
+    )
+
+
+def _can_retry_sol_validation(
+    state: Mapping[str, Any],
+    contract: Mapping[str, Any],
+    task: Mapping[str, Any],
+) -> bool:
+    """Allow one task-local correction only inside the global Sol attempt cap."""
+
+    execution = state["execution"][task["task_id"]]
+    rejected = _sol_validation_error_count(execution)
+    retry_limit = int(
+        contract["semantic_call_contract"][
+            "sol_max_validation_retries_per_task"
+        ]
+    )
+    return 0 < rejected <= retry_limit and _sol_attempt_capacity(
+        state, contract, task
+    ) > 0
 
 
 def _holistic_model_attempt(
@@ -6780,6 +6822,72 @@ def _omit_luna_task(
         state["omissions"].append(omission)
 
 
+def _omit_sol_task(
+    state: dict[str, Any],
+    task: Mapping[str, Any],
+    *,
+    reason: str,
+    error: str | None = None,
+) -> None:
+    """Retain exact inventory for one non-final Sol task that cannot be accepted."""
+
+    if task["phase"] == "sol-final":
+        raise CreditAnalysisError("the final Sol result cannot be omitted")
+    execution = state["execution"][task["task_id"]]
+    execution["status"] = "omitted"
+    output_bytes = 0
+    for attempt in reversed(execution["attempts"]):
+        raw_artifact = attempt.get("artifacts", {}).get("raw_output")
+        if not isinstance(raw_artifact, Mapping):
+            continue
+        raw_path = pathlib.Path(str(raw_artifact.get("path")))
+        if raw_path.is_file() and not raw_path.is_symlink():
+            output_bytes = raw_path.stat().st_size
+            break
+    source_record_ids = list(task.get("candidate_ids", []))
+    candidate_ids = list(
+        task.get("luna_candidate_ids", source_record_ids)
+    )
+    call_ids = list(task.get("call_ids", []))
+    if not call_ids:
+        call_ids = list(
+            dict.fromkeys(
+                call_id
+                for window in task.get("audit_windows", [])
+                for call_id in window.get("call_ids", [])
+            )
+        )
+    input_path = pathlib.Path(str(task["artifacts"]["input"]))
+    input_bytes = (
+        input_path.stat().st_size
+        if input_path.is_file() and not input_path.is_symlink()
+        else 0
+    )
+    omission: dict[str, Any] = {
+        "stage": task["phase"],
+        "reason": reason,
+        "task_id": task["task_id"],
+        "turn_ids": list(task.get("turn_ids", [])),
+        "candidate_ids": candidate_ids,
+        "source_record_ids": source_record_ids,
+        "call_ids": call_ids,
+        "record_count": len(source_record_ids),
+        "candidate_count": len(candidate_ids),
+        "evidence_bytes": int(task.get("routing_bytes") or input_bytes),
+        "input_bytes": input_bytes,
+        "output_bytes": output_bytes,
+        "attempt_count": len(execution["attempts"]),
+    }
+    if error:
+        omission["error"] = error
+    if not any(
+        item.get("task_id") == task["task_id"]
+        for item in state["omissions"]
+        if isinstance(item, Mapping)
+    ):
+        state["omissions"].append(omission)
+
+
 def command_execute_orchestration(
     state_path: pathlib.Path,
     *,
@@ -6837,6 +6945,16 @@ def command_execute_orchestration(
     luna_attempt_limit = int(
         contract["semantic_call_contract"]["luna_max_attempts"]
     )
+    sol_attempt_limit = int(
+        contract["semantic_call_contract"]["sol_max_calls"]
+    )
+    sol_retry_limit = int(
+        contract["semantic_call_contract"][
+            "sol_max_validation_retries_per_task"
+        ]
+    )
+    if int(state["model_attempts"]["sol"]) > sol_attempt_limit:
+        raise CreditAnalysisError("Sol attempt cap was exceeded")
     state["phase"] = "executing"
     _holistic_save_state(state)
 
@@ -6864,6 +6982,47 @@ def command_execute_orchestration(
         if luna_terminal and state.get("routing") is None:
             _freeze_sol_routing(state, compact, contract)
             tasks = _holistic_task_map(state["manifest"])
+
+        sol_omission_changed = False
+        for base_task in state["manifest"]["sol_tasks"]:
+            execution = state["execution"][base_task["task_id"]]
+            if execution["status"] != "pending":
+                continue
+            rejected = _sol_validation_error_count(execution)
+            if not rejected:
+                continue
+            task = _holistic_runtime_task(state, base_task)
+            if rejected > sol_retry_limit:
+                if task["phase"] == "sol-final":
+                    _holistic_save_state(state)
+                    raise CreditAnalysisError(
+                        "final Sol failed validation after its automatic retry"
+                    )
+                _omit_sol_task(
+                    state,
+                    task,
+                    reason="sol-invalid-output",
+                    error=str(execution["attempts"][-1].get("error") or "invalid result"),
+                )
+                progressed += 1
+                sol_omission_changed = True
+                continue
+            if _sol_attempt_capacity(state, contract, task) == 0:
+                if task["phase"] == "sol-final":
+                    _holistic_save_state(state)
+                    raise CreditAnalysisError(
+                        "Sol attempt ceiling leaves no corrective final retry"
+                    )
+                _omit_sol_task(
+                    state,
+                    task,
+                    reason="sol-retry-capacity",
+                    error=str(execution["attempts"][-1].get("error") or "invalid result"),
+                )
+                progressed += 1
+                sol_omission_changed = True
+        if sol_omission_changed:
+            _holistic_save_state(state)
 
         ready: list[dict[str, Any]] = []
         for task_id in state["task_order"]:
@@ -6896,9 +7055,49 @@ def command_execute_orchestration(
                 for task in ready
                 if task["phase"] in {"sol-adjudication", "sol-direct-evidence"}
             ]
+            launch_capacity = _sol_attempt_capacity(
+                state, contract, ready[0]
+            )
+            deferred = ready[launch_capacity:]
+            deferred_omission_changed = False
+            for task in deferred:
+                execution = state["execution"][task["task_id"]]
+                if _sol_validation_error_count(execution):
+                    _omit_sol_task(
+                        state,
+                        task,
+                        reason="sol-retry-capacity",
+                        error=str(
+                            execution["attempts"][-1].get("error")
+                            or "invalid result"
+                        ),
+                    )
+                    progressed += 1
+                    deferred_omission_changed = True
+            ready = ready[:launch_capacity]
+            if deferred_omission_changed:
+                _holistic_save_state(state)
+            if not ready and deferred:
+                fresh = [
+                    task
+                    for task in deferred
+                    if state["execution"][task["task_id"]]["status"] == "pending"
+                ]
+                if fresh:
+                    _holistic_save_state(state)
+                    raise CreditAnalysisError(
+                        "Sol attempt ceiling leaves no first-stage capacity"
+                    )
             concurrency = len(ready)
         else:
             ready = [ready[0]]
+            if phase == "sol-final" and _sol_attempt_capacity(
+                state, contract, ready[0]
+            ) == 0:
+                _holistic_save_state(state)
+                raise CreditAnalysisError(
+                    "Sol attempt ceiling leaves no final result capacity"
+                )
             concurrency = 1
         if task_budget is not None:
             remaining_tasks = task_budget - progressed
@@ -7016,13 +7215,19 @@ def command_execute_orchestration(
                             "error": str(error),
                         }
                     )
-                    can_retry = (
+                    can_retry_luna = (
                         task["phase"] == "luna-discovery"
                         and _diagnosed_luna_retry(error)
                         and len(execution["attempts"]) == 1
                         and state["model_attempts"]["luna"] < luna_attempt_limit
                     )
-                    if not can_retry:
+                    can_retry_sol = (
+                        task["phase"].startswith("sol-")
+                        and _can_retry_sol_validation(
+                            state, contract, task
+                        )
+                    )
+                    if not can_retry_luna and not can_retry_sol:
                         if task["phase"] == "luna-discovery":
                             _omit_luna_task(
                                 state,
@@ -7032,11 +7237,21 @@ def command_execute_orchestration(
                             )
                             progressed += 1
                             continue
+                        if task["phase"] != "sol-final":
+                            _omit_sol_task(
+                                state,
+                                task,
+                                reason="sol-invalid-output",
+                                error=str(error),
+                            )
+                            progressed += 1
+                            continue
                         _holistic_sync_child_lineage(state)
                         _holistic_save_state(state)
                         raise
                     _holistic_sync_child_lineage(state)
                     _holistic_save_state(state)
+                    continue
                 else:
                     _holistic_accept_result(
                         state=state,
@@ -7151,19 +7366,34 @@ def command_execute_orchestration(
                         "error": str(error),
                     }
                 )
-                can_retry = (
+                can_retry_luna = (
                     task["phase"] == "luna-discovery"
                     and _diagnosed_luna_retry(error)
                     and len(execution["attempts"]) == 1
                     and state["model_attempts"]["luna"] < luna_attempt_limit
                 )
-                if can_retry:
+                can_retry_sol = (
+                    task["phase"].startswith("sol-")
+                    and _can_retry_sol_validation(
+                        state, contract, task
+                    )
+                )
+                if can_retry_luna or can_retry_sol:
                     continue
                 if task["phase"] == "luna-discovery":
                     _omit_luna_task(
                         state,
                         task,
                         reason="luna-invalid-output",
+                        error=str(error),
+                    )
+                    progressed += 1
+                    continue
+                if task["phase"] != "sol-final":
+                    _omit_sol_task(
+                        state,
+                        task,
+                        reason="sol-invalid-output",
                         error=str(error),
                     )
                     progressed += 1

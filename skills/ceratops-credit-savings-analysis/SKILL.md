@@ -90,16 +90,20 @@ applies them.
   allowance; if it still fails, report that run part as unreviewed and continue.
   Never truncate a result, detach calls from their run context, or create
   per-surface Luna calls.
-- Measure accepted Luna outputs before Sol planning. Route every retained Luna
+- Measure accepted Luna outputs before Sol planning. A temporary-control review
+  governs only its described owner/control subclaim and does not veto an
+  independent finding carried by the same candidate. Route every retained Luna
   candidate exactly once among up to six parallel Sol reviewers. Optionally run
-  one direct-evidence Sol when deterministic signals select an important run for
-  independent inspection. After the parallel reviewers finish, run one dependent
-  final Sol to merge their compact judgments, produce the report, and deeply
-  verify the top three deduplicated owner/control findings against exact
-  evidence.
-  Use no more than six Luna-output reviewers, one direct-evidence reviewer, and
-  one final merger: eight Sol calls total. The final Sol does not re-adjudicate
-  every candidate or receive the complete source tree.
+  one direct-evidence Sol only when it leaves capacity for the final merger and
+  one corrective Sol retry. After the parallel reviewers finish, run one
+  dependent final Sol to merge their compact judgments, produce the report, and
+  deeply verify the top three deduplicated owner/control findings against exact
+  evidence. Each rejected Sol task receives one automatic corrective retry when
+  the eight-attempt ceiling permits. After a non-final task fails validation
+  twice, retain its exact unreviewed candidate, call, and byte inventory and
+  continue to the final merger. Use no more than eight Sol calls total, counting
+  every attempt. The final Sol does not re-adjudicate every candidate or receive
+  the complete source tree.
 - Restore canonical identifiers and derive nonsemantic summaries, ordering,
   surfaces, workstreams, repeated evidence, and savings arithmetic in code. Sol
   adjudicators merge overlaps and temporary controls, apply recurrence and ROI
