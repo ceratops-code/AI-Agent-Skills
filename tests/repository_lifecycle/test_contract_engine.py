@@ -1514,6 +1514,23 @@ class GHContractStateEngineTests(unittest.TestCase):
                 "pom_metadata_present": True,
             },
         )
+        inherited_gradle_identity = _manifest_facts(
+            {
+                "files": ["build.gradle.kts", "gradle.properties"],
+                "texts": {
+                    "build.gradle.kts": (
+                        'plugins { id("maven-publish") }\n'
+                        'publishing { publications { create<MavenPublication>("maven") {\n'
+                        '  pom { name.set("Demo") }\n'
+                        "} } }\n"
+                    ),
+                    "gradle.properties": "group=com.example\nversion=1.0.0\n",
+                },
+            }
+        )
+        self.assertTrue(
+            inherited_gradle_identity["gradle"]["publication_identity_present"]
+        )
         plugin_only = _manifest_facts(
             {
                 "files": ["build.gradle"],

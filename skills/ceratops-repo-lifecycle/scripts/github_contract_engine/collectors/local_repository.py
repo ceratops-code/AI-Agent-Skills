@@ -177,7 +177,7 @@ def _dependabot_ecosystems(paths: list[str]) -> dict[str, list[str]]:
 
 def _readable_text(path: pathlib.Path) -> bool:
     return (
-        path.name in {"Dockerfile", "Gemfile"}
+        path.name in {"Dockerfile", "Gemfile", "gradle.properties"}
         or path.suffix.lower() in TEXT_SUFFIXES
         or path.name.startswith("README")
     )
@@ -662,11 +662,17 @@ def _manifest_facts(local: dict[str, Any]) -> dict[str, Any]:
         ],
     )
     gradle_text = "\n".join(texts.get(path, "") for path in gradle_build_files)
+    gradle_properties = "\n".join(
+        texts.get(path, "")
+        for path in matching_paths(files, ["gradle.properties", "**/gradle.properties"])
+    )
     gradle_group_present = bool(
         re.search(r"(?m)^\s*(?:group|groupId)\s*(?:=|\.set\s*\()", gradle_text)
+        or re.search(r"(?m)^\s*group\s*=\s*\S+", gradle_properties)
     )
     gradle_version_present = bool(
         re.search(r"(?m)^\s*version\s*(?:=|\.set\s*\()", gradle_text)
+        or re.search(r"(?m)^\s*version\s*=\s*\S+", gradle_properties)
     )
     # MavenPublication inherits artifactId from the project name, while group and
     # version remain unusable defaults unless the build declares them.

@@ -260,7 +260,12 @@ def pack_report_groups(
                 return None
             omitted.append(group)
             continue
-        selected = min(choices, key=lambda index: (loads[index], index))
+        empty = [index for index in choices if loads[index] == 0]
+        selected = (
+            min(empty)
+            if empty
+            else max(choices, key=lambda index: (loads[index], -index))
+        )
         bins[selected].append(group)
         loads[selected] += size
     for group_bin in bins:

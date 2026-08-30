@@ -4087,7 +4087,7 @@ def _deep_review_findings(
 
 def _holistic_sol_input(
     *,
-    state: Mapping[str, Any],
+    state: dict[str, Any],
     evidence: Mapping[str, Any],
     contract: Mapping[str, Any],
     compact: Mapping[str, Any],
@@ -4145,12 +4145,14 @@ def _holistic_sol_input(
             if not isinstance(result_record, Mapping):
                 raise CreditAnalysisError("final Sol requires every routed adjudication")
             adjudication_results.append(
-                _namespaced_adjudication_result(
-                    _read_json(
-                        pathlib.Path(str(result_record["path"])),
-                        "Sol shard result",
-                    ),
-                    str(shard_task["task_id"]),
+                _compact_final_adjudication_result(
+                    _namespaced_adjudication_result(
+                        _read_json(
+                            pathlib.Path(str(result_record["path"])),
+                            "Sol shard result",
+                        ),
+                        str(shard_task["task_id"]),
+                    )
                 )
             )
         audit_execution = state["execution"]["sol.direct-evidence"]
@@ -4202,18 +4204,22 @@ def _holistic_sol_input(
             candidates.append({**candidate, "source_task_id": result["task_id"]})
     candidate_evidence: list[dict[str, Any]] = []
     high_signal: list[dict[str, Any]] = []
-    inventory = [
-        [
-            record["candidate_id"],
-            record["call_id"],
-            record["workstream"],
-            record["surface_lenses"],
-            record["high_signal_reasons"],
-            record["volume"],
-            record["evidence_refs"][0],
+    inventory = (
+        _compact_final_call_inventory(compact["records"])
+        if task["phase"] == "sol-final"
+        else [
+            [
+                record["candidate_id"],
+                record["call_id"],
+                record["workstream"],
+                record["surface_lenses"],
+                record["high_signal_reasons"],
+                record["volume"],
+                record["evidence_refs"][0],
+            ]
+            for record in compact["records"]
         ]
-        for record in compact["records"]
-    ]
+    )
     canonical_payload = {
         "schema": HOLISTIC_TASK_SCHEMA,
         "analysis_id": state["analysis_id"],
@@ -4262,7 +4268,7 @@ def _holistic_sol_input(
         "maximum_unassessed_fraction": contract["coverage"]["maximum_unassessed_fraction"],
         "prior_adjudication_results": adjudication_results,
         "audit_result": audit_result,
-        "deep_review_evidence": deep_review_evidence,
+        "deep_review_evidence": [],
         "final_contract": {
             "preserve_prior_candidate_decisions": task["phase"] == "sol-final",
             "deep_verify_only_supplied_top_findings": task["phase"] == "sol-final",
@@ -4276,8 +4282,29 @@ def _holistic_sol_input(
         compact=compact,
     )
     canonical_to_alias, _ = _holistic_alias_lookups(aliases)
-    payload = _holistic_alias_value(canonical_payload, canonical_to_alias)
     budget_bytes = int(state["model_specs"]["sol"]["evidence_byte_budget"])
+    if task["phase"] == "sol-final":
+        selected_evidence, capacity_omissions = _fit_final_supplemental_evidence(
+            base_payload=canonical_payload,
+            evidence_groups=deep_review_evidence,
+            byte_budget=budget_bytes,
+            transform=lambda value: _holistic_alias_value(value, canonical_to_alias),
+        )
+        canonical_payload = {
+            **canonical_payload,
+            "deep_review_evidence": selected_evidence,
+        }
+        state["omissions"] = [
+            omission
+            for omission in state["omissions"]
+            if not (
+                isinstance(omission, Mapping)
+                and omission.get("stage") == "sol-final"
+                and omission.get("reason") == "deep-review-capacity"
+            )
+        ]
+        state["omissions"].extend(capacity_omissions)
+    payload = _holistic_alias_value(canonical_payload, canonical_to_alias)
     if _json_bytes(payload) > budget_bytes:
         raise CreditAnalysisError(
             f"{task['phase']} packet exceeds the dynamic byte budget"
@@ -4352,7 +4379,7 @@ def _holistic_audit_input(
 
 
 def _holistic_prepare_task(
-    state: Mapping[str, Any],
+    state: dict[str, Any],
     evidence: Mapping[str, Any],
     contract: Mapping[str, Any],
     compact: Mapping[str, Any],
@@ -6089,6 +6116,19 @@ def _holistic_final(
     luna_task_by_id = {
         task["task_id"]: task for task in state["manifest"]["luna_tasks"]
     }
+    final_input_path = pathlib.Path(
+        str(state["manifest"]["sol_tasks"][-1]["artifacts"]["input"])
+    )
+    deep_review_finding_ids = (
+        [
+            str(item["finding_id"])
+            for item in _read_json(final_input_path, "final Sol input")[
+                "deep_review_evidence"
+            ]
+        ]
+        if final_input_path.is_file() and not final_input_path.is_symlink()
+        else []
+    )
 
     def accepted_output_bytes(task_id: str) -> int:
         result = state["execution"][task_id]["result"]
@@ -6239,10 +6279,7 @@ def _holistic_final(
         "surface_summaries": sol["surface_summaries"],
         "candidate_decisions": sol["candidate_decisions"],
         "confirmed_findings": findings,
-        "deep_review_finding_ids": [
-            str(finding["id"])
-            for finding in _deep_review_findings(findings, compact)
-        ],
+        "deep_review_finding_ids": deep_review_finding_ids,
         "plausible_risks": sol["plausible_risks"],
         "temporary_control_reviews": sol["temporary_control_reviews"],
         "temporary_control_merges": sol["temporary_control_merges"],

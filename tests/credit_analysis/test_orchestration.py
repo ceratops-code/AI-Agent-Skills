@@ -63,9 +63,21 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
     final_call = next(call for call in runner.calls if call["phase"] == "sol-final")
     assert final_call["input_payload"]["canonical_state"] == []
     assert final_call["input_payload"]["surface_contracts"] == {}
+    assert all(
+        "surface_summaries" not in result and "analysis_summary" not in result
+        for result in final_call["input_payload"]["prior_adjudication_results"]
+    )
+    assert all(
+        row[3:6] == [[], [], {}]
+        for row in final_call["input_payload"]["call_inventory"]["rows"]
+    )
     final = json.loads(
         pathlib.Path(completed["final_result_path"]).read_text(encoding="utf-8")
     )
+    assert final["deep_review_finding_ids"] == [
+        item["finding_id"]
+        for item in final_call["input_payload"]["deep_review_evidence"]
+    ]
     completed_state = json.loads(
         pathlib.Path(plan["state_path"]).read_text(encoding="utf-8")
     )
@@ -267,6 +279,62 @@ def test_luna_admission_caps_at_seventy_attempts_and_fifteen_workers(
         },
     ]
     assert selector(priority_tasks, maximum_attempts=2) == {"b.1", "c.1"}
+    packer = workflow.command_plan_orchestration.__globals__["pack_report_groups"]
+    packed = packer(
+        [
+            {
+                "routing_bytes": size,
+                "run_ordinal": ordinal,
+                "run_window_ordinal": 1,
+            }
+            for ordinal, size in enumerate((9, 9, 9, 9, 7, 6, 3, 2, 2), start=1)
+        ],
+        bin_count=6,
+        capacity_bytes=10,
+        allow_omissions=True,
+    )
+    assert packed is not None
+    bins, omissions = packed
+    assert omissions == []
+    assert sorted(
+        sum(group["routing_bytes"] for group in group_bin)
+        for group_bin in bins
+    ) == [9, 9, 9, 9, 10, 10]
+    fitter = workflow.command_plan_orchestration.__globals__[
+        "_fit_final_supplemental_evidence"
+    ]
+    selected_evidence, capacity_omissions = fitter(
+        base_payload={"deep_review_evidence": [], "fixed": "value"},
+        evidence_groups=[
+            {
+                "finding_id": "f1",
+                "producer_owner": "one",
+                "proposed_durable_control": "control-one",
+                "original_evidence": [
+                    {"call_id": "too-large", "text": "x" * 1_000},
+                    {"call_id": "small-one", "text": "one"},
+                ],
+            },
+            {
+                "finding_id": "f2",
+                "producer_owner": "two",
+                "proposed_durable_control": "control-two",
+                "original_evidence": [
+                    {"call_id": "small-two", "text": "two"},
+                ],
+            },
+        ],
+        byte_budget=500,
+        transform=lambda value: value,
+    )
+    assert [
+        record["call_id"]
+        for group in selected_evidence
+        for record in group["original_evidence"]
+    ] == ["small-one", "small-two"]
+    assert [
+        omission["omitted_window_task_ids"] for omission in capacity_omissions
+    ] == [["too-large"]]
     completed = workflow.command_execute_orchestration(
         pathlib.Path(plan["state_path"]),
         runner=runner,
