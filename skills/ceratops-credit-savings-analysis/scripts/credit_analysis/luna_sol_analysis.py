@@ -4222,10 +4222,14 @@ def _holistic_sol_input(
         "surface_order": state["manifest"]["surface_order"],
         "execution_rule_context": _execution_rule_handoff(state, task),
         "analysis_policy": compact["analysis_policy"],
-        "surface_contracts": {
-            surface: _surface_reference_text(surface, contract)
-            for surface in state["manifest"]["surface_order"]
-        },
+        "surface_contracts": (
+            {
+                surface: _surface_reference_text(surface, contract)
+                for surface in state["manifest"]["surface_order"]
+            }
+            if task["phase"] == "sol-adjudication"
+            else {}
+        ),
         "luna_results": (
             luna_results if task["phase"] == "sol-adjudication" else []
         ),
