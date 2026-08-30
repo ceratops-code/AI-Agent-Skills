@@ -13,8 +13,8 @@ domain audits owned by other lifecycle actions.
   --projects-root <projects-root> --evidence-output <task-temp-file>` before
   deep-reading.
 - (D) With `--evidence-output`, the helper atomically writes the complete
-  `global-governance-consistency-audit/snapshot.v3` evidence and emits only
-  `global-governance-consistency-audit/decision.v1` with the evidence path,
+  `global-governance-consistency-audit/snapshot.v4` evidence and emits only
+  `global-governance-consistency-audit/decision.v2` with the evidence path,
   stable state fingerprint, and decision-cluster counts; nonzero execution,
   unreadable JSON, or unreadable evidence blocks the audit.
 - (D) `--automation-root` is installed runtime; automation source defaults to
@@ -23,27 +23,26 @@ domain audits owned by other lifecycle actions.
 - Reuse the evidence file for later audit decisions until an inventoried
   surface changes; query it instead of rerunning the helper, refresh only after
   such a change, and remove the task-temporary evidence before closing.
-- (D) Project AGENTS discovery scans each primary Git checkout on `main` that
-  is the selected projects root or one of its direct children. Include every
-  non-ignored `AGENTS.md` in that checkout; never read or report AGENTS sources
-  from linked worktrees, alternate branches, `tmp`, or `worktrees`.
+- (D) Project AGENTS discovery considers only the selected projects root or one
+  of its direct children when it has a `.git` directory and its current branch
+  is `main`; traverse only that checkout, excluding ignored paths, nested Git
+  repositories, `tmp`, and `worktrees`.
+- (D) The helper must not enumerate Git worktrees or include worktree metadata
+  in evidence or decisions.
 - Use helper output as cheap-pass evidence for automation metadata, AGENTS
-  classification, Git/worktree state, automation ignore coverage, directly
-  referenced paths, structured rule-graph facts, and overlong `(D)` rule
-  candidates.
+  classification, Git state, automation ignore coverage, directly referenced
+  paths, structured rule-graph facts, and overlong `(D)` rule candidates.
 
 ### Scope
 
 - Global `$CODEX_HOME/AGENTS.md` and every non-ignored root or nested
-  `AGENTS.md` in each selected primary Git checkout on `main`, excluding linked
-  worktrees and alternate branches, evaluated through the complete applicable
-  global-to-local instruction stack.
+  `AGENTS.md` in each selected Git checkout on `main`, evaluated through the
+  complete applicable global-to-local instruction stack.
 - Installed `$CODEX_HOME/automations/*/automation.toml`, source automation
   definitions and repository controls under `<projects-root>/Codex-Automations`,
   and helpers directly referenced by an in-scope control file.
 - Cross-scope ownership, instruction interaction, prompt/helper alignment,
-  automation metadata, worktree policy, verification scope, and recurring
-  credit-cost controls.
+  automation metadata, verification scope, and recurring credit-cost controls.
 
 ### Delegated Owners
 
@@ -110,9 +109,9 @@ domain audits owned by other lifecycle actions.
 
 - Run the deterministic helper once and inventory files, schedules, model and
   source/runtime effort-policy drift, workspaces, prompt names, helper
-  references, memory/alert contracts, Git/worktree state, repeated text, rule
-  IDs, metadata, statuses, histories, relation edges and cycles, stack
-  interaction, and `(D)` rule-brevity candidates.
+  references, memory/alert contracts, Git state, repeated text, rule IDs,
+  metadata, statuses, histories, relation edges and cycles, stack interaction,
+  and `(D)` rule-brevity candidates.
 - If history contains invalid fields, route the exact repair through
   `propose-rules-update` before any other audit work. Apply it when authorized;
   otherwise stop and report only the repair blocker.
@@ -146,9 +145,8 @@ domain audits owned by other lifecycle actions.
   overlapping schedules or responsibilities, avoidable inbox items, memory and
   alert contracts, noisy output, broad refreshes, unnecessary live checks, and
   weak evidence or stopping budgets.
-- Check worktree-root placement, automation ignore coverage, duplicated
-  worktree rules, and task work merged into `release/local` without
-  explicit staging or preview intent.
+- Check automation ignore coverage and task work merged into `release/local`
+  without explicit staging or preview intent.
 - Check claim-scope and verification-scope drift, including artifact-specific
   checks or end-to-end validation required beyond changed artifacts and claims.
 - Review automation prompts against current GPT guidance for outcome-first

@@ -11,118 +11,136 @@ from tests.credit_analysis.paths import (
     CREDIT_ANALYSIS_CONTRACT,
 )
 from tests.credit_analysis.sessions import (
-    _attach_prior_analysis_state,
+    _attach_persistent_descendants,
     credit_analysis_request,
     finding_record,
+    indexed_credit_analysis_session,
     surface_result_record,
     write_json_file,
 )
 from tests.credit_analysis.workflow import run_credit_analysis_workflow
 
 
-def test_credit_analysis_lineage_allows_later_meta_analysis_without_recursion(
+def test_credit_analysis_lineage_discovers_recursive_persistent_descendants(
     tmp_path: pathlib.Path,
+    monkeypatch,
 ) -> None:
     workflow = load_credit_analysis_workflow_module()
-    a_root = tmp_path / "a"
-    b_root = tmp_path / "b"
-    a_root.mkdir()
-    b_root.mkdir()
-    request_a, _, _ = credit_analysis_request(
-        a_root,
+    root = tmp_path / "root"
+    root.mkdir()
+    codex_home = tmp_path / "codex-home"
+    child_thread_id = "019a0000-0000-7000-8000-000000000001"
+    native_thread_id = "019a0000-0000-7000-8000-000000000002"
+    grandchild_thread_id = "019a0000-0000-7000-8000-000000000003"
+    unavailable_thread_id = "019a0000-0000-7000-8000-000000000004"
+    child_session = indexed_credit_analysis_session(
+        codex_home,
+        thread_id=child_thread_id,
+        thread_name="persistent child",
+        updated_at="2026-08-01T00:00:01Z",
+        project_name="persistent-child",
+    )
+    indexed_credit_analysis_session(
+        codex_home,
+        thread_id=native_thread_id,
+        thread_name="native persistent child",
+        updated_at="2026-08-01T00:00:02Z",
+        project_name="native-persistent-child",
+    )
+    indexed_credit_analysis_session(
+        codex_home,
+        thread_id=grandchild_thread_id,
+        thread_name="persistent grandchild",
+        updated_at="2026-08-01T00:00:03Z",
+        project_name="persistent-grandchild",
+    )
+    _attach_persistent_descendants(
+        child_session,
+        child_session_ids=[grandchild_thread_id],
+    )
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    request, source_session, _ = credit_analysis_request(
+        root,
         extra_completed_turns=1,
         extra_calls_per_turn=2,
     )
-    runner_a = FakeCreditModelRunner(temporary_controls=False)
-    plan_a = workflow.command_plan_orchestration(
-        request_a,
-        available_models=runner_a.available_models,
+    _attach_persistent_descendants(
+        source_session,
+        child_session_ids=[
+            child_thread_id,
+            child_thread_id,
+            unavailable_thread_id,
+        ],
+        native_thread_id=native_thread_id,
     )
-    complete_a = workflow.command_execute_orchestration(
-        pathlib.Path(plan_a["state_path"]),
-        runner=runner_a,
-        available_models=runner_a.available_models,
+    runner = FakeCreditModelRunner(temporary_controls=False)
+    plan = workflow.command_plan_orchestration(
+        request,
+        available_models=runner.available_models,
     )
-    assert complete_a["complete"] is True
-
-    request_b, session_b, _ = credit_analysis_request(
-        b_root,
-        extra_completed_turns=1,
-        extra_calls_per_turn=2,
+    evidence = json.loads(
+        pathlib.Path(plan["evidence_path"]).read_text(encoding="utf-8")
     )
-    prior_state_path = pathlib.Path(plan_a["state_path"])
-    _attach_prior_analysis_state(session_b, prior_state_path)
-    raw_rows = [
-        json.loads(line)
-        for line in session_b.read_text(encoding="utf-8").splitlines()
-    ]
-    raw_state_paths = workflow.command_plan_orchestration.__globals__[
-        "_holistic_raw_state_paths_by_call"
-    ](raw_rows)
-    assert raw_state_paths["read-1"] == [prior_state_path]
-    assert raw_state_paths["read-2"] == [prior_state_path]
-    runner_b = FakeCreditModelRunner(temporary_controls=False)
-    plan_b = workflow.command_plan_orchestration(
-        request_b,
-        available_models=runner_b.available_models,
-    )
-    evidence_b = json.loads(
-        pathlib.Path(plan_b["evidence_path"]).read_text(encoding="utf-8")
-    )
-    assert evidence_b["analysis_lineage"]["included_prior_analysis_ids"] == [
-        plan_a["analysis_id"]
-    ]
-    assert evidence_b["analysis_lineage"]["source_selection_uses_prompt_markers"] is False
-    assert evidence_b["analysis_generated_activity"][0]["analysis_id"] == plan_a[
-        "analysis_id"
-    ]
+    lineage = evidence["analysis_lineage"]
+    assert lineage["lineage_source"] == "structured-tool-results"
+    assert lineage["source_selection_uses_prompt_markers"] is False
+    assert lineage["included_session_reads"] == 4
+    included = {
+        item["session_id"]: item
+        for item in lineage["included_descendant_sessions"]
+    }
+    assert set(included) == {
+        child_thread_id,
+        native_thread_id,
+        grandchild_thread_id,
+    }
+    assert included[child_thread_id]["lineage_depth"] == 1
+    assert included[child_thread_id]["discovery_kind"] == "child-session-ids"
+    assert included[native_thread_id]["lineage_depth"] == 1
+    assert included[native_thread_id]["discovery_kind"] == "native-thread-tool"
+    assert included[grandchild_thread_id]["lineage_depth"] == 2
+    assert included[grandchild_thread_id]["parent_session_id"] == child_thread_id
+    unresolved = lineage["unresolved_descendant_sessions"]
     assert any(
-        attempt["prompt"] is not None
-        and attempt["event_summary"]["usage"] is not None
-        for task in evidence_b["analysis_generated_activity"][0]["tasks"]
-        for attempt in task["attempts"]
+        item["session_id"] == unavailable_thread_id
+        and item["reason"] == "session-unavailable"
+        for item in unresolved
     )
-    manifest_b = json.loads(
-        pathlib.Path(plan_b["manifest_path"]).read_text(encoding="utf-8")
+    assert "analysis_generated_activity" not in evidence
+    descendant_runs = [
+        run for run in evidence["runs"] if str(run["turn_id"]).startswith("thread.")
+    ]
+    assert len(descendant_runs) == 9
+    legacy_analysis_key = "source" "_analysis_id"
+    assert all(legacy_analysis_key not in run for run in descendant_runs)
+    assert {run["source_session_id"] for run in descendant_runs} == set(included)
+    manifest = json.loads(
+        pathlib.Path(plan["manifest_path"]).read_text(encoding="utf-8")
     )
-    compact_b = json.loads(
-        pathlib.Path(manifest_b["compact_evidence"]["path"]).read_text(
+    compact = json.loads(
+        pathlib.Path(manifest["compact_evidence"]["path"]).read_text(
             encoding="utf-8"
         )
     )
-    analysis_records = [
-        record
-        for record in compact_b["records"]
-        if record["workstream"] == "analysis-overhead"
-    ]
-    assert len(analysis_records) >= 2
-    assert all(
-        record["candidate_id"] in manifest_b["candidate_ids"]
-        for record in analysis_records
-    )
+    assert {record["workstream"] for record in compact["records"]} == {"producer"}
 
-    complete_b = workflow.command_execute_orchestration(
-        pathlib.Path(plan_b["state_path"]),
-        runner=runner_b,
-        available_models=runner_b.available_models,
+    complete = workflow.command_execute_orchestration(
+        pathlib.Path(plan["state_path"]),
+        runner=runner,
+        available_models=runner.available_models,
     )
-    final_b = json.loads(
-        pathlib.Path(complete_b["final_result_path"]).read_text(encoding="utf-8")
+    final = json.loads(
+        pathlib.Path(complete["final_result_path"]).read_text(encoding="utf-8")
     )
-    assert final_b["lineage"]["included_prior_analysis_ids"] == [
-        plan_a["analysis_id"]
-    ]
     assert all(
-        child["analysis_id"] == plan_b["analysis_id"]
-        for child in final_b["lineage"]["created_child_tasks"]
+        child["analysis_id"] == plan["analysis_id"]
+        for child in final["lineage"]["created_child_tasks"]
     )
-    assert final_b["lineage"]["excluded_own_descendant_task_ids"] == [
-        child["task_id"] for child in final_b["lineage"]["created_child_tasks"]
+    assert final["lineage"]["excluded_own_descendant_task_ids"] == [
+        child["task_id"] for child in final["lineage"]["created_child_tasks"]
     ]
-    analysis_totals = final_b["workstream_classification_totals"][
-        "analysis-overhead"
-    ]
-    assert sum(analysis_totals.values()) == len(analysis_records)
+    analysis_totals = final["workstream_classification_totals"]["analysis-overhead"]
+    assert sum(analysis_totals.values()) == 0
 
 
 def test_credit_analysis_workflow_standalone_zero_findings_is_isolated(

@@ -52,7 +52,7 @@ def test_credit_analysis_workflow_each_surface_is_independently_callable(
         pathlib.Path(plan["manifest_path"]).read_text(encoding="utf-8")
     )
     assert manifest["surface_order"] == [action]
-    assert plan["projected_semantic_calls"] == len(manifest["luna_tasks"]) + 5
+    assert plan["projected_semantic_calls"] == len(manifest["luna_tasks"]) + 7
     complete = workflow.command_execute_orchestration(
         pathlib.Path(plan["state_path"]),
         runner=runner,
@@ -61,8 +61,8 @@ def test_credit_analysis_workflow_each_surface_is_independently_callable(
     assert complete["complete"] is True
     phases = [call["phase"] for call in runner.calls]
     assert phases.count("luna-discovery") == len(manifest["luna_tasks"])
-    assert phases.count("sol-adjudication") == 3
-    assert phases.count("sol-audit") == 1
+    assert phases.count("sol-adjudication") == len(manifest["luna_tasks"])
+    assert phases.count("sol-direct-evidence") == 1
     assert phases.count("sol-final") == 1
     assert "supplied fixed lenses" in next(
         call["prompt"] for call in runner.calls if call["phase"] == "luna-discovery"
@@ -408,7 +408,7 @@ def test_credit_analysis_batch_selects_recent_threads_and_projects_once(
                 "ceratops-credit-analysis-orchestration-state.v5"
             )
             assert child_state["manifest"]["projected_semantic_calls"] == (
-                len(child_state["manifest"]["luna_tasks"]) + 5
+                len(child_state["manifest"]["luna_tasks"]) + 7
             )
             assert child_state["task_order"] == [
                 *[

@@ -61,7 +61,7 @@ class FakeCreditModelRunner:
             "output_tokens": 360,
             "reasoning_output_tokens": 1_100,
         },
-        "sol-audit": {
+        "sol-direct-evidence": {
             "input_tokens": 600,
             "cached_input_tokens": 0,
             "output_tokens": 40,
@@ -751,7 +751,7 @@ class FakeCreditModelRunner:
         )
         if task["phase"] == "luna-discovery":
             return self._luna(task, input_payload, input_sha256)
-        if task["phase"] == "sol-audit":
+        if task["phase"] == "sol-direct-evidence":
             return self._audit(task, input_payload, input_sha256)
         if task["phase"] == "sol-final":
             return self._final(input_payload)

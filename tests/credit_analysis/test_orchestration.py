@@ -14,16 +14,7 @@ from tests.credit_analysis.models import (
     holistic_model_catalog,
     load_credit_analysis_workflow_module,
 )
-from tests.credit_analysis.paths import (
-    CREDIT_ANALYSIS_CONTRACT,
-)
-from tests.credit_analysis.sessions import (
-    credit_analysis_request,
-    finding_record,
-    surface_result_record,
-    write_json_file,
-)
-from tests.credit_analysis.workflow import run_credit_analysis_workflow
+from tests.credit_analysis.sessions import credit_analysis_request
 
 
 def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
@@ -44,7 +35,7 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
         - state["model_specs"]["luna"]["evidence_byte_budget"]
         == state["model_specs"]["luna"]["visible_task_reserve_bytes"]
     )
-    assert len(manifest["sol_tasks"]) == 6
+    assert len(manifest["sol_tasks"]) == 8
     assert state["execution_context"]["instruction_chains"]
     chains_by_cwd = {
         chain["cwd"]: chain
@@ -67,19 +58,32 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
     phases = [call["phase"] for call in runner.calls]
     assert completed["complete"] is True
     assert phases.count("sol-adjudication") == 3
-    assert phases.count("sol-audit") == 1
+    assert phases.count("sol-direct-evidence") == 1
     assert phases.count("sol-final") == 1
     final_call = next(call for call in runner.calls if call["phase"] == "sol-final")
     assert final_call["input_payload"]["canonical_state"] == []
+    assert final_call["input_payload"]["surface_contracts"] == {}
+    assert all(
+        "surface_summaries" not in result and "analysis_summary" not in result
+        for result in final_call["input_payload"]["prior_adjudication_results"]
+    )
+    assert all(
+        row[3:6] == [[], [], {}]
+        for row in final_call["input_payload"]["call_inventory"]["rows"]
+    )
     final = json.loads(
         pathlib.Path(completed["final_result_path"]).read_text(encoding="utf-8")
     )
+    assert final["deep_review_finding_ids"] == [
+        item["finding_id"]
+        for item in final_call["input_payload"]["deep_review_evidence"]
+    ]
     completed_state = json.loads(
         pathlib.Path(plan["state_path"]).read_text(encoding="utf-8")
     )
     prior_findings = [
         finding
-        for task in manifest["sol_tasks"][:4]
+        for task in manifest["sol_tasks"][:6]
         if completed_state["execution"][task["task_id"]]["status"] == "complete"
         for finding in json.loads(
             pathlib.Path(
@@ -111,7 +115,7 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
     assert final["coverage"]["analyzed_runs"] == final["coverage"]["eligible_runs"]
     assert final["omissions"] == []
     report = pathlib.Path(completed["report_path"]).read_text(encoding="utf-8")
-    assert "| Run | Window | Records | Input bytes |" in report
+    assert "| Run | Part | Records | Input bytes |" in report
     assert "| Completed run | Total model calls |" in report
     assert "| Proposed control | Calls saved per affected run |" in report
 
@@ -148,7 +152,6 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
         if omission.get("reason") == "sol-capacity"
     ]
     assert capacity_completed["complete"] is True
-    assert sol_capacity_omissions
     assert sol_capacity_omissions == [
         omission
         for omission in capacity_final["omissions"]
@@ -181,12 +184,12 @@ def test_removed_bounded_action_is_rejected(tmp_path: pathlib.Path) -> None:
         )
 
 
-def test_luna_admission_caps_at_fifty_attempts_and_ten_workers(
+def test_luna_admission_caps_at_seventy_attempts_and_fifteen_workers(
     tmp_path: pathlib.Path,
 ) -> None:
     workflow = load_credit_analysis_workflow_module()
     request, _, _ = credit_analysis_request(
-        tmp_path, extra_completed_turns=52, extra_calls_per_turn=1
+        tmp_path, extra_completed_turns=72, extra_calls_per_turn=1
     )
 
     class ConcurrentRunner(FakeCreditModelRunner):
@@ -195,6 +198,8 @@ def test_luna_admission_caps_at_fifty_attempts_and_ten_workers(
             self.lock = threading.Lock()
             self.active = 0
             self.maximum_active = 0
+            self.started = 0
+            self.first_wave = threading.Barrier(15)
 
         def _luna(
             self,
@@ -205,7 +210,11 @@ def test_luna_admission_caps_at_fifty_attempts_and_ten_workers(
             with self.lock:
                 self.active += 1
                 self.maximum_active = max(self.maximum_active, self.active)
+                self.started += 1
+                wait_for_first_wave = self.started <= 15
             try:
+                if wait_for_first_wave:
+                    self.first_wave.wait(timeout=2)
                 time.sleep(0.01)
                 return super()._luna(task, packet, digest)
             finally:
@@ -216,13 +225,122 @@ def test_luna_admission_caps_at_fifty_attempts_and_ten_workers(
     plan = workflow.command_plan_orchestration(
         request, available_models=runner.available_models
     )
+    planned_state = json.loads(
+        pathlib.Path(plan["state_path"]).read_text(encoding="utf-8")
+    )
+    admitted = [
+        task
+        for task in planned_state["manifest"]["luna_tasks"]
+        if planned_state["execution"][task["task_id"]]["status"] == "pending"
+    ]
+    output_allocator = workflow.command_plan_orchestration.__globals__[
+        "luna_output_allowance"
+    ]
+    assert {task["output_byte_limit"] for task in admitted} == {
+        output_allocator(
+            admitted_tasks=70,
+            sol_reviewer_capacity_bytes=max(
+                16_000,
+                planned_state["model_specs"]["sol"]["evidence_byte_budget"]
+                - 64_000,
+            ),
+            maximum_reviewers=6,
+        )
+    }
+    selector = workflow.command_plan_orchestration.__globals__["select_luna_tasks"]
+    priority_tasks = [
+        {
+            "task_id": "a.1",
+            "turn_id": "a",
+            "run_window_ordinal": 1,
+            "input_bytes": 100,
+            "evidence_bytes": 100,
+            "capacity_omitted": False,
+        },
+        *[
+            {
+                "task_id": f"b.{ordinal}",
+                "turn_id": "b",
+                "run_window_ordinal": ordinal,
+                "input_bytes": 1_000,
+                "evidence_bytes": 1_000,
+                "capacity_omitted": False,
+            }
+            for ordinal in range(1, 4)
+        ],
+        {
+            "task_id": "c.1",
+            "turn_id": "c",
+            "run_window_ordinal": 1,
+            "input_bytes": 200,
+            "evidence_bytes": 200,
+            "capacity_omitted": False,
+        },
+    ]
+    assert selector(priority_tasks, maximum_attempts=2) == {"b.1", "c.1"}
+    packer = workflow.command_plan_orchestration.__globals__["pack_report_groups"]
+    packed = packer(
+        [
+            {
+                "routing_bytes": size,
+                "run_ordinal": ordinal,
+                "run_window_ordinal": 1,
+            }
+            for ordinal, size in enumerate((9, 9, 9, 9, 7, 6, 3, 2, 2), start=1)
+        ],
+        bin_count=6,
+        capacity_bytes=10,
+        allow_omissions=True,
+    )
+    assert packed is not None
+    bins, omissions = packed
+    assert omissions == []
+    assert sorted(
+        sum(group["routing_bytes"] for group in group_bin)
+        for group_bin in bins
+    ) == [9, 9, 9, 9, 10, 10]
+    fitter = workflow.command_plan_orchestration.__globals__[
+        "_fit_final_supplemental_evidence"
+    ]
+    selected_evidence, capacity_omissions = fitter(
+        base_payload={"deep_review_evidence": [], "fixed": "value"},
+        evidence_groups=[
+            {
+                "finding_id": "f1",
+                "producer_owner": "one",
+                "proposed_durable_control": "control-one",
+                "original_evidence": [
+                    {"call_id": "too-large", "text": "x" * 1_000},
+                    {"call_id": "small-one", "text": "one"},
+                ],
+            },
+            {
+                "finding_id": "f2",
+                "producer_owner": "two",
+                "proposed_durable_control": "control-two",
+                "original_evidence": [
+                    {"call_id": "small-two", "text": "two"},
+                ],
+            },
+        ],
+        byte_budget=500,
+        transform=lambda value: value,
+    )
+    assert [
+        record["call_id"]
+        for group in selected_evidence
+        for record in group["original_evidence"]
+    ] == ["small-one", "small-two"]
+    assert [
+        omission["omitted_window_task_ids"] for omission in capacity_omissions
+    ] == [["too-large"]]
     completed = workflow.command_execute_orchestration(
         pathlib.Path(plan["state_path"]),
         runner=runner,
         available_models=runner.available_models,
     )
-    assert completed["actual_luna_calls"] == 50
-    assert runner.maximum_active == 10
+    assert completed["actual_luna_calls"] == 70
+    assert runner.maximum_active == 15
     final = json.loads(
         pathlib.Path(completed["final_result_path"]).read_text(encoding="utf-8")
     )
@@ -232,8 +350,8 @@ def test_luna_admission_caps_at_fifty_attempts_and_ten_workers(
     ]
     assert len(capped) == 5
     assert all(item["candidate_ids"] for item in capped)
-    assert final["coverage"]["analyzed_runs"] == 50
-    assert final["coverage"]["eligible_runs"] == 55
+    assert final["coverage"]["analyzed_runs"] == 70
+    assert final["coverage"]["eligible_runs"] == 75
 
 
 def test_luna_schema_retry_is_single_and_omission_is_exact(
@@ -363,9 +481,10 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     assert plan["mode"] == "full-analysis"
     assert plan["analysis_scope_label"] == "full all-run analysis"
     assert plan["projected_luna_calls"] == 6
-    assert plan["projected_sol_calls"] == 5
-    assert plan["projected_semantic_calls"] == 11
-    assert plan["shared_candidate_count"] > 8
+    assert plan["projected_sol_calls"] == 7
+    assert plan["maximum_sol_calls"] == 8
+    assert plan["projected_semantic_calls"] == 13
+    assert plan["candidate_count"] > 8
     assert len(json.dumps(plan)) < 20_000
 
     state_path = pathlib.Path(plan["state_path"])
@@ -560,8 +679,8 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     assert completed["complete"] is True
     assert all(call["reasoning_effort"] == "max" for call in runner.calls)
     assert sum(call["phase"] == "luna-discovery" for call in runner.calls) == 6
-    assert sum(call["phase"] == "sol-adjudication" for call in runner.calls) == 3
-    assert sum(call["phase"] == "sol-audit" for call in runner.calls) == 1
+    assert sum(call["phase"] == "sol-adjudication" for call in runner.calls) == 6
+    assert sum(call["phase"] == "sol-direct-evidence" for call in runner.calls) == 0
     assert sum(call["phase"] == "sol-final" for call in runner.calls) == 1
     assert sum(
         call["input_sha256"] == orphan_digest for call in runner.calls
@@ -609,8 +728,10 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
         and "CERATOPS_CREDIT_ANALYSIS_CHILD" not in call["prompt"]
         for call in runner.calls
     )
-    assert any(
-        "frozen current canonical state" in call["prompt"]
+    assert all(
+        "Do not independently re-read the source evidence" in call["prompt"]
+        and call["input_payload"]["candidate_original_evidence"] == []
+        and call["input_payload"]["canonical_state"] == []
         for call in runner.calls
         if call["phase"] == "sol-adjudication"
     )
@@ -662,7 +783,7 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
         task = tasks_by_id[task_id]
         for attempt in execution["attempts"]:
             assert attempt["execution_cwd"] == task["execution_cwd"]
-            assert attempt["ephemeral"] is (task["phase"] == "luna-discovery")
+            assert attempt["ephemeral"] is False
             assert (
                 attempt["instruction_chain_sha256"]
                 == task["instruction_chain_sha256"]
@@ -710,9 +831,9 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     )
     assert final["model_calls"] == {
         "actual_luna": 6,
-        "actual_sol": 5,
+        "actual_sol": 7,
         "accepted_luna": 6,
-        "accepted_sol": 5,
+        "accepted_sol": 7,
         "bookkeeping": 0,
     }
     assert final["manifest"]["unclassified_calls"] == 0
@@ -726,7 +847,7 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
             "reviewed_no_confirmed_waste",
             "unassessed",
         )
-    ) == final["manifest"]["shared_candidate_count"]
+    ) == final["manifest"]["candidate_count"]
     assert {
         review["disposition"] for review in final["temporary_control_reviews"]
     } == {
@@ -810,6 +931,76 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     )
 
     class OneInvalidSolRunner(FakeCreditModelRunner):
+        def __init__(self) -> None:
+            super().__init__()
+            self.invalidated = False
+
+        def _sol(
+            self,
+            task: Mapping[str, Any],
+            packet: Mapping[str, Any],
+            digest: str,
+        ) -> dict[str, Any]:
+            result = super()._sol(task, packet, digest)
+            if (
+                task["task_id"] == "sol.adjudication.0001"
+                and not self.invalidated
+            ):
+                self.invalidated = True
+                result["candidate_decisions"][0]["reason"] = "x" * 321
+            return result
+
+    failure_runner = OneInvalidSolRunner()
+    failure_state_path = pathlib.Path(failure_plan["state_path"])
+    recovered = workflow.command_execute_orchestration(
+        failure_state_path,
+        runner=failure_runner,
+        available_models=failure_runner.available_models,
+    )
+    assert recovered["complete"] is True
+    failure_state = json.loads(failure_state_path.read_text(encoding="utf-8"))
+    assert [
+        attempt["outcome"]
+        for attempt in failure_state["execution"]["sol.adjudication.0001"][
+            "attempts"
+        ]
+    ] == ["validation-error", "accepted"]
+    assert all(
+        failure_state["execution"][task_id]["status"] == "complete"
+        for task_id in (
+            "sol.adjudication.0001",
+            "sol.adjudication.0002",
+            "sol.adjudication.0003",
+            "sol.adjudication.0004",
+            "sol.adjudication.0005",
+            "sol.adjudication.0006",
+            "sol.final",
+        )
+    )
+    assert failure_state["execution"]["sol.direct-evidence"]["status"] == "skipped"
+    assert failure_state["model_attempts"]["sol"] == 8
+    assert failure_state["omissions"] == []
+    failure_call_count = len(failure_runner.calls)
+    assert workflow.command_execute_orchestration(
+        failure_state_path,
+        runner=failure_runner,
+        available_models=failure_runner.available_models,
+    )["complete"] is True
+    assert len(failure_runner.calls) == failure_call_count
+
+    persistent_root = tmp_path / "persistent-invalid-sol"
+    persistent_root.mkdir()
+    persistent_request, _, _ = credit_analysis_request(
+        persistent_root,
+        extra_completed_turns=3,
+        extra_calls_per_turn=4,
+    )
+    persistent_plan = workflow.command_plan_orchestration(
+        persistent_request,
+        available_models=holistic_model_catalog(),
+    )
+
+    class PersistentInvalidSolRunner(FakeCreditModelRunner):
         def _sol(
             self,
             task: Mapping[str, Any],
@@ -821,26 +1012,40 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
                 result["candidate_decisions"][0]["reason"] = "x" * 321
             return result
 
-    failure_runner = OneInvalidSolRunner()
-    failure_state_path = pathlib.Path(failure_plan["state_path"])
-    with pytest.raises(
-        workflow.CreditAnalysisError,
-        match="320-character semantic bound",
-    ):
-        workflow.command_execute_orchestration(
-            failure_state_path,
-            runner=failure_runner,
-            available_models=failure_runner.available_models,
-        )
-    failure_state = json.loads(failure_state_path.read_text(encoding="utf-8"))
-    assert failure_state["execution"]["sol.adjudication.0001"]["attempts"][0][
-        "outcome"
-    ] == "validation-error"
-    assert all(
-        failure_state["execution"][task_id]["status"] == "complete"
-        for task_id in (
-            "sol.adjudication.0002",
-            "sol.adjudication.0003",
-            "sol.audit",
+    persistent_runner = PersistentInvalidSolRunner()
+    persistent_state_path = pathlib.Path(persistent_plan["state_path"])
+    persistent_status = workflow.command_execute_orchestration(
+        persistent_state_path,
+        runner=persistent_runner,
+        available_models=persistent_runner.available_models,
+    )
+    assert persistent_status["complete"] is True
+    persistent_state = json.loads(
+        persistent_state_path.read_text(encoding="utf-8")
+    )
+    rejected_execution = persistent_state["execution"]["sol.adjudication.0001"]
+    assert rejected_execution["status"] == "omitted"
+    assert [attempt["outcome"] for attempt in rejected_execution["attempts"]] == [
+        "validation-error",
+        "validation-error",
+    ]
+    invalid_omission = next(
+        omission
+        for omission in persistent_state["omissions"]
+        if omission.get("task_id") == "sol.adjudication.0001"
+    )
+    assert invalid_omission["reason"] == "sol-invalid-output"
+    assert invalid_omission["candidate_ids"]
+    assert invalid_omission["call_ids"]
+    assert invalid_omission["input_bytes"] > 0
+    assert invalid_omission["output_bytes"] > 0
+    assert persistent_state["execution"]["sol.final"]["status"] == "complete"
+    assert persistent_state["model_attempts"]["sol"] == 8
+    persistent_final = json.loads(
+        pathlib.Path(persistent_status["final_result_path"]).read_text(
+            encoding="utf-8"
         )
     )
+    assert persistent_final["coverage"]["analyzed_calls"] < persistent_final[
+        "coverage"
+    ]["eligible_calls"]

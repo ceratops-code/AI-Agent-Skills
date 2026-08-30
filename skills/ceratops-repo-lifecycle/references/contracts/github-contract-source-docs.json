@@ -504,6 +504,13 @@
       "url": "https://central.sonatype.org/publish/publish-portal-api/"
     },
     {
+      "id": "gradle.maven_publish",
+      "scope": [
+        "artifact"
+      ],
+      "url": "https://docs.gradle.org/current/userguide/publishing_maven.html"
+    },
+    {
       "id": "nuget.create_package",
       "scope": [
         "artifact"

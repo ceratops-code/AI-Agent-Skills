@@ -160,7 +160,8 @@ def test_closure_credit_analysis_defaults_to_full_analysis() -> None:
     ]
     assert full.startswith("# Full Analysis Action\n")
     assert "every completed run as one semantic unit" in full
-    assert "Never exceed six." in full
+    assert "six Luna-output reviewers" in full
+    assert "eight Sol calls total" in full
     assert contract["end_to_end_controller_commands"] == [
         "run",
         "plan",

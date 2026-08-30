@@ -44,7 +44,7 @@
     {
       "id": "ND.skill.trigger-fit",
       "applies_when": "Every skill source or metadata review.",
-      "review_required": "Confirm the frontmatter description states what the skill does and when it should trigger, and that interface metadata and the default prompt target the same task class without overtriggering on adjacent work.",
+      "review_required": "Confirm the frontmatter description states what the skill does and when it should trigger; interface metadata and the default prompt target the same task class without overtriggering; and any declared tool dependencies match the workflow without overdeclaring integrations.",
       "evidence_keys": ["skill.SKILL.md", "skill.agents.openai.yaml"]
     },
     {

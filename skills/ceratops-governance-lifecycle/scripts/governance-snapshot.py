@@ -33,7 +33,7 @@ MEDIUM_REASONING_AUTOMATION_IDS = frozenset(
     {"diskfinventorycheck", "pc-cleanup"}
 )
 RESERVED_PROJECT_TREE_NAMES = frozenset({"tmp", "worktrees"})
-D_RULE_RE = re.compile(r"^\s*-\s+\(D\)\s+(.+)$")
+D_RULE_RE = re.compile(r"^\s*(?:-\s+)?\(D\)\s+(.+)$")
 ALL_BULLETS_FORCE_RE = re.compile(
     r"All instruction bullets in this file are mandatory,\s*blocking,\s*and\s*closure-gating",
     re.IGNORECASE,
@@ -260,7 +260,7 @@ def run_git(repo: pathlib.Path, *args: str) -> tuple[str | None, str | None]:
 
 
 def git_ignore_excludes(path: pathlib.Path) -> bool:
-    """Use the containing worktree's Git ignore resolution when one exists."""
+    """Use the containing checkout's Git ignore resolution when one exists."""
     git_root, _ = run_git(path.parent, "rev-parse", "--show-toplevel")
     if not git_root:
         return False
@@ -299,7 +299,7 @@ def iter_primary_main_project_roots(
     if not projects_root.exists():
         return
     resolved_root = projects_root.resolve()
-    if (resolved_root / ".git").exists():
+    if (resolved_root / ".git").is_dir():
         candidates = [resolved_root]
     else:
         candidates = [
@@ -307,7 +307,7 @@ def iter_primary_main_project_roots(
             for path in sorted(projects_root.iterdir())
             if path.is_dir()
             and path.name.casefold() not in RESERVED_PROJECT_TREE_NAMES
-            and (path / ".git").exists()
+            and (path / ".git").is_dir()
         ]
 
     for candidate in candidates:
@@ -320,17 +320,7 @@ def iter_primary_main_project_roots(
         branch, branch_error = run_git(root, "branch", "--show-current")
         if branch_error or branch != "main":
             continue
-        worktree_output, worktree_error = run_git(
-            root, "worktree", "list", "--porcelain"
-        )
-        if worktree_error:
-            continue
-        worktrees = parse_worktrees(worktree_output or "")
-        if not worktrees:
-            continue
-        primary_root = pathlib.Path(str(worktrees[0]["path"])).resolve()
-        if primary_root == root:
-            yield root
+        yield root
 
 
 def iter_project_agents(projects_root: pathlib.Path) -> Iterable[pathlib.Path]:
@@ -338,15 +328,6 @@ def iter_project_agents(projects_root: pathlib.Path) -> Iterable[pathlib.Path]:
 
     local_paths: set[pathlib.Path] = set()
     for project_root in iter_primary_main_project_roots(projects_root):
-        worktree_output, worktree_error = run_git(
-            project_root, "worktree", "list", "--porcelain"
-        )
-        if worktree_error:
-            continue
-        linked_roots = {
-            pathlib.Path(str(item["path"])).resolve()
-            for item in parse_worktrees(worktree_output or "")[1:]
-        }
         for current, directories, filenames in os.walk(
             project_root, topdown=True, followlinks=False
         ):
@@ -354,10 +335,9 @@ def iter_project_agents(projects_root: pathlib.Path) -> Iterable[pathlib.Path]:
             retained_directories = []
             for name in directories:
                 candidate = current_path / name
-                resolved_candidate = candidate.resolve()
                 if name == ".git" or name.casefold() in RESERVED_PROJECT_TREE_NAMES:
                     continue
-                if resolved_candidate in linked_roots or (candidate / ".git").exists():
+                if (candidate / ".git").exists():
                     continue
                 retained_directories.append(name)
             directories[:] = sorted(retained_directories)
@@ -387,39 +367,8 @@ def iter_agents(
     )
 
 
-def parse_worktrees(output: str) -> list[dict[str, object]]:
-    """Reduce `git worktree list --porcelain` to stable branch/path evidence."""
-    worktrees: list[dict[str, object]] = []
-    current: dict[str, object] = {}
-    for line in [*output.splitlines(), ""]:
-        if not line:
-            if current:
-                worktrees.append(current)
-                current = {}
-            continue
-        key, _, value = line.partition(" ")
-        if key == "worktree":
-            current["path"] = str(pathlib.Path(value).resolve())
-        elif key == "HEAD":
-            current["head"] = value
-        elif key == "branch":
-            current["branch"] = value.removeprefix("refs/heads/")
-        elif key in {"bare", "detached", "locked", "prunable"}:
-            current[key] = True
-    return worktrees
-
-
-def is_within(path: pathlib.Path, root: pathlib.Path) -> bool:
-    """Return whether a resolved path stays within the expected worktree root."""
-    try:
-        path.resolve().relative_to(root.resolve())
-        return True
-    except ValueError:
-        return False
-
-
 def repo_git_state(repo: pathlib.Path, kind: str) -> dict[str, object]:
-    """Inventory branch, dirty state, and secondary-worktree placement without mutation."""
+    """Inventory branch and working-copy state without mutation."""
     top_level, top_error = run_git(repo, "rev-parse", "--show-toplevel")
     if top_error or not top_level:
         return {
@@ -436,24 +385,12 @@ def repo_git_state(repo: pathlib.Path, kind: str) -> dict[str, object]:
         root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"
     )
     status, status_error = run_git(root, "status", "--porcelain=v1", "--untracked-files=normal")
-    worktree_output, worktree_error = run_git(root, "worktree", "list", "--porcelain")
 
     status_lines = status.splitlines() if status is not None else []
     changed_paths = [line[3:] for line in status_lines if len(line) > 3]
-    worktrees = parse_worktrees(worktree_output or "")
-    primary_root = (
-        pathlib.Path(str(worktrees[0]["path"])).resolve() if worktrees else root
-    )
-    expected_root = primary_root.parent / "worktrees" / primary_root.name
-    misplaced = [
-        str(item["path"])
-        for item in worktrees
-        if pathlib.Path(str(item["path"])).resolve() != primary_root
-        and not is_within(pathlib.Path(str(item["path"])), expected_root)
-    ]
     errors = [
         error
-        for error in (branch_error, head_error, status_error, worktree_error)
+        for error in (branch_error, head_error, status_error)
         if error
     ]
     if upstream_error and "no upstream configured" not in upstream_error.lower():
@@ -462,7 +399,6 @@ def repo_git_state(repo: pathlib.Path, kind: str) -> dict[str, object]:
     return {
         "kind": kind,
         "path": str(root),
-        "primary_worktree": str(primary_root),
         "is_git_repo": True,
         "branch": branch,
         "head": head,
@@ -472,9 +408,6 @@ def repo_git_state(repo: pathlib.Path, kind: str) -> dict[str, object]:
         "changed_count": len(status_lines),
         "changed_paths": changed_paths[:20],
         "changed_paths_truncated": len(changed_paths) > 20,
-        "expected_secondary_worktree_root": str(expected_root.resolve()),
-        "worktrees": worktrees,
-        "misplaced_worktrees": misplaced,
         "errors": errors,
     }
 
@@ -483,7 +416,7 @@ def git_inventory(
     automation_source_repo: pathlib.Path,
     projects_root: pathlib.Path,
 ) -> dict[str, object]:
-    """Collect compact Git/worktree state for the automation repo and AGENTS projects."""
+    """Collect compact Git state for the automation repo and AGENTS projects."""
     candidates = [
         ("automation", automation_source_repo),
         *(("project", path.parent) for path in iter_project_agents(projects_root)),
@@ -501,11 +434,6 @@ def git_inventory(
     return {
         "count": len(items),
         "dirty_count": sum(1 for item in items if item.get("dirty")),
-        "misplaced_worktree_count": sum(
-            len(value)
-            for item in items
-            if isinstance((value := item.get("misplaced_worktrees")), list)
-        ),
         "items": items,
     }
 
@@ -866,7 +794,7 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, object]:
     runtime_inventory = automations_inventory(runtime_root)
     source_inventory = automations_inventory(source_root)
     return {
-        "schema": "global-governance-consistency-audit/snapshot.v3",
+        "schema": "global-governance-consistency-audit/snapshot.v4",
         "generated_at": utc_now(),
         "automations": runtime_inventory,
         "automation_source": source_inventory,
@@ -962,7 +890,7 @@ def build_decision_payload(
     )
     d_rule_brevity = cast(dict[str, Any], snapshot["d_rule_brevity"])
     return {
-        "schema": "global-governance-consistency-audit/decision.v1",
+        "schema": "global-governance-consistency-audit/decision.v2",
         "evidence_path": str(evidence_path),
         "evidence_schema": snapshot["schema"],
         "state_sha256": snapshot_state_sha256(snapshot),
@@ -980,7 +908,6 @@ def build_decision_payload(
             "approved_debt": rule_graph["approved_debt_count"],
             "git_repositories": git["count"],
             "dirty_git": git["dirty_count"],
-            "misplaced_worktrees": git["misplaced_worktree_count"],
             "automation_gitignore_missing": len(
                 automation_gitignore["missing_expected_entries"]
             ),

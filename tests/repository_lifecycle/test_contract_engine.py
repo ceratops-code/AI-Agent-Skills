@@ -36,6 +36,7 @@ from github_contract_engine.collect_observed_states import (  # noqa: E402
 )
 from github_contract_engine.collectors import registries  # noqa: E402
 from github_contract_engine.collectors.local_repository import (  # noqa: E402
+    _manifest_facts,
     classify_repository,
     collect_local_repository,
 )
@@ -864,7 +865,7 @@ class GHContractStateEngineTests(unittest.TestCase):
             {"owner": "owner", "repo": "repo", "default_branch": "main"},
             repo_subset_ids(self.contracts, "all"),
         )
-        self.assertEqual(len(desired_state["rules"]), 78)
+        self.assertEqual(len(desired_state["rules"]), 79)
         self.assertTrue(all(rule["assertions"] for rule in desired_state["rules"]))
         self.assertTrue(
             any(
@@ -1483,6 +1484,93 @@ class GHContractStateEngineTests(unittest.TestCase):
         )
         self.assertEqual(release_backed["artifact_candidates"], [])
         self.assertEqual(release_backed["artifact_surface"], ["github_release_binary"])
+
+        gradle_manifests = _manifest_facts(
+            {
+                "files": ["build.gradle.kts"],
+                "texts": {
+                    "build.gradle.kts": (
+                        'plugins { id("maven-publish") }\n'
+                        'group = "com.example"\n'
+                        'version = "1.0.0"\n'
+                        "publishing {\n"
+                        "  publications {\n"
+                        '    create<MavenPublication>("maven") {\n'
+                        '      artifactId = "demo"\n'
+                        '      pom { name.set("Demo") }\n'
+                        "    }\n"
+                        "  }\n"
+                        "}\n"
+                    )
+                },
+            }
+        )
+        self.assertEqual(
+            gradle_manifests["gradle"],
+            {
+                "build_file_present": True,
+                "maven_publish_plugin_present": True,
+                "publication_identity_present": True,
+                "pom_metadata_present": True,
+            },
+        )
+        inherited_gradle_identity = _manifest_facts(
+            {
+                "files": ["build.gradle.kts", "gradle.properties"],
+                "texts": {
+                    "build.gradle.kts": (
+                        'plugins { id("maven-publish") }\n'
+                        'publishing { publications { create<MavenPublication>("maven") {\n'
+                        '  pom { name.set("Demo") }\n'
+                        "} } }\n"
+                    ),
+                    "gradle.properties": "group=com.example\nversion=1.0.0\n",
+                },
+            }
+        )
+        self.assertTrue(
+            inherited_gradle_identity["gradle"]["publication_identity_present"]
+        )
+        plugin_only = _manifest_facts(
+            {
+                "files": ["build.gradle"],
+                "texts": {"build.gradle": "plugins { id 'maven-publish' }\n"},
+            }
+        )
+        self.assertEqual(
+            plugin_only["gradle"],
+            {
+                "build_file_present": True,
+                "maven_publish_plugin_present": True,
+                "publication_identity_present": False,
+                "pom_metadata_present": False,
+            },
+        )
+
+        maven_rule = next(
+            rule
+            for rule in self.contracts["artifact"]["checks"]
+            if rule["id"] == "maven.metadata_publish_and_verify"
+        )
+        gradle_rule = next(
+            rule
+            for rule in self.contracts["artifact"]["checks"]
+            if rule["id"] == "gradle.metadata_publish_and_verify"
+        )
+        maven_state = {"artifact_type": ["maven_package"]}
+        gradle_state = {"artifact_type": ["gradle_maven_package"]}
+        self.assertTrue(
+            condition_matches(maven_rule["applies_when"], maven_state)
+        )
+        self.assertFalse(
+            condition_matches(maven_rule["applies_when"], gradle_state)
+        )
+        self.assertTrue(
+            condition_matches(gradle_rule["applies_when"], gradle_state)
+        )
+        self.assertFalse(
+            condition_matches(gradle_rule["applies_when"], maven_state)
+        )
 
         weak_workflows = [
             {

@@ -425,7 +425,7 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
     assert completed["complete"] is True
     assert runner.variation_applied is True
     assert sum(call["phase"] == "sol-adjudication" for call in runner.calls) == 3
-    assert sum(call["phase"] == "sol-audit" for call in runner.calls) == 1
+    assert sum(call["phase"] == "sol-direct-evidence" for call in runner.calls) == 1
     assert sum(call["phase"] == "sol-final" for call in runner.calls) == 1
     final = json.loads(
         pathlib.Path(completed["final_result_path"]).read_text(encoding="utf-8")
@@ -510,16 +510,8 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
         for review in final["temporary_control_reviews"]
         if review["disposition"] == "transient-by-design"
     )
-    assert all(
-        decision["disposition"] != "confirmed-finding"
-        or all(
-            final_findings[finding_id]["implementation_status"] == "implemented"
-            for finding_id in decision["finding_ids"]
-        )
-        for decision in final["candidate_decisions"]
-        if decision["luna_candidate_id"]
-        in transient_review["source_luna_candidate_ids"]
-    )
+    assert transient_review["finding_id"] is None
+    assert transient_review["no_finding_reason"]
     assert all(
         finding["observed_avoidable_call_count"]
         == len(finding["affected_call_ids"])
@@ -528,18 +520,26 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
     )
     normalized_review = next(
         item
-        for item in final["temporary_control_reviews"]
+        for item in shard["temporary_control_reviews"]
         if item["disposition"] == "permanently-implemented"
     )
     assert normalized_review["finding_id"] is None
     assert normalized_review["no_finding_reason"]
     normalized_decision = next(
         item
-        for item in final["candidate_decisions"]
+        for item in shard["candidate_decisions"]
         if item["luna_candidate_id"]
         == normalized_review["source_luna_candidate_ids"][0]
     )
-    assert normalized_decision["disposition"] == "dismissed-candidate"
+    assert normalized_decision["disposition"] == "confirmed-finding"
+    assert normalized_decision["finding_ids"]
+    shard_findings = {
+        finding["id"]: finding for finding in shard["confirmed_findings"]
+    }
+    assert any(
+        shard_findings[finding_id]["implementation_status"] == "unimplemented"
+        for finding_id in normalized_decision["finding_ids"]
+    )
     assert all(
         merge["control_key"] != "implemented-control-is-not-a-gap"
         for merge in final["temporary_control_merges"]
@@ -598,11 +598,10 @@ def test_credit_analysis_child_command_places_global_approval_before_exec(
         schema_path=pathlib.Path("schema.json"),
         raw_output=pathlib.Path("result.json"),
         execution_cwd=pathlib.Path("."),
-        ephemeral=True,
     )
     assert command.index("--ask-for-approval") < command.index("exec")
     assert 'model_reasoning_effort="medium"' in command
-    assert "--ephemeral" in command
+    assert "--ephemeral" not in command
     assert "--sandbox" in command
     assert command[command.index("--sandbox") + 1] == "read-only"
     persistent = workflow._codex_child_command(
@@ -612,7 +611,6 @@ def test_credit_analysis_child_command_places_global_approval_before_exec(
         schema_path=pathlib.Path("schema.json"),
         raw_output=pathlib.Path("result.json"),
         execution_cwd=pathlib.Path("."),
-        ephemeral=False,
     )
     assert "--ephemeral" not in persistent
     assert persistent[persistent.index("--cd") + 1] == "."
@@ -909,7 +907,6 @@ def test_credit_analysis_workflow_rejects_invalid_and_conflicting_passes(
         "surface_order": compact["surface_order"],
         "analysis_policy": compact["analysis_policy"],
         "canonical_state": [],
-        "analysis_generated_activity": [],
         "records": synthetic_records,
         "candidate_ids": synthetic_ids,
     }
@@ -951,6 +948,49 @@ def test_credit_analysis_workflow_rejects_invalid_and_conflicting_passes(
         for candidate_id in episode["candidate_ids"]
     ] == synthetic_ids
 
+    oversized_id = "candidate.synthetic.oversized"
+    oversized_bundle = {
+        **synthetic_bundle,
+        "records": [{"candidate_id": oversized_id, "workstream": "producer"}],
+        "candidate_ids": [oversized_id],
+    }
+    oversized_episode = {
+        "episode_id": "episode.synthetic.oversized",
+        "turn_id": "turn.synthetic.oversized",
+        "candidate_ids": [oversized_id],
+        "user_messages": [],
+        "calls": [
+            {
+                "candidate_id": oversized_id,
+                "call_id": "call.synthetic.oversized",
+                "turn_id": "turn.synthetic.oversized",
+                "workstream": "producer",
+                "surface_lenses": compact["surface_order"],
+                "user_message_ids": [],
+                "evidence_refs": ["evidence://calls/synthetic-oversized"],
+                "semantic_evidence": "x" * 100_000,
+            }
+        ],
+    }
+    oversized_packets = workflow._holistic_partition(
+        analysis_id=compact["analysis_id"],
+        episodes=[oversized_episode],
+        bundle=oversized_bundle,
+        budget_bytes=10_000,
+    )
+    assert len(oversized_packets) == 1
+    assert oversized_packets[0][0]["candidate_ids"] == [oversized_id]
+    assert oversized_packets[0][0]["calls"][0]["capacity_reduced"] is True
+    assert workflow._json_bytes(
+        workflow._holistic_luna_payload(
+            analysis_id=compact["analysis_id"],
+            task_id="luna.discovery.oversized",
+            ordinal=1,
+            episodes=oversized_packets[0],
+            bundle=oversized_bundle,
+        )
+    ) <= 10_000
+
     manifest = json.loads(pathlib.Path(plan["manifest_path"]).read_text(encoding="utf-8"))
     first = manifest["luna_tasks"][0]
     assert len(first["candidate_ids"]) > 1
@@ -974,7 +1014,7 @@ def test_credit_analysis_workflow_rejects_invalid_and_conflicting_passes(
     )
     with pytest.raises(
         workflow.CreditAnalysisError,
-        match="packet boundaries",
+        match="run-part boundaries",
     ):
         workflow._validate_holistic_manifest(
             manifest,

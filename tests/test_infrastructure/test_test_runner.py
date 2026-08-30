@@ -105,7 +105,7 @@ def test_committed_diff_mode_collects_and_invokes_only_selected_suite(
     runner = test_runner_module
     execution = DeterministicExecution(
         runner,
-        b"M\0skills/ceratops-credit-savings-analysis/scripts/credit_analysis/holistic.py\0",
+        b"M\0skills/ceratops-credit-savings-analysis/scripts/credit_analysis/luna_sol_analysis.py\0",
     )
 
     exit_code = runner.execute(
@@ -125,7 +125,7 @@ def test_committed_diff_mode_collects_and_invokes_only_selected_suite(
     assert result["changed"] == [
         {
             "paths": [
-                "skills/ceratops-credit-savings-analysis/scripts/credit_analysis/holistic.py"
+                "skills/ceratops-credit-savings-analysis/scripts/credit_analysis/luna_sol_analysis.py"
             ],
             "status": "M",
         }

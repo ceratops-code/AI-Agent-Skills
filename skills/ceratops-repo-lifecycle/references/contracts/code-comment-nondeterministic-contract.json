@@ -4,7 +4,7 @@
   "name": "ceratops_code_comment_nondeterministic_contract",
   "surface": "code_comments",
   "description": "Local AI-agent review rubric for comment sufficiency. It is not an ordinary implementation, shipping, or skill-update check.",
-  "usage": "Use during ceratops-code-consistency-audit when scripts, public APIs, automation helpers, contract validators, or non-obvious safety logic are in scope.",
+  "usage": "Use when a governing review routes comment sufficiency here and scripts, public APIs, automation helpers, contract validators, or non-obvious safety logic are in scope.",
   "scope_policy": [
     "Apply to repository scripts, CLI entrypoints, automation helpers, contract validators, and nontrivial project code touched by a consistency audit.",
     "Prefer project-local conventions when they exist.",

@@ -15,7 +15,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
-import importlib.util
 import json
 import math
 import os
@@ -33,11 +32,12 @@ from collections.abc import Mapping, Sequence
 from types import ModuleType
 from typing import Any
 
+from . import session_evidence_collector
+
 PACKAGE_DIR = pathlib.Path(__file__).resolve().parent
 SCRIPT_DIR = PACKAGE_DIR.parent
 SKILL_DIR = SCRIPT_DIR.parent
 CONTRACT_PATH = SCRIPT_DIR / "credit-analysis-contract.json"
-LEDGER_PATH = SCRIPT_DIR / "model-call-ledger.py"
 STATE_SCHEMA = "ceratops-credit-analysis-state.v1"
 CONTEXT_SCHEMA = "ceratops-credit-analysis-context.v1"
 PASS_PACKET_SCHEMA = "ceratops-credit-analysis-pass-packet.v1"
@@ -654,19 +654,10 @@ def _exclusive_json(path: pathlib.Path, value: Any, label: str) -> None:
         raise CreditAnalysisError(f"could not write {label}: {exc}") from exc
 
 
-def _load_ledger() -> ModuleType:
-    spec = importlib.util.spec_from_file_location(
-        "ceratops_credit_model_call_ledger",
-        LEDGER_PATH,
-    )
-    if spec is None or spec.loader is None:
-        raise CreditAnalysisError("could not load model-call-ledger.py")
-    module = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(module)
-    except (ImportError, OSError, SyntaxError) as exc:
-        raise CreditAnalysisError(f"could not import model-call-ledger.py: {exc}") from exc
-    return module
+def _load_evidence_collector() -> ModuleType:
+    """Return the package-owned session evidence collector."""
+
+    return session_evidence_collector
 
 
 def _action_title(action_id: str) -> str:
@@ -815,12 +806,13 @@ def _load_contract() -> dict[str, Any]:
         raise CreditAnalysisError("orchestration reasoning effort contract is invalid")
     semantic_calls = contract.get("semantic_call_contract")
     if semantic_calls != {
-        "luna_max_attempts": 50,
-        "luna_max_concurrency": 10,
-        "sol_target_calls": 5,
-        "sol_max_calls": 6,
-        "sol_adjudicator_target": 3,
-        "sol_adjudicator_max": 4,
+        "luna_max_attempts": 70,
+        "luna_max_concurrency": 15,
+        "sol_target_calls": 7,
+        "sol_max_calls": 8,
+        "sol_max_validation_retries_per_task": 1,
+        "sol_adjudicator_target": 6,
+        "sol_adjudicator_max": 6,
         "bookkeeping_calls": 0,
     }:
         raise CreditAnalysisError("semantic call contract is invalid")
@@ -895,7 +887,7 @@ def _load_contract() -> dict[str, Any]:
 
 def _request_source(
     raw: Any,
-    ledger: ModuleType,
+    collector: ModuleType,
 ) -> tuple[dict[str, Any], pathlib.Path]:
     if not isinstance(raw, dict):
         raise CreditAnalysisError("source must be an object")
@@ -924,19 +916,19 @@ def _request_source(
         )
     try:
         if isinstance(thread_id, str) and thread_id:
-            canonical_id = ledger.canonical_thread_id(thread_id)
-            resolved = ledger.resolve_thread_session(canonical_id)
+            canonical_id = collector.canonical_thread_id(thread_id)
+            resolved = collector.resolve_thread_session(canonical_id)
             descriptor = {"kind": "thread_id", "value": canonical_id}
         elif isinstance(session, str) and session:
             resolved = pathlib.Path(str(session)).expanduser().resolve(strict=True)
             descriptor = {"kind": "session", "value": str(resolved)}
         elif current_thread is True:
-            canonical_id, resolved = ledger.resolve_current_thread_source()
+            canonical_id, resolved = collector.resolve_current_thread_source()
             descriptor = {"kind": "current_thread", "value": canonical_id}
         else:
             assert isinstance(thread_name, str)
             canonical_id, resolved, index_fingerprint = (
-                ledger.resolve_named_thread_source(thread_name)
+                collector.resolve_named_thread_source(thread_name)
             )
             descriptor = {
                 "kind": "thread_name",
@@ -982,7 +974,7 @@ def _request_window(raw: Any) -> tuple[dict[str, Any], dict[str, Any]]:
 def _validate_request(
     request_path: pathlib.Path,
     contract: dict[str, Any],
-    ledger: ModuleType,
+    collector: ModuleType,
     *,
     task_root_boundary: pathlib.Path | None = None,
 ) -> dict[str, Any]:
@@ -1003,7 +995,7 @@ def _validate_request(
         "surface_contract_version"
     ]:
         raise CreditAnalysisError("surface contract version mismatch")
-    source, session = _request_source(request.get("source"), ledger)
+    source, session = _request_source(request.get("source"), collector)
     window, collector_window = _request_window(request.get("window"))
     task_root = _task_directory(
         request.get("task_temp_root"),
@@ -2498,15 +2490,15 @@ def _initialize_analysis(
 
 def command_prepare(request_path: pathlib.Path) -> dict[str, Any]:
     contract = _load_contract()
-    ledger = _load_ledger()
-    request = _validate_request(request_path, contract, ledger)
+    collector = _load_evidence_collector()
+    request = _validate_request(request_path, contract, collector)
     if request["mode"] == "full-analysis":
         raise CreditAnalysisError(
             "full-analysis requires the run/plan/execute controller"
         )
     collector_window = request["collector_window"]
     try:
-        collected = ledger.collect_session_evidence(
+        collected = collector.collect_session_evidence(
             request["session"],
             last_runs=collector_window["last_runs"],
             completed_turn_ids=collector_window["completed_turn_ids"],
@@ -5112,7 +5104,6 @@ __all__ = (
     "HOLISTIC_TASK_SCHEMA",
     "IDENTIFIER_RE",
     "INDEX_SCHEMA",
-    "LEDGER_PATH",
     "MODEL_PROGRESS_SECONDS",
     "Mapping",
     "ModuleType",
@@ -5191,7 +5182,7 @@ __all__ = (
     "_initialize_analysis",
     "_json_chars",
     "_load_contract",
-    "_load_ledger",
+    "_load_evidence_collector",
     "_load_state",
     "_model_review_records_for_calls",
     "_new_file",
@@ -5243,7 +5234,6 @@ __all__ = (
     "defaultdict",
     "dt",
     "hashlib",
-    "importlib",
     "json",
     "math",
     "os",

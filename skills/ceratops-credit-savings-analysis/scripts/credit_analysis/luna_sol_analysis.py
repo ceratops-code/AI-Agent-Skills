@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import concurrent.futures
 
-from .batch import *
-from .core import *
+from .model_input_preparation import *
+from .model_capacity_planning import *
+from .multi_thread_analysis import *
+from .persistent_subthread_analysis import *
+from .single_thread_analysis import *
 
 def _exclusive_text(path: pathlib.Path, value: str, label: str) -> None:
     """Create one immutable UTF-8 controller artifact."""
@@ -100,24 +103,6 @@ def _surface_order_for_request(
     return [str(request["action"])]
 
 
-def _review_record_index(evidence: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
-    model_review = evidence.get("model_review")
-    if not isinstance(model_review, Mapping):
-        raise CreditAnalysisError("model-review evidence is invalid")
-    records = model_review.get("records")
-    if not isinstance(records, list):
-        raise CreditAnalysisError("model-review records are invalid")
-    indexed: dict[str, dict[str, Any]] = {}
-    for record in records:
-        if not isinstance(record, dict):
-            raise CreditAnalysisError("model-review record is invalid")
-        record_id = record.get("record_id")
-        if not isinstance(record_id, str) or record_id in indexed:
-            raise CreditAnalysisError("model-review record ID is invalid")
-        indexed[record_id] = record
-    return indexed
-
-
 def _run_index(evidence: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     runs = evidence.get("runs")
     if not isinstance(runs, list):
@@ -129,159 +114,6 @@ def _run_index(evidence: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
         if run["turn_id"] in result:
             raise CreditAnalysisError("duplicate evidence run")
         result[run["turn_id"]] = run
-    return result
-
-
-SURFACE_EVIDENCE_KEYWORDS = {
-    "helper-contracts": (
-        "helper",
-        "script",
-        "contract",
-        "cleanup",
-        "rollback",
-        "dependency",
-        "output",
-    ),
-    "context-evidence": (
-        "read",
-        "search",
-        "context",
-        "evidence",
-        "token",
-        "cached",
-        "path",
-    ),
-    "rework-validation": (
-        "failed",
-        "error",
-        "retry",
-        "again",
-        "temporary",
-        "workaround",
-        "patch",
-        "revert",
-        "correct",
-    ),
-    "tool-flow": (
-        "tool",
-        "command",
-        "wait",
-        "timeout",
-        "terminated",
-        "result",
-        "exit",
-    ),
-    "instruction-reasoning": (
-        "instruction",
-        "rule",
-        "prompt",
-        "clarif",
-        "approve",
-        "plan",
-        "skill",
-    ),
-}
-OUTCOME_KEYS = frozenset(
-    {
-        "code",
-        "error",
-        "errors",
-        "exit_code",
-        "returncode",
-        "status",
-        "stderr",
-        "success",
-        "terminated",
-        "termination",
-        "timed_out",
-        "timeout",
-    }
-)
-
-
-def _structured_outcome(value: Any, *, depth: int = 0) -> Any:
-    """Project explicit process/result telemetry without semantic judgment."""
-
-    if depth > 5:
-        return None
-    if isinstance(value, Mapping):
-        result: dict[str, Any] = {}
-        for key, item in value.items():
-            normalized = str(key).casefold()
-            if normalized in OUTCOME_KEYS:
-                result[str(key)] = _bounded_value(item, text_limit=600)
-                continue
-            nested = _structured_outcome(item, depth=depth + 1)
-            if nested not in (None, {}, []):
-                result[str(key)] = nested
-        return result or None
-    if isinstance(value, list):
-        items = [
-            projected
-            for item in value
-            if (projected := _structured_outcome(item, depth=depth + 1))
-            is not None
-        ]
-        return items or None
-    return None
-
-
-def _relevant_segments(text: str, surface_id: str) -> list[dict[str, Any]]:
-    """Retain bounded deterministic windows around surface-relevant terms."""
-
-    lowered = text.casefold()
-    segments: list[dict[str, Any]] = []
-    seen: set[tuple[int, int]] = set()
-    for keyword in SURFACE_EVIDENCE_KEYWORDS[surface_id]:
-        start = 0
-        while len(segments) < 4:
-            position = lowered.find(keyword, start)
-            if position < 0:
-                break
-            left = max(0, position - 350)
-            right = min(len(text), position + len(keyword) + 650)
-            bounds = (left, right)
-            if not any(left < old_right and right > old_left for old_left, old_right in seen):
-                seen.add(bounds)
-                segments.append(
-                    {
-                        "start": left,
-                        "end": right,
-                        "text": text[left:right],
-                    }
-                )
-            start = position + len(keyword)
-        if len(segments) >= 4:
-            break
-    return segments
-
-
-def _shared_relevant_segments(
-    text: str,
-    surface_ids: Sequence[str],
-    *,
-    text_limit: int,
-) -> list[dict[str, Any]]:
-    """Keep one deterministic non-overlapping segment per applicable surface."""
-
-    result: list[dict[str, Any]] = []
-    bounds: list[tuple[int, int]] = []
-    for surface_id in surface_ids:
-        for segment in _relevant_segments(text, surface_id):
-            start = int(segment["start"])
-            end = int(segment["end"])
-            if any(start < prior_end and end > prior_start for prior_start, prior_end in bounds):
-                continue
-            bounds.append((start, end))
-            result.append(
-                {
-                    "surface_id": surface_id,
-                    "start": start,
-                    "end": end,
-                    "text": str(segment["text"])[:text_limit],
-                }
-            )
-            break
     return result
 
 
@@ -473,7 +305,7 @@ def _collect_canonical_state_snapshot(
     evidence: Mapping[str, Any],
     path_roots: list[tuple[str, str]],
     orchestration_root: pathlib.Path,
-    ledger: ModuleType,
+    collector: ModuleType,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     """Read referenced final artifacts once and retain protected immutable evidence."""
 
@@ -570,7 +402,7 @@ def _collect_canonical_state_snapshot(
                             {"status": "read-error", "kind": "directory-listing"}
                         )
                     else:
-                        protected = ledger.prepare_review_text(listing, path_roots)
+                        protected = collector.prepare_review_text(listing, path_roots)
                         snapshot_path = payload_root / f"{artifact_id}.txt"
                         _exclusive_text(
                             snapshot_path,
@@ -603,7 +435,7 @@ def _collect_canonical_state_snapshot(
                                 {"status": "captured", "kind": "binary-hash"}
                             )
                         else:
-                            protected = ledger.prepare_review_text(decoded, path_roots)
+                            protected = collector.prepare_review_text(decoded, path_roots)
                             snapshot_path = payload_root / f"{artifact_id}.txt"
                             _exclusive_text(
                                 snapshot_path,
@@ -1254,9 +1086,8 @@ def _codex_child_command(
     schema_path: pathlib.Path,
     raw_output: pathlib.Path,
     execution_cwd: pathlib.Path,
-    ephemeral: bool,
 ) -> list[str]:
-    """Build the current CLI command with global approval policy before `exec`."""
+    """Build one persistent CLI child with approval policy before `exec`."""
 
     command = [
         executable,
@@ -1281,8 +1112,6 @@ def _codex_child_command(
         str(execution_cwd),
         "-",
     ]
-    if ephemeral:
-        command.insert(command.index("--skip-git-repo-check"), "--ephemeral")
     return command
 
 
@@ -1363,7 +1192,6 @@ def _run_codex_child(
     schema_path: pathlib.Path,
     attempt_dir: pathlib.Path,
     execution_cwd: pathlib.Path,
-    ephemeral: bool,
     timeout_seconds: int = 1800,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     """Launch one explicit read-only Codex child and wait internally."""
@@ -1382,13 +1210,12 @@ def _run_codex_child(
         schema_path=schema_path,
         raw_output=raw_output,
         execution_cwd=execution_cwd,
-        ephemeral=ephemeral,
     )
     started = time.monotonic()
     child_environment = os.environ.copy()
     child_environment["CERATOPS_CREDIT_ANALYSIS_ID"] = analysis_id
     child_environment["CERATOPS_CREDIT_ANALYSIS_TASK_ID"] = str(task["task_id"])
-    child_environment["CERATOPS_CREDIT_ANALYSIS_EPHEMERAL"] = "1" if ephemeral else "0"
+    child_environment["CERATOPS_CREDIT_ANALYSIS_EPHEMERAL"] = "0"
     controller_parent_pid = os.getppid()
     timed_out = False
     terminated = False
@@ -1455,7 +1282,7 @@ def _run_codex_child(
         "runner": "codex-cli",
         "model": model,
         "reasoning_effort": reasoning_effort,
-        "ephemeral": ephemeral,
+        "ephemeral": False,
         "execution_cwd": str(execution_cwd),
         "model_invoked": launch_error is None,
         "exit_code": exit_code,
@@ -1594,7 +1421,7 @@ def _bind_attempt_record(
             "analysis_id": state["analysis_id"],
             "task_id": task["task_id"],
             "phase": task["phase"],
-            "ephemeral": task["phase"] == "luna-discovery",
+            "ephemeral": False,
             "execution_cwd": str(task["execution_cwd"]),
             "instruction_chain_sha256": str(task["instruction_chain_sha256"]),
             "attempt_number": attempt_number,
@@ -1773,243 +1600,6 @@ def _json_bytes(value: Any) -> int:
             default=str,
         ).encode("utf-8")
     )
-
-
-def _holistic_projection(
-    value: Any,
-    *,
-    limit: int,
-    surface_ids: Sequence[str],
-) -> Any:
-    """Keep useful bounded evidence while the complete value remains retained."""
-
-    serialized = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    )
-    if len(serialized) <= limit:
-        return {"mode": "complete", "value": value}
-    segments = _shared_relevant_segments(
-        serialized,
-        surface_ids,
-        text_limit=max(160, min(420, limit // 2)),
-    )[:2]
-    return {
-        "mode": "retained-projection",
-        "chars": len(serialized),
-        "sha256": hashlib.sha256(serialized.encode("utf-8")).hexdigest(),
-        "structured_outcome": _structured_outcome(value),
-        "head": serialized[: min(300, limit // 3)],
-        "relevant_segments": segments,
-        "tail": serialized[-min(300, limit // 3) :],
-    }
-
-
-def _holistic_state_paths(value: Any) -> list[pathlib.Path]:
-    """Find exact controller state paths only in structured tool output."""
-
-    found: list[pathlib.Path] = []
-
-    def visit(item: Any) -> None:
-        if isinstance(item, Mapping):
-            state_path = item.get("state_path")
-            if isinstance(state_path, str) and state_path:
-                resolved_text = state_path
-                if resolved_text.startswith("<user-home>"):
-                    resolved_text = str(pathlib.Path.home()) + resolved_text[len("<user-home>") :]
-                found.append(pathlib.Path(resolved_text))
-            for nested in item.values():
-                visit(nested)
-            return
-        if isinstance(item, list):
-            for nested in item:
-                visit(nested)
-            return
-        if not isinstance(item, str) or len(item) > 2_000_000:
-            return
-        stripped = item.strip()
-        if stripped.startswith("{") or stripped.startswith("["):
-            try:
-                visit(json.loads(stripped))
-            except json.JSONDecodeError:
-                pass
-        for match in re.finditer(r'"state_path"\s*:\s*("(?:[^"\\]|\\.)*")', item):
-            try:
-                candidate = json.loads(match.group(1))
-            except json.JSONDecodeError:
-                continue
-            if isinstance(candidate, str) and candidate:
-                resolved_text = candidate
-                if resolved_text.startswith("<user-home>"):
-                    resolved_text = str(pathlib.Path.home()) + resolved_text[len("<user-home>") :]
-                found.append(pathlib.Path(resolved_text))
-
-    visit(value)
-    return list(dict.fromkeys(found))
-
-
-def _holistic_raw_state_paths_by_call(
-    rows: Sequence[Mapping[str, Any]],
-) -> dict[str, list[pathlib.Path]]:
-    """Index transient structured state paths before evidence redaction.
-
-    Raw local paths are used only to load explicitly referenced controller state
-    and are never copied into retained evidence. Correlation IDs keep each path
-    bound to the model call whose tool result supplied it.
-    """
-
-    indexed: dict[str, list[pathlib.Path]] = {}
-    for row in rows:
-        if row.get("type") != "response_item":
-            continue
-        payload = row.get("payload")
-        if not isinstance(payload, Mapping):
-            continue
-        item_type = payload.get("type")
-        call_id = payload.get("call_id") or payload.get("id")
-        if (
-            not isinstance(item_type, str)
-            or not item_type.endswith("_output")
-            or not isinstance(call_id, str)
-            or not call_id
-        ):
-            continue
-        paths = _holistic_state_paths(
-            {
-                key: item
-                for key, item in payload.items()
-                if key not in {"call_id", "id", "type"}
-            }
-        )
-        if paths:
-            indexed[call_id] = list(
-                dict.fromkeys([*indexed.get(call_id, []), *paths])
-            )
-    return indexed
-
-
-def _holistic_prior_analysis_activity(
-    evidence: Mapping[str, Any],
-    *,
-    current_analysis_id: str,
-    surface_ids: Sequence[str],
-    text_limit: int,
-    raw_state_paths_by_call: Mapping[str, Sequence[pathlib.Path]],
-) -> tuple[list[dict[str, Any]], set[str]]:
-    """Load referenced earlier controller telemetry without prompt-text markers."""
-
-    activities: list[dict[str, Any]] = []
-    analysis_call_ids: set[str] = set()
-    seen_analyses: set[str] = set()
-    review_index = _review_record_index(evidence)
-    for call in _all_calls(evidence):
-        call_id = str(call["call_id"])
-        review_records = [
-            review_index[record_id]
-            for record_id in call.get("model_review_record_ids", [])
-            if record_id in review_index
-        ]
-        review_payloads = [record.get("content") for record in review_records]
-        state_paths = _holistic_state_paths(
-            [call.get("tool_results", []), *review_payloads]
-        )
-        for record in review_records:
-            record_call_id = record.get("call_id")
-            if isinstance(record_call_id, str):
-                state_paths.extend(raw_state_paths_by_call.get(record_call_id, ()))
-        for unresolved in dict.fromkeys(state_paths):
-            try:
-                state_path = unresolved.expanduser().resolve(strict=True)
-            except OSError:
-                continue
-            if state_path.is_symlink() or not state_path.is_file():
-                continue
-            try:
-                prior = _read_json(state_path, "referenced prior analysis state")
-            except CreditAnalysisError:
-                continue
-            if prior.get("schema") != HOLISTIC_STATE_SCHEMA:
-                continue
-            analysis_id = prior.get("analysis_id")
-            if not isinstance(analysis_id, str) or analysis_id == current_analysis_id:
-                continue
-            analysis_call_ids.add(call_id)
-            if analysis_id in seen_analyses:
-                continue
-            seen_analyses.add(analysis_id)
-            tasks: list[dict[str, Any]] = []
-            execution = prior.get("execution")
-            order = prior.get("task_order")
-            if isinstance(execution, Mapping) and isinstance(order, list):
-                for task_id in order:
-                    task_state = execution.get(task_id)
-                    if not isinstance(task_id, str) or not isinstance(task_state, Mapping):
-                        continue
-                    attempts: list[dict[str, Any]] = []
-                    for attempt in task_state.get("attempts", []):
-                        if not isinstance(attempt, Mapping):
-                            continue
-                        artifacts = attempt.get("artifacts")
-                        prompt_projection = None
-                        result_projection = None
-                        if isinstance(artifacts, Mapping):
-                            prompt_artifact = artifacts.get("prompt")
-                            if isinstance(prompt_artifact, Mapping):
-                                prompt_path = pathlib.Path(str(prompt_artifact.get("path", "")))
-                                if prompt_path.is_file() and not prompt_path.is_symlink():
-                                    prompt_projection = _holistic_projection(
-                                        prompt_path.read_text(encoding="utf-8"),
-                                        limit=text_limit,
-                                        surface_ids=surface_ids,
-                                    )
-                            output_artifact = artifacts.get("raw_output")
-                            if isinstance(output_artifact, Mapping):
-                                output_path = pathlib.Path(str(output_artifact.get("path", "")))
-                                if output_path.is_file() and not output_path.is_symlink():
-                                    result_projection = _holistic_projection(
-                                        output_path.read_text(encoding="utf-8"),
-                                        limit=text_limit,
-                                        surface_ids=surface_ids,
-                                    )
-                        attempts.append(
-                            {
-                                "attempt_number": attempt.get("attempt_number"),
-                                "model": attempt.get("model"),
-                                "reasoning_effort": attempt.get("reasoning_effort"),
-                                "duration_ms": attempt.get("duration_ms"),
-                                "exit_code": attempt.get("exit_code"),
-                                "timed_out": attempt.get("timed_out"),
-                                "terminated": attempt.get("terminated"),
-                                "error": attempt.get("error"),
-                                "event_summary": attempt.get("event_summary"),
-                                "prompt": prompt_projection,
-                                "result": result_projection,
-                            }
-                        )
-                    tasks.append(
-                        {
-                            "task_id": task_id,
-                            "status": task_state.get("status"),
-                            "result_identity": task_state.get("result"),
-                            "attempts": attempts,
-                        }
-                    )
-            activities.append(
-                {
-                    "analysis_id": analysis_id,
-                    "source_call_id": call_id,
-                    "state_sha256": _file_hash(state_path),
-                    "phase": prior.get("phase"),
-                    "model_calls": prior.get("model_calls"),
-                    "model_attempts": prior.get("model_attempts"),
-                    "tasks": tasks,
-                    "evidence_ref": f"analysis://{analysis_id}",
-                }
-            )
-    return activities, analysis_call_ids
 
 
 def _instruction_file(directory: pathlib.Path) -> pathlib.Path | None:
@@ -2213,19 +1803,17 @@ def _collect_holistic_evidence(
     *,
     request: Mapping[str, Any],
     contract: Mapping[str, Any],
-    ledger: ModuleType,
+    collector: ModuleType,
     analysis_id: str,
-    surface_ids: Sequence[str],
-) -> tuple[dict[str, Any], str, str, list[tuple[str, str]], set[str]]:
-    """Collect once, freeze lineage, and separate earlier analysis activity."""
+) -> tuple[dict[str, Any], str, str, list[tuple[str, str]]]:
+    """Read a frozen source thread tree once and normalize every child run."""
 
     cutoff = dt.datetime.now(dt.timezone.utc).isoformat(timespec="microseconds")
     try:
-        rows, source_fingerprint = ledger.load_rows_with_fingerprint(request["session"])
-        raw_state_paths_by_call = _holistic_raw_state_paths_by_call(rows)
+        rows, source_fingerprint = collector.load_rows_with_fingerprint(request["session"])
         execution_context = _source_execution_context(rows)
-        path_roots = ledger.review_path_roots(rows)
-        collected = ledger.collect_session_evidence_from_rows(
+        path_roots = collector.review_path_roots(rows)
+        collected = collector.collect_session_evidence_from_rows(
             rows,
             session=request["session"],
             source_fingerprint=source_fingerprint,
@@ -2240,6 +1828,138 @@ def _collect_holistic_evidence(
     if collected.get("collection", {}).get("model_calls", 0) < 1:
         raise CreditAnalysisError("selected completed-run window has no model calls")
     collector_schema = collected.pop("schema", None)
+    descendants: list[dict[str, Any]] = []
+    included_descendants: list[dict[str, Any]] = []
+    unresolved_descendants: list[dict[str, Any]] = []
+    seen_sessions: set[str] = set()
+    instruction_chains = {
+        str(chain["cwd"]): chain
+        for chain in execution_context["instruction_chains"]
+    }
+    root_session = pathlib.Path(request["session"]).resolve()
+    root_session_id = _session_identity(rows, fallback=str(root_session))
+    try:
+        seen_sessions.add(collector.canonical_thread_id(root_session_id))
+    except (RuntimeError, ValueError):
+        pass
+    pending = _persistent_descendant_references(
+        rows,
+        parent_session_id=root_session_id,
+        lineage_depth=1,
+        completed_call_ids=_completed_tool_call_ids(collected),
+    )
+    pending_index = 0
+    while pending_index < len(pending):
+        descendant = pending[pending_index]
+        pending_index += 1
+        raw_session_id = str(descendant["session_id"])
+        try:
+            session_id = collector.canonical_thread_id(raw_session_id)
+        except (RuntimeError, ValueError) as exc:
+            invalid_key = f"invalid:{raw_session_id}"
+            if invalid_key in seen_sessions:
+                continue
+            seen_sessions.add(invalid_key)
+            unresolved_descendants.append(
+                {
+                    **descendant,
+                    "reason": "invalid-session-id",
+                    "detail": str(exc)[:500],
+                }
+            )
+            continue
+        if session_id in seen_sessions:
+            continue
+        seen_sessions.add(session_id)
+        descendant = {**descendant, "session_id": session_id}
+        try:
+            child_session = collector.resolve_thread_session(session_id).resolve(
+                strict=True
+            )
+            if child_session == root_session:
+                unresolved_descendants.append(
+                    {**descendant, "reason": "source-cycle"}
+                )
+                continue
+            child_rows, child_fingerprint = collector.load_rows_with_fingerprint(
+                child_session
+            )
+            retained_child_id = _session_identity(
+                child_rows,
+                fallback=session_id,
+            )
+            if collector.canonical_thread_id(retained_child_id) != session_id:
+                raise CreditAnalysisError(
+                    "descendant session metadata does not match its reference"
+                )
+            child_context = _source_execution_context(child_rows)
+            child_collected = collector.collect_session_evidence_from_rows(
+                child_rows,
+                session=child_session,
+                source_fingerprint=child_fingerprint,
+                last_runs=None,
+                completed_turn_ids=None,
+                pricing_profile=request["pricing"],
+            )
+        except (CreditAnalysisError, OSError, RuntimeError, ValueError) as exc:
+            unresolved_descendants.append(
+                {
+                    **descendant,
+                    "reason": "session-unavailable",
+                    "detail": str(exc)[:500],
+                }
+            )
+            continue
+        if child_collected.get("collection", {}).get("session_reads") != 1:
+            raise CreditAnalysisError(
+                "descendant session collector did not report exactly one read"
+            )
+        if child_collected.get("collection", {}).get("model_calls", 0) < 1:
+            unresolved_descendants.append(
+                {**descendant, "reason": "no-completed-model-calls"}
+            )
+            continue
+        pending.extend(
+            _persistent_descendant_references(
+                child_rows,
+                parent_session_id=session_id,
+                lineage_depth=int(descendant["lineage_depth"]) + 1,
+                completed_call_ids=_completed_tool_call_ids(child_collected),
+            )
+        )
+        child_collected.pop("schema", None)
+        namespaced, turn_ids = _namespace_descendant_evidence(
+            child_collected,
+            session_id=session_id,
+            parent_session_id=str(descendant["parent_session_id"]),
+            lineage_depth=int(descendant["lineage_depth"]),
+            source_cwd=str(child_context["primary_cwd"]),
+        )
+        descendants.append(namespaced)
+        path_roots.extend(collector.review_path_roots(child_rows))
+        for chain in child_context["instruction_chains"]:
+            cwd = str(chain["cwd"])
+            if cwd in instruction_chains and instruction_chains[cwd] != chain:
+                raise CreditAnalysisError(
+                    f"descendant instruction chain conflicts for cwd: {cwd}"
+                )
+            instruction_chains[cwd] = chain
+        for original_turn_id, namespaced_turn_id in turn_ids.items():
+            execution_context["run_cwds"][namespaced_turn_id] = child_context[
+                "run_cwds"
+            ].get(original_turn_id, child_context["primary_cwd"])
+        included_descendants.append(
+            {
+                **descendant,
+                "session": str(child_session),
+                "source_fingerprint": child_fingerprint,
+                "completed_runs": child_collected["collection"]["completed_runs"],
+            }
+        )
+    execution_context["instruction_chains"] = [
+        instruction_chains[key] for key in sorted(instruction_chains)
+    ]
+    collected = _merge_thread_evidence(collected, descendants)
     evidence: dict[str, Any] = {
         **collected,
         "schema": contract["evidence_schema"],
@@ -2254,33 +1974,36 @@ def _collect_holistic_evidence(
     }
     for run in evidence.get("runs", []):
         if isinstance(run, dict):
-            run["source_cwd"] = execution_context["run_cwds"].get(
-                str(run.get("turn_id")), execution_context["primary_cwd"]
+            run.setdefault(
+                "source_cwd",
+                execution_context["run_cwds"].get(
+                    str(run.get("turn_id")), execution_context["primary_cwd"]
+                ),
             )
-    prior_activity, analysis_call_ids = _holistic_prior_analysis_activity(
-        evidence,
-        current_analysis_id=analysis_id,
-        surface_ids=surface_ids,
-        text_limit=int(contract["chunking"]["compact_text_chars"]),
-        raw_state_paths_by_call=raw_state_paths_by_call,
-    )
-    evidence["analysis_generated_activity"] = prior_activity
     evidence["analysis_lineage"] = {
         "controller_analysis_id": analysis_id,
         "source_session": str(request["session"]),
-        "source_fingerprint": source_fingerprint,
+        "source_session_id": root_session_id,
+        "source_fingerprint": evidence["source_fingerprint"],
         "collection_cutoff_utc": cutoff,
-        "included_prior_analysis_ids": [item["analysis_id"] for item in prior_activity],
+        "lineage_source": "structured-tool-results",
+        "included_descendant_sessions": included_descendants,
+        "unresolved_descendant_sessions": unresolved_descendants,
+        "included_session_reads": evidence["collection"]["session_reads"],
         "excluded_own_descendant_task_ids": [],
         "source_selection_uses_prompt_markers": False,
         "execution_recollects_session": False,
-        "producer_and_analysis_work_are_separate": True,
     }
     fingerprint = _content_hash(evidence)
     evidence["evidence_fingerprint"] = fingerprint
     evidence_path = pathlib.Path(request["evidence_path"])
     _exclusive_json(evidence_path, evidence, "retained evidence")
-    return evidence, fingerprint, _file_hash(evidence_path), path_roots, analysis_call_ids
+    return (
+        evidence,
+        fingerprint,
+        _file_hash(evidence_path),
+        list(dict.fromkeys(path_roots)),
+    )
 
 
 def _holistic_compact_bundle(
@@ -2291,7 +2014,6 @@ def _holistic_compact_bundle(
     canonical_state: Mapping[str, Mapping[str, Any]],
     contract: Mapping[str, Any],
     surface_order: Sequence[str],
-    analysis_call_ids: set[str],
 ) -> dict[str, Any]:
     """Format every selected call once as compact, causally usable evidence."""
 
@@ -2330,7 +2052,7 @@ def _holistic_compact_bundle(
             {
                 "message_id": str(message["message_id"]),
                 "timestamp": message.get("timestamp"),
-                "text": _holistic_projection(
+                "text": _prepare_bounded_evidence(
                     message.get("text", ""),
                     limit=limit,
                     surface_ids=surfaces,
@@ -2357,7 +2079,7 @@ def _holistic_compact_bundle(
                     "kind": raw.get("kind"),
                     "name": raw.get("name"),
                     "timestamp": raw.get("timestamp"),
-                    "content": _holistic_projection(
+                    "content": _prepare_bounded_evidence(
                         content,
                         limit=limit,
                         surface_ids=surfaces,
@@ -2407,20 +2129,20 @@ def _holistic_compact_bundle(
                 "run_started_at": run.get("started_at"),
                 "model_call_index": call.get("index"),
                 "timestamp": call.get("timestamp"),
-                "workstream": (
-                    "analysis-overhead" if call_id in analysis_call_ids else "producer"
-                ),
+                "workstream": "producer",
                 "surface_lenses": surfaces,
                 "user_messages": messages,
                 "assistant_and_tool_evidence": review_records,
-                "actions": _holistic_projection(
+                "actions": _prepare_bounded_evidence(
                     call.get("actions", []), limit=limit, surface_ids=surfaces
                 ),
-                "semantic_actions": _holistic_projection(
+                "semantic_actions": _prepare_bounded_evidence(
                     call.get("semantic_actions", []), limit=limit, surface_ids=surfaces
                 ),
                 "tool_results": [
-                    _holistic_projection(item, limit=limit, surface_ids=surfaces)
+                    _prepare_bounded_evidence(
+                        item, limit=limit, surface_ids=surfaces
+                    )
                     for item in call.get("tool_results", [])
                 ],
                 "run_telemetry": {
@@ -2454,7 +2176,7 @@ def _holistic_compact_bundle(
             "kind": record.get("kind"),
             "source_bytes": record.get("source_bytes"),
             "source_sha256": record.get("source_sha256"),
-            "projection": _holistic_projection(
+            "projection": _prepare_bounded_evidence(
                 record.get("projection"),
                 limit=limit,
                 surface_ids=surface_order,
@@ -2472,7 +2194,6 @@ def _holistic_compact_bundle(
         "call_ids": [record["call_id"] for record in records],
         "records": records,
         "canonical_state": canonical_index,
-        "analysis_generated_activity": evidence["analysis_generated_activity"],
     }
 
 
@@ -2545,6 +2266,12 @@ def _holistic_luna_payload(
 ) -> dict[str, Any]:
     candidate_ids = [candidate for episode in episodes for candidate in episode["candidate_ids"]]
     record_ids = set(candidate_ids)
+    canonical_references = {
+        str(reference)
+        for episode in episodes
+        for call in episode.get("calls", [])
+        for reference in call.get("canonical_artifact_references", [])
+    }
     return {
         "schema": HOLISTIC_TASK_SCHEMA,
         "analysis_id": analysis_id,
@@ -2556,10 +2283,13 @@ def _holistic_luna_payload(
         "candidate_ids": candidate_ids,
         "candidate_ids_sha256": _content_hash(candidate_ids),
         "episodes": list(episodes),
-        "canonical_state": bundle["canonical_state"],
-        "analysis_generated_activity": bundle["analysis_generated_activity"],
+        "canonical_state": [
+            item
+            for item in bundle["canonical_state"]
+            if str(item.get("artifact_reference")) in canonical_references
+        ],
         "coverage_contract": {
-            "each_candidate_in_exactly_one_luna_packet": True,
+            "each_candidate_in_exactly_one_luna_run_part": True,
             "sparse_discovery_not_candidate_surface_classification": True,
         },
         "workstream_counts": dict(
@@ -2572,53 +2302,40 @@ def _holistic_luna_payload(
     }
 
 
-def _holistic_split_episode(
-    episode: Mapping[str, Any],
-    *,
-    analysis_id: str,
-    budget_bytes: int,
-    bundle: Mapping[str, Any],
-) -> list[dict[str, Any]]:
-    calls = list(episode["calls"])
-    fragments: list[list[Mapping[str, Any]]] = []
-    current: list[Mapping[str, Any]] = []
-    for call in calls:
-        proposed = [*current, call]
-        probe = {
-            **episode,
-            "candidate_ids": [str(item["candidate_id"]) for item in proposed],
-            "calls": proposed,
-        }
-        payload = _holistic_luna_payload(
-            analysis_id=analysis_id,
-            task_id="luna.discovery.0001",
-            ordinal=1,
-            episodes=[probe],
-            bundle=bundle,
-        )
-        if current and _json_bytes(payload) > budget_bytes:
-            fragments.append(current)
-            current = [call]
-        else:
-            current = proposed
-        # Keep the complete record as an indivisible window even when that one
-        # record is larger than Luna's proven input envelope. Planning records
-        # the exact capacity omission; it must not abort the remaining runs or
-        # truncate this record to manufacture apparent coverage.
-    if current:
-        fragments.append(current)
-    result: list[dict[str, Any]] = []
-    for index, group in enumerate(fragments, start=1):
-        result.append(
-            {
-                **episode,
-                "episode_fragment": index,
-                "episode_fragment_count": len(fragments),
-                "candidate_ids": [str(call["candidate_id"]) for call in group],
-                "calls": list(group),
-            }
-        )
-    return result
+def _holistic_capacity_record(
+    record: Mapping[str, Any], budget_bytes: int
+) -> dict[str, Any]:
+    """Reduce one oversized call record without detaching it from its run."""
+
+    identity_keys = (
+        "candidate_id",
+        "candidate_ordinal",
+        "call_id",
+        "turn_id",
+        "source_cwd",
+        "run_started_at",
+        "model_call_index",
+        "timestamp",
+        "workstream",
+        "surface_lenses",
+        "user_message_ids",
+        "high_signal_reasons",
+        "canonical_artifact_references",
+        "evidence_refs",
+    )
+    identity = {key: record.get(key) for key in identity_keys if key in record}
+    detail = {
+        key: value for key, value in record.items() if key not in identity
+    }
+    return {
+        **identity,
+        "capacity_reduced": True,
+        "capacity_projection": _prepare_bounded_evidence(
+            detail,
+            limit=max(600, min(4_000, budget_bytes // 8)),
+            surface_ids=record.get("surface_lenses", []),
+        ),
+    }
 
 
 def _holistic_partition(
@@ -2628,48 +2345,16 @@ def _holistic_partition(
     bundle: Mapping[str, Any],
     budget_bytes: int,
 ) -> list[list[dict[str, Any]]]:
-    """Create source-ordered run windows without mixing semantic runs."""
+    """Create source-ordered fitting run parts through the capacity owner."""
 
-    fragments: list[dict[str, Any]] = []
-    for episode in episodes:
-        probe = _holistic_luna_payload(
-            analysis_id=analysis_id,
-            task_id="luna.discovery.0001",
-            ordinal=1,
-            episodes=[episode],
-            bundle=bundle,
-        )
-        if _json_bytes(probe) <= budget_bytes:
-            fragments.append(dict(episode))
-        else:
-            fragments.extend(
-                _holistic_split_episode(
-                    episode,
-                    analysis_id=analysis_id,
-                    budget_bytes=budget_bytes,
-                    bundle=bundle,
-                )
-            )
-    counts = Counter(str(fragment["turn_id"]) for fragment in fragments)
-    seen: Counter[str] = Counter()
-    normalized: list[dict[str, Any]] = []
-    for fragment in fragments:
-        turn_id = str(fragment["turn_id"])
-        seen[turn_id] += 1
-        normalized.append(
-            {
-                **fragment,
-                "run_window_ordinal": seen[turn_id],
-                "run_window_count": counts[turn_id],
-            }
-        )
-    packets = [[fragment] for fragment in normalized]
-    if not packets:
-        raise CreditAnalysisError("holistic Luna plan is empty")
-    observed = [candidate for packet in packets for episode in packet for candidate in episode["candidate_ids"]]
-    if observed != bundle["candidate_ids"] or len(observed) != len(set(observed)):
-        raise CreditAnalysisError("holistic Luna run-window plan changed call coverage")
-    return packets
+    return partition_luna_inputs(
+        analysis_id=analysis_id,
+        episodes=episodes,
+        bundle=bundle,
+        budget_bytes=budget_bytes,
+        payload_builder=_holistic_luna_payload,
+        record_fitter=_holistic_capacity_record,
+    )
 
 
 def _validate_holistic_manifest(
@@ -2702,16 +2387,12 @@ def _validate_holistic_manifest(
         observed_membership = [list(task.get("candidate_ids", [])) for task in tasks]
         if observed_membership != expected_membership:
             raise CreditAnalysisError(
-                "holistic manifest packet boundaries do not match the frozen "
-                "run-window plan"
+                "holistic manifest run-part boundaries do not match the frozen "
+                "run-part plan"
             )
     luna_limit = int(contract["semantic_call_contract"]["luna_max_attempts"])
-    eligible_luna_tasks = [
-        task for task in tasks if not task.get("capacity_omitted", False)
-    ]
-    if manifest.get("projected_luna_calls") != min(
-        len(eligible_luna_tasks), luna_limit
-    ):
+    admitted_luna_ids = select_luna_tasks(tasks, maximum_attempts=luna_limit)
+    if manifest.get("projected_luna_calls") != len(admitted_luna_ids):
         raise CreditAnalysisError("projected Luna count is invalid")
     limits = contract["semantic_call_contract"]
     if (
@@ -2720,7 +2401,7 @@ def _validate_holistic_manifest(
     ):
         raise CreditAnalysisError("holistic Sol call range is invalid")
     if manifest.get("projected_semantic_calls") != min(
-        len(eligible_luna_tasks), luna_limit
+        len(admitted_luna_ids), luna_limit
     ) + limits["sol_target_calls"]:
         raise CreditAnalysisError("projected semantic count is invalid")
     if manifest.get("surface_order") not in (
@@ -2729,7 +2410,7 @@ def _validate_holistic_manifest(
     ):
         raise CreditAnalysisError("holistic manifest surface order is invalid")
     sol_tasks = manifest.get("sol_tasks")
-    if not isinstance(sol_tasks, list) or len(sol_tasks) != 6:
+    if not isinstance(sol_tasks, list) or len(sol_tasks) != 8:
         raise CreditAnalysisError("holistic Sol task slots are invalid")
     phases = [task.get("phase") for task in sol_tasks]
     if phases != [
@@ -2737,7 +2418,9 @@ def _validate_holistic_manifest(
         "sol-adjudication",
         "sol-adjudication",
         "sol-adjudication",
-        "sol-audit",
+        "sol-adjudication",
+        "sol-adjudication",
+        "sol-direct-evidence",
         "sol-final",
     ]:
         raise CreditAnalysisError("holistic Sol phase order is invalid")
@@ -2777,8 +2460,8 @@ def _holistic_public_status(state: Mapping[str, Any]) -> dict[str, Any]:
         "projected_sol_calls": manifest["projected_sol_calls"],
         "maximum_sol_calls": manifest["maximum_sol_calls"],
         "projected_semantic_calls": manifest["projected_semantic_calls"],
-        "shared_luna_packets": len(manifest["luna_tasks"]),
-        "shared_candidate_count": len(manifest["candidate_ids"]),
+        "planned_luna_parts": len(manifest["luna_tasks"]),
+        "candidate_count": len(manifest["candidate_ids"]),
         "actual_luna_calls": state["model_attempts"]["luna"],
         "actual_sol_calls": state["model_attempts"]["sol"],
         "accepted_luna_calls": state["model_calls"]["luna"],
@@ -2793,7 +2476,6 @@ def _holistic_public_status(state: Mapping[str, Any]) -> dict[str, Any]:
             ),
             None,
         ),
-        "included_prior_analysis_ids": state["lineage"]["included_prior_analysis_ids"],
         "omissions": list(state.get("omissions", [])),
     }
 
@@ -2813,22 +2495,21 @@ def command_plan_orchestration(
     contract = _load_contract()
     catalog = _codex_model_catalog() if available_models is None else available_models
     model_specs = _holistic_model_specs(contract, catalog)
-    ledger = _load_ledger()
+    collector = _load_evidence_collector()
     request = _validate_request(
         request_path,
         contract,
-        ledger,
+        collector,
         task_root_boundary=task_root_boundary,
     )
     surface_order = _surface_order_for_request(request, contract)
     analysis_id = secrets.token_hex(12)
-    evidence, fingerprint, evidence_sha, path_roots, analysis_call_ids = (
+    evidence, fingerprint, evidence_sha, path_roots = (
         _collect_holistic_evidence(
             request=request,
             contract=contract,
-            ledger=ledger,
+            collector=collector,
             analysis_id=analysis_id,
-            surface_ids=surface_order,
         )
     )
     orchestration_root = pathlib.Path(request["task_root"]) / "orchestration"
@@ -2840,7 +2521,7 @@ def command_plan_orchestration(
         evidence=evidence,
         path_roots=path_roots,
         orchestration_root=orchestration_root,
-        ledger=ledger,
+        collector=collector,
     )
     eligible_bundle = _holistic_compact_bundle(
         analysis_id=analysis_id,
@@ -2849,7 +2530,6 @@ def command_plan_orchestration(
         canonical_state=canonical_state,
         contract=contract,
         surface_order=surface_order,
-        analysis_call_ids=analysis_call_ids,
     )
     eligible_episodes = _holistic_episodes(eligible_bundle)
     bundle = eligible_bundle
@@ -2863,19 +2543,16 @@ def command_plan_orchestration(
     compact_path = orchestration_root / "compact-causal-evidence.json"
     _exclusive_json(compact_path, bundle, "compact causal evidence")
     limits = contract["semantic_call_contract"]
-    run_count = len(episodes)
     sol_variable_bytes = max(
         16_000,
         int(model_specs["sol"]["evidence_byte_budget"]) - 64_000,
     )
-    per_run_output_bytes = max(
-        4_000,
-        min(64_000, (int(limits["sol_adjudicator_target"]) * sol_variable_bytes) // run_count),
-    )
-    windows_per_run = Counter(str(packet[0]["turn_id"]) for packet in packets)
     instruction_chains = {
         str(chain["cwd"]): chain
         for chain in evidence["execution_context"]["instruction_chains"]
+    }
+    record_by_candidate = {
+        str(record["candidate_id"]): record for record in bundle["records"]
     }
     luna_tasks: list[dict[str, Any]] = []
     for ordinal, packet in enumerate(packets, start=1):
@@ -2892,7 +2569,6 @@ def command_plan_orchestration(
             model_specs["luna"]["evidence_byte_budget"]
         )
         turn_id = str(packet[0]["turn_id"])
-        output_byte_limit = max(2_000, per_run_output_bytes // windows_per_run[turn_id])
         artifacts = _task_artifact_paths(orchestration_root, task_id)
         input_path = pathlib.Path(artifacts["input"])
         _exclusive_json(input_path, payload, "Luna task input")
@@ -2915,22 +2591,29 @@ def command_plan_orchestration(
                 "candidate_ids_sha256": payload["candidate_ids_sha256"],
                 "input_sha256": _file_hash(input_path),
                 "input_bytes": input_bytes,
-                "output_byte_limit": output_byte_limit,
+                "evidence_bytes": _json_bytes(
+                    [record_by_candidate[item] for item in payload["candidate_ids"]]
+                ),
+                "output_byte_limit": None,
                 "capacity_omitted": capacity_omitted,
                 "artifacts": artifacts,
             }
         )
-    admissible_luna_tasks = [
-        task for task in luna_tasks if not task["capacity_omitted"]
-    ]
-    admitted_luna_ids = {
-        task["task_id"]
-        for task in admissible_luna_tasks[: int(limits["luna_max_attempts"])]
-    }
+    admitted_luna_ids = select_luna_tasks(
+        luna_tasks,
+        maximum_attempts=int(limits["luna_max_attempts"]),
+    )
+    output_byte_limit = luna_output_allowance(
+        admitted_tasks=len(admitted_luna_ids),
+        sol_reviewer_capacity_bytes=sol_variable_bytes,
+        maximum_reviewers=int(limits["sol_adjudicator_max"]),
+    )
+    for task in luna_tasks:
+        task["output_byte_limit"] = output_byte_limit
     luna_ids = [task["task_id"] for task in luna_tasks]
     primary_cwd = str(evidence["execution_context"]["primary_cwd"])
     sol_tasks: list[dict[str, Any]] = []
-    for ordinal in range(1, 5):
+    for ordinal in range(1, 7):
         task_id = f"sol.adjudication.{ordinal:04d}"
         sol_tasks.append(
             {
@@ -2946,11 +2629,11 @@ def command_plan_orchestration(
                 "artifacts": _task_artifact_paths(orchestration_root, task_id),
             }
         )
-    audit_id = "sol.audit"
+    audit_id = "sol.direct-evidence"
     sol_tasks.append(
         {
             "task_id": audit_id,
-            "phase": "sol-audit",
+            "phase": "sol-direct-evidence",
             "ordinal": 1,
             "dependencies": luna_ids,
             "execution_cwd": primary_cwd,
@@ -3042,12 +2725,15 @@ def command_plan_orchestration(
             "path": str(request["evidence_path"]),
             "fingerprint": fingerprint,
             "sha256": evidence_sha,
-            "session_reads": 1,
+            "session_reads": evidence["collection"]["session_reads"],
         },
         "manifest": {**manifest, "path": str(manifest_path), "sha256": _file_hash(manifest_path)},
         "immutable_artifacts": {
             "request": {"path": str(request["request_path"]), "sha256": request["request_hash"]},
-            "surface_contract": {"path": str(CONTRACT_PATH), "sha256": _file_hash(CONTRACT_PATH)},
+            "surface_contract": {
+                "path": str(CONTRACT_PATH),
+                "sha256": _file_hash(CONTRACT_PATH),
+            },
             "evidence": {"path": str(request["evidence_path"]), "sha256": evidence_sha},
             "manifest": {"path": str(manifest_path), "sha256": _file_hash(manifest_path)},
             "compact_evidence": manifest["compact_evidence"],
@@ -3086,7 +2772,7 @@ def command_plan_orchestration(
                 "candidate_ids": task["candidate_ids"],
                 "record_count": len(task["candidate_ids"]),
                 "candidate_count": len(task["candidate_ids"]),
-                "evidence_bytes": task["input_bytes"],
+                "evidence_bytes": task["evidence_bytes"],
                 "input_bytes": task["input_bytes"],
                 "output_bytes": 0,
             }
@@ -3224,7 +2910,7 @@ def _holistic_read_state(
             raise CreditAnalysisError("holistic task status is invalid")
         attempts = task_state["attempts"]
         if not isinstance(attempts, list):
-            raise CreditAnalysisError("holistic attempt ledger is invalid")
+            raise CreditAnalysisError("Luna/Sol attempt record is invalid")
         for attempt in attempts:
             if not isinstance(attempt, Mapping):
                 raise CreditAnalysisError("holistic attempt record is invalid")
@@ -3734,9 +3420,6 @@ def _validate_holistic_luna_result(
             for record in compact["canonical_state"]
             if isinstance((ref := record.get("evidence_ref")), str)
         )
-        allowed_refs.update(
-            item["evidence_ref"] for item in compact["analysis_generated_activity"]
-        )
         if not set(refs) <= allowed_refs:
             raise CreditAnalysisError(f"{label} cites evidence outside its Luna packet")
         # A causal hypothesis may cite an adjacent call from the same frozen
@@ -3949,43 +3632,6 @@ def _holistic_read_sol_aliases(
     return aliases
 
 
-def _pack_run_reports(
-    groups: Sequence[Mapping[str, Any]],
-    *,
-    bin_count: int,
-    capacity_bytes: int,
-    allow_omissions: bool,
-) -> tuple[list[list[dict[str, Any]]], list[dict[str, Any]]] | None:
-    """Best-fit complete run reports without splitting a run across Sol shards."""
-
-    bins: list[list[dict[str, Any]]] = [[] for _ in range(bin_count)]
-    loads = [0] * bin_count
-    omitted: list[dict[str, Any]] = []
-    ordered = sorted(
-        (dict(group) for group in groups),
-        key=lambda group: (-int(group["routing_bytes"]), int(group["run_ordinal"])),
-    )
-    for group in ordered:
-        size = int(group["routing_bytes"])
-        choices = [
-            index
-            for index in range(bin_count)
-            if loads[index] + size <= capacity_bytes
-        ]
-        if not choices:
-            if not allow_omissions:
-                return None
-            omitted.append(group)
-            continue
-        selected = min(choices, key=lambda index: (loads[index], index))
-        bins[selected].append(group)
-        loads[selected] += size
-    for group_bin in bins:
-        group_bin.sort(key=lambda group: int(group["run_ordinal"]))
-    omitted.sort(key=lambda group: int(group["run_ordinal"]))
-    return bins, omitted
-
-
 def _freeze_sol_routing(
     state: dict[str, Any], compact: Mapping[str, Any], contract: Mapping[str, Any]
 ) -> None:
@@ -3999,67 +3645,47 @@ def _freeze_sol_routing(
         str(record["candidate_id"]): record for record in compact["records"]
     }
     run_order = [str(episode["turn_id"]) for episode in _holistic_episodes(compact)]
+    run_ordinals = {
+        turn_id: ordinal for ordinal, turn_id in enumerate(run_order, start=1)
+    }
     groups: list[dict[str, Any]] = []
-    for run_ordinal, turn_id in enumerate(run_order, start=1):
-        run_tasks = [
-            task
-            for task in manifest["luna_tasks"]
-            if str(task["turn_id"]) == turn_id
-        ]
-        omitted_windows = [
-            task["task_id"]
-            for task in run_tasks
-            if state["execution"][task["task_id"]]["status"] == "omitted"
-        ]
-        if omitted_windows:
-            candidate_ids = [
-                candidate
-                for task in run_tasks
-                for candidate in task["candidate_ids"]
-            ]
-            completed_output_bytes = sum(
-                pathlib.Path(str(result["path"])).stat().st_size
-                for task in run_tasks
-                for result in [state["execution"][task["task_id"]]["result"]]
-                if isinstance(result, Mapping)
-            )
-            state["omissions"].append(
-                {
-                    "stage": "sol-routing",
-                    "reason": "incomplete-run-luna-coverage",
-                    "turn_id": turn_id,
-                    "task_ids": [task["task_id"] for task in run_tasks],
-                    "omitted_window_task_ids": omitted_windows,
-                    "candidate_ids": candidate_ids,
-                    "record_count": len(candidate_ids),
-                    "candidate_count": len(candidate_ids),
-                    "evidence_bytes": _json_bytes(
-                        [record_by_id[candidate] for candidate in candidate_ids]
-                    ),
-                    "output_bytes": completed_output_bytes,
-                }
-            )
+    for task in manifest["luna_tasks"]:
+        execution = state["execution"][task["task_id"]]
+        if execution["status"] == "omitted":
             continue
-        result_bytes = 0
-        for task in run_tasks:
-            result_record = state["execution"][task["task_id"]]["result"]
-            if not isinstance(result_record, Mapping):
-                raise CreditAnalysisError("Sol routing requires every retained Luna result")
-            result_bytes += pathlib.Path(str(result_record["path"])).stat().st_size
-        candidate_ids = [
-            candidate for task in run_tasks for candidate in task["candidate_ids"]
-        ]
-        evidence_bytes = _json_bytes([record_by_id[candidate] for candidate in candidate_ids])
+        result_record = execution["result"]
+        if not isinstance(result_record, Mapping):
+            raise CreditAnalysisError("Sol routing requires every retained Luna result")
+        result_bytes = pathlib.Path(str(result_record["path"])).stat().st_size
+        turn_id = str(task["turn_id"])
+        candidate_ids = list(task["candidate_ids"])
+        evidence_bytes = int(task.get("evidence_bytes") or 0)
+        inventory_bytes = _json_bytes(
+            [
+                [
+                    record_by_id[candidate]["candidate_id"],
+                    record_by_id[candidate]["call_id"],
+                    record_by_id[candidate]["workstream"],
+                    record_by_id[candidate]["surface_lenses"],
+                    record_by_id[candidate]["high_signal_reasons"],
+                    record_by_id[candidate]["volume"],
+                    record_by_id[candidate]["evidence_refs"][0],
+                ]
+                for candidate in candidate_ids
+            ]
+        )
         groups.append(
             {
                 "turn_id": turn_id,
-                "run_ordinal": run_ordinal,
-                "luna_task_ids": [task["task_id"] for task in run_tasks],
+                "run_ordinal": run_ordinals[turn_id],
+                "run_window_ordinal": int(task["run_window_ordinal"]),
+                "run_window_count": int(task["run_window_count"]),
+                "luna_task_ids": [task["task_id"]],
                 "candidate_ids": candidate_ids,
                 "call_ids": [record_by_id[candidate]["call_id"] for candidate in candidate_ids],
                 "luna_result_bytes": result_bytes,
                 "evidence_bytes": evidence_bytes,
-                "routing_bytes": result_bytes + evidence_bytes,
+                "routing_bytes": result_bytes + inventory_bytes + 1_000,
             }
         )
     rule_handoff_bytes = _json_bytes(
@@ -4077,30 +3703,25 @@ def _freeze_sol_routing(
         - rule_handoff_bytes,
     )
     limits = contract["semantic_call_contract"]
-    packed = _pack_run_reports(
+    packed = pack_report_groups(
         groups,
-        bin_count=int(limits["sol_adjudicator_target"]),
+        bin_count=int(limits["sol_adjudicator_max"]),
         capacity_bytes=capacity,
-        allow_omissions=False,
+        allow_omissions=True,
     )
-    adjudicator_count = int(limits["sol_adjudicator_target"])
-    if packed is None:
-        adjudicator_count = int(limits["sol_adjudicator_max"])
-        packed = _pack_run_reports(
-            groups,
-            bin_count=adjudicator_count,
-            capacity_bytes=capacity,
-            allow_omissions=True,
-        )
     if packed is None:
         raise CreditAnalysisError("could not create bounded Sol routing")
     bins, omitted_groups = packed
+    bins = [group_bin for group_bin in bins if group_bin]
+    adjudicator_count = len(bins)
     for group in omitted_groups:
         state["omissions"].append(
             {
                 "stage": "sol-routing",
                 "reason": "sol-capacity",
                 "turn_id": group["turn_id"],
+                "run_window_ordinal": group["run_window_ordinal"],
+                "run_window_count": group["run_window_count"],
                 "candidate_ids": group["candidate_ids"],
                 "call_ids": group["call_ids"],
                 "task_ids": group["luna_task_ids"],
@@ -4154,13 +3775,6 @@ def _freeze_sol_routing(
             state["execution"][sol_task["task_id"]]["status"] = "skipped"
         _holistic_save_state(state)
         return
-    largest_run = max(
-        retained_run_order,
-        key=lambda turn_id: (
-            _json_bytes(records_by_run[turn_id]),
-            -run_order.index(turn_id),
-        ),
-    )
     retained_window_tasks = [
         task_by_id[task_id]
         for group_bin in bins
@@ -4171,65 +3785,41 @@ def _freeze_sol_routing(
     def window_records(window: Mapping[str, Any]) -> list[Mapping[str, Any]]:
         return [record_by_id[item] for item in window["candidate_ids"]]
 
-    largest_windows = [
-        task
-        for task in retained_window_tasks
-        if str(task["turn_id"]) == largest_run
-    ]
-    largest_window = max(
-        largest_windows,
-        key=lambda window: (
+    partial_turn_ids = {
+        str(omission.get("turn_id"))
+        for omission in state.get("omissions", [])
+        if isinstance(omission, Mapping)
+        and omission.get("stage") == "luna"
+        and omission.get("turn_id") is not None
+    }
+    correction_reasons = {
+        "failure-timeout-or-termination-telemetry",
+        "correction-retry-or-temporary-control",
+    }
+
+    def direct_evidence_rank(window: Mapping[str, Any]) -> tuple[Any, ...]:
+        records = window_records(window)
+        return (
+            int(str(window["turn_id"]) in partial_turn_ids),
             sum(
-                record["candidate_id"] not in surfaced
-                for record in window_records(window)
+                any(reason in correction_reasons for reason in record.get("high_signal_reasons", []))
+                for record in records
             ),
-            _json_bytes(window_records(window)),
-            -int(window["run_window_ordinal"]),
-        ),
-    )
-    alternate_windows = [
-        task
-        for task in retained_window_tasks
-        if task["task_id"] != largest_window["task_id"]
-    ]
-    highest_signal_window = max(
-        alternate_windows or [largest_window],
-        key=lambda window: (
-            sum(
-                bool(record.get("high_signal_reasons"))
-                and record["candidate_id"] not in surfaced
-                for record in window_records(window)
-            ),
-            sum(
-                len(record.get("high_signal_reasons", []))
-                for record in window_records(window)
-            ),
-            _json_bytes(window_records(window)),
+            sum(len(record.get("high_signal_reasons", [])) for record in records),
+            sum(record["candidate_id"] not in surfaced for record in records),
+            _json_bytes(records),
             -int(window["ordinal"]),
-        ),
+        )
+
+    retry_reserve = int(limits["sol_max_validation_retries_per_task"])
+    direct_evidence_fits_call_budget = (
+        adjudicator_count + 1 + retry_reserve + 1
+        <= int(limits["sol_max_calls"])
     )
-    preferred_audit_windows = [
-        largest_window,
-        highest_signal_window,
-        *sorted(
-            retained_window_tasks,
-            key=lambda window: (
-                -sum(
-                    bool(record.get("high_signal_reasons"))
-                    and record["candidate_id"] not in surfaced
-                    for record in window_records(window)
-                ),
-                -sum(
-                    record["candidate_id"] not in surfaced
-                    for record in window_records(window)
-                ),
-                _json_bytes(window_records(window)),
-                int(window["ordinal"]),
-            ),
-        ),
-    ]
-    preferred_audit_windows = list(
-        {window["task_id"]: window for window in preferred_audit_windows}.values()
+    preferred_audit_windows = (
+        [max(retained_window_tasks, key=direct_evidence_rank)]
+        if direct_evidence_fits_call_budget
+        else []
     )
 
     def audit_identity(window: Mapping[str, Any]) -> dict[str, Any]:
@@ -4248,7 +3838,7 @@ def _freeze_sol_routing(
     audit_windows: list[dict[str, Any]] = []
     audit_budget = int(state["model_specs"]["sol"]["evidence_byte_budget"])
     for window in preferred_audit_windows:
-        if len(audit_windows) == 2:
+        if len(audit_windows) == 1:
             break
         identity = audit_identity(window)
         proposed = sorted(
@@ -4261,7 +3851,7 @@ def _freeze_sol_routing(
             for candidate_id in item["candidate_ids"]
         ]
         probe_task = {
-            "task_id": "sol.audit",
+            "task_id": "sol.direct-evidence",
             "candidate_ids": proposed_ids,
             "audit_windows": proposed,
         }
@@ -4276,8 +3866,8 @@ def _freeze_sol_routing(
             continue
         state["omissions"].append(
             {
-                "stage": "sol-audit",
-                "reason": "audit-window-capacity",
+                "stage": "sol-direct-evidence",
+                "reason": "direct-evidence-capacity",
                 "task_id": window["task_id"],
                 "turn_id": window["turn_id"],
                 "run_window_ordinal": window["run_window_ordinal"],
@@ -4302,7 +3892,9 @@ def _freeze_sol_routing(
         shard_records.append(
             {
                 "task_id": f"sol.adjudication.{index:04d}",
-                "turn_ids": [group["turn_id"] for group in group_bin],
+                "turn_ids": list(
+                    dict.fromkeys(group["turn_id"] for group in group_bin)
+                ),
                 "luna_task_ids": task_ids,
                 "luna_candidate_ids": [
                     candidate["id"]
@@ -4334,10 +3926,10 @@ def _freeze_sol_routing(
         "sha256": _file_hash(routing_path),
         "content_hash": _content_hash(routing_value),
     }
-    if adjudicator_count == 3:
-        state["execution"]["sol.adjudication.0004"]["status"] = "skipped"
+    for ordinal in range(adjudicator_count + 1, 7):
+        state["execution"][f"sol.adjudication.{ordinal:04d}"]["status"] = "skipped"
     if not audit_windows:
-        state["execution"]["sol.audit"]["status"] = "skipped"
+        state["execution"]["sol.direct-evidence"]["status"] = "skipped"
     _holistic_save_state(state)
 
 
@@ -4346,6 +3938,18 @@ def _routing_value(state: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(routing, Mapping):
         raise CreditAnalysisError("Sol routing is not frozen")
     return _read_json(pathlib.Path(str(routing["path"])), "Sol routing manifest")
+
+
+def _completed_routing_shards(
+    state: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Return only shards whose Sol reviewer produced an accepted result."""
+
+    return [
+        dict(shard)
+        for shard in _routing_value(state)["shards"]
+        if state["execution"][shard["task_id"]]["status"] == "complete"
+    ]
 
 
 def _namespaced_adjudication_result(
@@ -4406,7 +4010,7 @@ def _holistic_runtime_task(
         if shard is None:
             raise CreditAnalysisError(f"Sol shard is not routed: {task['task_id']}")
         result.update(shard)
-    elif task["phase"] == "sol-audit":
+    elif task["phase"] == "sol-direct-evidence":
         routing = _routing_value(state)
         candidate_ids = list(routing["audit_candidate_ids"])
         result.update(
@@ -4422,7 +4026,7 @@ def _holistic_runtime_task(
 def _routed_call_ids(state: Mapping[str, Any]) -> list[str]:
     routed = {
         call_id
-        for shard in _routing_value(state)["shards"]
+        for shard in _completed_routing_shards(state)
         for call_id in shard["call_ids"]
     }
     return [
@@ -4483,7 +4087,7 @@ def _deep_review_findings(
 
 def _holistic_sol_input(
     *,
-    state: Mapping[str, Any],
+    state: dict[str, Any],
     evidence: Mapping[str, Any],
     contract: Mapping[str, Any],
     compact: Mapping[str, Any],
@@ -4512,7 +4116,7 @@ def _holistic_sol_input(
     elif task["phase"] == "sol-final":
         routed_luna_task_ids = {
             task_id
-            for shard in _routing_value(state)["shards"]
+            for shard in _completed_routing_shards(state)
             for task_id in shard["luna_task_ids"]
         }
         luna_results = [
@@ -4533,25 +4137,27 @@ def _holistic_sol_input(
             "candidate_ids": [record["candidate_id"] for record in routed_records],
             "call_ids": routed_call_ids,
         }
-        for shard_task in state["manifest"]["sol_tasks"][:4]:
+        for shard_task in state["manifest"]["sol_tasks"][:6]:
             execution = state["execution"][shard_task["task_id"]]
-            if execution["status"] == "skipped":
+            if execution["status"] in {"skipped", "omitted"}:
                 continue
             result_record = execution["result"]
             if not isinstance(result_record, Mapping):
                 raise CreditAnalysisError("final Sol requires every routed adjudication")
             adjudication_results.append(
-                _namespaced_adjudication_result(
-                    _read_json(
-                        pathlib.Path(str(result_record["path"])),
-                        "Sol shard result",
-                    ),
-                    str(shard_task["task_id"]),
+                _compact_final_adjudication_result(
+                    _namespaced_adjudication_result(
+                        _read_json(
+                            pathlib.Path(str(result_record["path"])),
+                            "Sol shard result",
+                        ),
+                        str(shard_task["task_id"]),
+                    )
                 )
             )
-        audit_execution = state["execution"]["sol.audit"]
+        audit_execution = state["execution"]["sol.direct-evidence"]
         audit_record = audit_execution["result"]
-        if audit_execution["status"] != "skipped":
+        if audit_execution["status"] not in {"skipped", "omitted"}:
             if not isinstance(audit_record, Mapping):
                 raise CreditAnalysisError("final Sol requires the audit result")
             audit_result = _read_json(
@@ -4596,52 +4202,24 @@ def _holistic_sol_input(
     for result in luna_results:
         for candidate in result["candidates"]:
             candidates.append({**candidate, "source_task_id": result["task_id"]})
-    record_index = {record["candidate_id"]: record for record in compact["records"]}
-    per_candidate_limit = int(contract["chunking"]["sol_evidence_chars_per_candidate"])
-    candidate_evidence = [
-        {
-            "luna_candidate_id": candidate["id"],
-            "candidate_ids": candidate["candidate_ids"],
-            "original_evidence": _holistic_projection(
-                [record_index[candidate_id] for candidate_id in candidate["candidate_ids"]],
-                limit=per_candidate_limit,
-                surface_ids=candidate["surface_ids"],
-            ),
-        }
-        for candidate in candidates
-    ]
-    surfaced_ids = {
-        candidate_id for candidate in candidates for candidate_id in candidate["candidate_ids"]
-    }
-    high_signal = [
-        {
-            "candidate_id": record["candidate_id"],
-            "call_id": record["call_id"],
-            "workstream": record["workstream"],
-            "surface_lenses": record["surface_lenses"],
-            "reasons": record["high_signal_reasons"],
-            "evidence_refs": record["evidence_refs"],
-            "evidence": _holistic_projection(
-                record,
-                limit=min(1_500, per_candidate_limit),
-                surface_ids=record["surface_lenses"],
-            ),
-        }
-        for record in compact["records"]
-        if record["high_signal_reasons"] and record["candidate_id"] not in surfaced_ids
-    ]
-    inventory = [
-        [
-            record["candidate_id"],
-            record["call_id"],
-            record["workstream"],
-            record["surface_lenses"],
-            record["high_signal_reasons"],
-            record["volume"],
-            record["evidence_refs"][0],
+    candidate_evidence: list[dict[str, Any]] = []
+    high_signal: list[dict[str, Any]] = []
+    inventory = (
+        _compact_final_call_inventory(compact["records"])
+        if task["phase"] == "sol-final"
+        else [
+            [
+                record["candidate_id"],
+                record["call_id"],
+                record["workstream"],
+                record["surface_lenses"],
+                record["high_signal_reasons"],
+                record["volume"],
+                record["evidence_refs"][0],
+            ]
+            for record in compact["records"]
         ]
-        for record in compact["records"]
-    ]
+    )
     canonical_payload = {
         "schema": HOLISTIC_TASK_SCHEMA,
         "analysis_id": state["analysis_id"],
@@ -4650,10 +4228,14 @@ def _holistic_sol_input(
         "surface_order": state["manifest"]["surface_order"],
         "execution_rule_context": _execution_rule_handoff(state, task),
         "analysis_policy": compact["analysis_policy"],
-        "surface_contracts": {
-            surface: _surface_reference_text(surface, contract)
-            for surface in state["manifest"]["surface_order"]
-        },
+        "surface_contracts": (
+            {
+                surface: _surface_reference_text(surface, contract)
+                for surface in state["manifest"]["surface_order"]
+            }
+            if task["phase"] == "sol-adjudication"
+            else {}
+        ),
         "luna_results": (
             luna_results if task["phase"] == "sol-adjudication" else []
         ),
@@ -4676,12 +4258,7 @@ def _holistic_sol_input(
             ],
             "rows": inventory,
         },
-        "analysis_generated_activity": compact["analysis_generated_activity"],
-        "canonical_state": (
-            compact["canonical_state"]
-            if task["phase"] == "sol-adjudication"
-            else []
-        ),
+        "canonical_state": [],
         "deterministic_totals": evidence["totals"],
         "pricing": evidence["pricing"],
         "helper_categories": contract["helper_categories"],
@@ -4691,7 +4268,7 @@ def _holistic_sol_input(
         "maximum_unassessed_fraction": contract["coverage"]["maximum_unassessed_fraction"],
         "prior_adjudication_results": adjudication_results,
         "audit_result": audit_result,
-        "deep_review_evidence": deep_review_evidence,
+        "deep_review_evidence": [],
         "final_contract": {
             "preserve_prior_candidate_decisions": task["phase"] == "sol-final",
             "deep_verify_only_supplied_top_findings": task["phase"] == "sol-final",
@@ -4705,49 +4282,29 @@ def _holistic_sol_input(
         compact=compact,
     )
     canonical_to_alias, _ = _holistic_alias_lookups(aliases)
-    payload = _holistic_alias_value(canonical_payload, canonical_to_alias)
     budget_bytes = int(state["model_specs"]["sol"]["evidence_byte_budget"])
-    if _json_bytes(payload) > budget_bytes:
-        payload["unsurfaced_high_signal_evidence"] = _holistic_alias_value(
-            [
-                {
-                    key: item[key]
-                    for key in (
-                        "candidate_id",
-                        "call_id",
-                        "workstream",
-                        "surface_lenses",
-                        "reasons",
-                        "evidence_refs",
-                    )
-                }
-                for item in high_signal
-            ],
-            canonical_to_alias,
+    if task["phase"] == "sol-final":
+        selected_evidence, capacity_omissions = _fit_final_supplemental_evidence(
+            base_payload=canonical_payload,
+            evidence_groups=deep_review_evidence,
+            byte_budget=budget_bytes,
+            transform=lambda value: _holistic_alias_value(value, canonical_to_alias),
         )
-    if _json_bytes(payload) > budget_bytes:
-        payload["candidate_original_evidence"] = _holistic_alias_value(
-            [
-                {
-                    "luna_candidate_id": item["luna_candidate_id"],
-                    "candidate_ids": item["candidate_ids"],
-                    "original_evidence": _holistic_projection(
-                        [
-                            record_index[candidate_id]
-                            for candidate_id in item["candidate_ids"]
-                        ],
-                        limit=1_500,
-                        surface_ids=next(
-                            candidate["surface_ids"]
-                            for candidate in candidates
-                            if candidate["id"] == item["luna_candidate_id"]
-                        ),
-                    ),
-                }
-                for item in candidate_evidence
-            ],
-            canonical_to_alias,
-        )
+        canonical_payload = {
+            **canonical_payload,
+            "deep_review_evidence": selected_evidence,
+        }
+        state["omissions"] = [
+            omission
+            for omission in state["omissions"]
+            if not (
+                isinstance(omission, Mapping)
+                and omission.get("stage") == "sol-final"
+                and omission.get("reason") == "deep-review-capacity"
+            )
+        ]
+        state["omissions"].extend(capacity_omissions)
+    payload = _holistic_alias_value(canonical_payload, canonical_to_alias)
     if _json_bytes(payload) > budget_bytes:
         raise CreditAnalysisError(
             f"{task['phase']} packet exceeds the dynamic byte budget"
@@ -4809,7 +4366,7 @@ def _holistic_audit_input(
     )
     return {
         **payload,
-        "phase": "sol-audit",
+        "phase": "sol-direct-evidence",
         "window_identities": observed_windows,
         "execution_rule_context": _execution_rule_handoff(state, task),
         "audit_contract": {
@@ -4822,7 +4379,7 @@ def _holistic_audit_input(
 
 
 def _holistic_prepare_task(
-    state: Mapping[str, Any],
+    state: dict[str, Any],
     evidence: Mapping[str, Any],
     contract: Mapping[str, Any],
     compact: Mapping[str, Any],
@@ -4836,7 +4393,7 @@ def _holistic_prepare_task(
             raise CreditAnalysisError("Luna input changed")
         luna_candidate_ids: list[str] = []
         alias_record: dict[str, Any] | None = None
-    elif task["phase"] == "sol-audit":
+    elif task["phase"] == "sol-direct-evidence":
         payload = _holistic_audit_input(
             state=state,
             compact=compact,
@@ -4880,7 +4437,7 @@ def _holistic_prepare_task(
             else None
         )
         luna_contract_valid = (
-            task["phase"] in {"luna-discovery", "sol-audit"}
+            task["phase"] in {"luna-discovery", "sol-direct-evidence"}
             and isinstance(input_identity, Mapping)
             and input_identity.get("const") == digest
         )
@@ -4894,7 +4451,7 @@ def _holistic_prepare_task(
         ):
             raise CreditAnalysisError("frozen model prompt/schema identity changed")
     else:
-        if task["phase"] in {"luna-discovery", "sol-audit"}:
+        if task["phase"] in {"luna-discovery", "sol-direct-evidence"}:
             schema = _holistic_luna_schema(
                 state=state,
                 task=task,
@@ -4942,7 +4499,7 @@ def _holistic_prompt_prefix(
         {
             "controller_analysis_id": state["analysis_id"],
             "task_id": task["task_id"],
-            "ephemeral_child": task["phase"] == "luna-discovery",
+            "ephemeral_child": False,
             "execution_cwd": str(task["execution_cwd"]),
             "instruction_chain_sha256": str(task["instruction_chain_sha256"]),
             "source_cutoff_precedes_this_child": True,
@@ -4978,18 +4535,19 @@ within the controller-supplied {int(task['output_byte_limit'])}-byte result
 target; concise hypotheses are sufficient and genuine candidates must not be
 silently dropped.
 """
-    elif task["phase"] == "sol-audit":
+    elif task["phase"] == "sol-direct-evidence":
         instructions = """
-Act as an independent miss-audit tier. Inspect only the supplied raw windows,
-without using Luna reports. Emit only material candidates Luna may have missed,
+Act as an independent direct-evidence tier. Inspect only the supplied prepared
+run part, without using Luna reports. Emit only material candidates Luna may have missed,
 using the same candidate schema and exact evidence rules as Luna discovery.
 Do not classify calls, calculate savings, or synthesize the final report.
 """
     elif task["phase"] == "sol-adjudication":
         instructions = f"""
-Act as one independent adjudication shard. Adjudicate every routed Luna
-candidate exactly once ({len(luna_candidate_ids)} total) against its original
-evidence excerpt. Review every supplied surface section in its fixed order,
+Act as one independent Luna-report reviewer. Review every routed Luna candidate
+exactly once ({len(luna_candidate_ids)} total) from its hypothesis and embedded
+evidence references. Do not independently re-read the source evidence. Review
+every supplied surface section in its fixed order,
 merge overlapping findings once by owning producer/control, and preserve every
 confirmed finding. Perform the mandatory temporary-control review for every
 temporary-control candidate, using exactly one allowed disposition; transient
@@ -5011,12 +4569,11 @@ without confirmed waste. `unassessed` is only for a decision-blocking evidence
 gap and must stay within the supplied cap. Let explicit avoidable call
 classifications govern model-call finding membership and observed counts; an
 unimplemented finding may include already-implemented calls when at least one
-affected call remains unimplemented. Before labeling a durable control missing,
-check the frozen current canonical state for the relevant instruction, skill,
-automation, or helper contract. If that state proves the safeguard already
-exists, preserve `implementation_status` as `implemented` and describe violating
-behavior as a compliance or runtime gap; do not propose a duplicate control. Do
-not perform broad rediscovery that duplicates Luna. Return only the semantic
+affected call remains unimplemented. Use Luna's supplied canonical-status
+evidence before labeling a durable control missing. When it shows the safeguard
+already exists, preserve `implementation_status` as `implemented` and describe
+violating behavior as a compliance or runtime gap; do not propose a duplicate
+control. Do not perform broad rediscovery that duplicates Luna. Return only the semantic
 fields in the schema: do not restate identity, surface summaries, workstreams,
 observed counts, recurrence arithmetic, or an analysis summary. Keep rationales
 compact and do not repeat evidence text already addressed by an evidence alias.
@@ -5028,7 +4585,7 @@ classification.
         instructions = f"""
 Act as the final synthesis tier. Preserve every prior shard candidate decision,
 confirmed finding, risk, temporary-control review, helper-category review, and
-call classification. Adjudicate only the separate audit candidates. Merge true
+call classification. Adjudicate only the separate direct-evidence candidates. Merge true
 duplicates by likely owning producer and durable control without dropping a
 material variant. Deep-verify only the supplied owner-deduplicated top-three
 findings against their raw evidence; do not re-adjudicate all Luna candidates.
@@ -5565,7 +5122,7 @@ def _validate_holistic_sol_result(
         and candidate["id"] in set(all_luna_candidate_ids)
     ]
     if task["phase"] == "sol-final":
-        audit_record = state["execution"]["sol.audit"]["result"]
+        audit_record = state["execution"]["sol.direct-evidence"]["result"]
         if isinstance(audit_record, Mapping):
             audit = _read_json(pathlib.Path(str(audit_record["path"])), "Sol audit result")
             temporary_candidate_ids.extend(
@@ -5684,33 +5241,6 @@ def _validate_holistic_sol_result(
         raise CreditAnalysisError(
             "temporary-control review coverage is missing"
         )
-    nonfinding_temporary_sources = {
-        candidate_id
-        for review in review_by_id.values()
-        if review["finding_id"] is None
-        for candidate_id in review["source_luna_candidate_ids"]
-    }
-    for decision in decisions:
-        if (
-            decision["luna_candidate_id"] in nonfinding_temporary_sources
-            and decision["disposition"] == "confirmed-finding"
-        ):
-            implemented_finding_ids = [
-                finding_id
-                for finding_id in decision["finding_ids"]
-                if finding_by_id[finding_id]["implementation_status"]
-                == "implemented"
-            ]
-            if implemented_finding_ids:
-                decision["finding_ids"] = implemented_finding_ids
-            else:
-                decision["disposition"] = "dismissed-candidate"
-                decision["finding_ids"] = []
-                decision["risk_ids"] = []
-                decision["reason"] = (
-                    "The mandatory temporary-control disposition records no "
-                    "missing durable control."
-                )
     referenced_findings = {
         finding_id for decision in decisions for finding_id in decision["finding_ids"]
     }
@@ -5814,9 +5344,9 @@ def _validate_holistic_sol_result(
         raise CreditAnalysisError("analysis summary is empty")
     if task["phase"] == "sol-final":
         prior_results = []
-        for shard_task in state["manifest"]["sol_tasks"][:4]:
+        for shard_task in state["manifest"]["sol_tasks"][:6]:
             shard_execution = state["execution"][shard_task["task_id"]]
-            if shard_execution["status"] == "skipped":
+            if shard_execution["status"] in {"skipped", "omitted"}:
                 continue
             shard_record = shard_execution["result"]
             if isinstance(shard_record, Mapping):
@@ -6034,7 +5564,7 @@ def _holistic_restore_sol_transport(
         for candidate in result["candidates"]
     }
     if task["phase"] == "sol-final":
-        audit_record = state["execution"]["sol.audit"]["result"]
+        audit_record = state["execution"]["sol.direct-evidence"]["result"]
         if isinstance(audit_record, Mapping):
             audit = _read_json(pathlib.Path(str(audit_record["path"])), "Sol audit result")
             for index, candidate in enumerate(audit.get("candidates", []), start=1):
@@ -6263,7 +5793,7 @@ def _validate_holistic_task_result(
     compact: Mapping[str, Any],
     luna_candidate_ids: Sequence[str],
 ) -> dict[str, Any]:
-    if task["phase"] in {"luna-discovery", "sol-audit"}:
+    if task["phase"] in {"luna-discovery", "sol-direct-evidence"}:
         return _validate_holistic_luna_result(
             raw,
             state=state,
@@ -6301,7 +5831,7 @@ def _holistic_role(task: Mapping[str, Any]) -> str:
 
 
 def _holistic_sync_child_lineage(state: dict[str, Any]) -> None:
-    """Rebuild exact child-attempt lineage from the durable attempt ledger."""
+    """Rebuild exact child-attempt lineage from durable attempt records."""
 
     lineage: list[dict[str, Any]] = []
     for task_id in state["task_order"]:
@@ -6517,7 +6047,7 @@ def _holistic_unrecorded_attempt(
             "runner": runner,
             "model": model_spec["model"],
             "reasoning_effort": model_spec["reasoning_effort"],
-            "ephemeral": task["phase"] == "luna-discovery",
+            "ephemeral": False,
             "execution_cwd": str(task["execution_cwd"]),
             "model_invoked": True,
             "exit_code": 0,
@@ -6569,23 +6099,36 @@ def _holistic_final(
     discovery_kinds = Counter(
         candidate["kind"] for result in luna_results for candidate in result["candidates"]
     )
-    routing = _routing_value(state)
+    reviewed_shards = _completed_routing_shards(state)
     analyzed_turn_ids = [
         turn_id
-        for shard in routing["shards"]
+        for shard in reviewed_shards
         for turn_id in shard["turn_ids"]
     ]
     analyzed_call_ids = {
-        call_id for shard in routing["shards"] for call_id in shard["call_ids"]
+        call_id for shard in reviewed_shards for call_id in shard["call_ids"]
     }
     reviewed_luna_task_ids = {
         task_id
-        for shard in routing["shards"]
+        for shard in reviewed_shards
         for task_id in shard["luna_task_ids"]
     }
     luna_task_by_id = {
         task["task_id"]: task for task in state["manifest"]["luna_tasks"]
     }
+    final_input_path = pathlib.Path(
+        str(state["manifest"]["sol_tasks"][-1]["artifacts"]["input"])
+    )
+    deep_review_finding_ids = (
+        [
+            str(item["finding_id"])
+            for item in _read_json(final_input_path, "final Sol input")[
+                "deep_review_evidence"
+            ]
+        ]
+        if final_input_path.is_file() and not final_input_path.is_symlink()
+        else []
+    )
 
     def accepted_output_bytes(task_id: str) -> int:
         result = state["execution"][task_id]["result"]
@@ -6608,7 +6151,11 @@ def _holistic_final(
         return 0
 
     episode_bytes = {
-        str(episode["turn_id"]): _json_bytes(episode)
+        str(episode["turn_id"]): sum(
+            int(task["evidence_bytes"])
+            for task in luna_task_by_id.values()
+            if str(task["turn_id"]) == str(episode["turn_id"])
+        )
         for episode in _holistic_episodes(compact)
     }
     classification_by_call = {
@@ -6671,7 +6218,7 @@ def _holistic_final(
                 },
             }
         )
-    window_accounting = [
+    part_accounting = [
         {
             "turn_id": str(task["turn_id"]),
             "run_window_ordinal": int(task["run_window_ordinal"]),
@@ -6680,9 +6227,7 @@ def _holistic_final(
             "input_bytes": int(task["input_bytes"]),
             "output_byte_limit": int(task["output_byte_limit"]),
             "actual_output_bytes": observed_output_bytes(task_id),
-            "status": (
-                "reviewed" if task_id in reviewed_luna_task_ids else "omitted"
-            ),
+            "status": "reviewed" if task_id in reviewed_luna_task_ids else "unreviewed",
         }
         for task_id, task in luna_task_by_id.items()
     ]
@@ -6713,8 +6258,8 @@ def _holistic_final(
             "projected_sol_calls": state["manifest"]["projected_sol_calls"],
             "maximum_sol_calls": state["manifest"]["maximum_sol_calls"],
             "projected_semantic_calls": state["manifest"]["projected_semantic_calls"],
-            "shared_luna_packets": len(state["manifest"]["luna_tasks"]),
-            "shared_candidate_count": len(state["manifest"]["candidate_ids"]),
+            "planned_luna_parts": len(state["manifest"]["luna_tasks"]),
+            "candidate_count": len(state["manifest"]["candidate_ids"]),
             "candidate_coverage_sha256": state["manifest"]["candidate_ids_sha256"],
             "unclassified_calls": len(state["manifest"]["call_ids"])
             - len(analyzed_call_ids),
@@ -6734,10 +6279,7 @@ def _holistic_final(
         "surface_summaries": sol["surface_summaries"],
         "candidate_decisions": sol["candidate_decisions"],
         "confirmed_findings": findings,
-        "deep_review_finding_ids": [
-            str(finding["id"])
-            for finding in _deep_review_findings(findings, compact)
-        ],
+        "deep_review_finding_ids": deep_review_finding_ids,
         "plausible_risks": sol["plausible_risks"],
         "temporary_control_reviews": sol["temporary_control_reviews"],
         "temporary_control_merges": sol["temporary_control_merges"],
@@ -6774,24 +6316,32 @@ def _holistic_final(
         "coverage": {
             "eligible_runs": len(episode_bytes),
             "analyzed_runs": len(set(analyzed_turn_ids)),
+            "fully_analyzed_runs": sum(
+                item["review_status"] == "reviewed" for item in run_accounting
+            ),
+            "partially_analyzed_runs": sum(
+                item["review_status"] == "partially reviewed"
+                for item in run_accounting
+            ),
             "omitted_runs": len(episode_bytes) - len(set(analyzed_turn_ids)),
-            "planned_windows": len(luna_task_by_id),
-            "reviewed_windows": len(reviewed_luna_task_ids),
-            "omitted_windows": len(luna_task_by_id) - len(reviewed_luna_task_ids),
+            "planned_parts": len(luna_task_by_id),
+            "reviewed_parts": len(reviewed_luna_task_ids),
+            "unreviewed_parts": len(luna_task_by_id) - len(reviewed_luna_task_ids),
             "eligible_calls": len(state["manifest"]["call_ids"]),
             "analyzed_calls": len(analyzed_call_ids),
             "eligible_evidence_bytes": sum(episode_bytes.values()),
             "analyzed_evidence_bytes": sum(
-                episode_bytes[turn_id] for turn_id in set(analyzed_turn_ids)
+                int(luna_task_by_id[task_id]["evidence_bytes"])
+                for task_id in reviewed_luna_task_ids
             ),
-            "planned_window_input_bytes": sum(
+            "planned_part_input_bytes": sum(
                 int(task["input_bytes"]) for task in luna_task_by_id.values()
             ),
-            "reviewed_window_input_bytes": sum(
+            "reviewed_part_input_bytes": sum(
                 int(luna_task_by_id[task_id]["input_bytes"])
                 for task_id in reviewed_luna_task_ids
             ),
-            "omitted_window_input_bytes": sum(
+            "unreviewed_part_input_bytes": sum(
                 int(task["input_bytes"])
                 for task_id, task in luna_task_by_id.items()
                 if task_id not in reviewed_luna_task_ids
@@ -6810,7 +6360,7 @@ def _holistic_final(
         },
         "omissions": list(state.get("omissions", [])),
         "run_accounting": run_accounting,
-        "window_accounting": window_accounting,
+        "part_accounting": part_accounting,
         "pricing": evidence["pricing"],
         "retained_artifacts": {
             "result": state["paths"]["final_result"],
@@ -6840,8 +6390,9 @@ def _render_holistic_report(final: Mapping[str, Any]) -> str:
         "# Credit savings analysis",
         "",
         (
-            f"Coverage: {coverage['analyzed_runs']} of {coverage['eligible_runs']} "
-            f"runs, {coverage['analyzed_calls']} of {coverage['eligible_calls']} "
+            f"Coverage: {coverage['fully_analyzed_runs']} complete and "
+            f"{coverage['partially_analyzed_runs']} partial of "
+            f"{coverage['eligible_runs']} runs; {coverage['analyzed_calls']} of {coverage['eligible_calls']} "
             f"calls, and {coverage['analyzed_evidence_bytes']} of "
             f"{coverage['eligible_evidence_bytes']} UTF-8 evidence bytes "
             f"({evidence_percent})."
@@ -6853,27 +6404,27 @@ def _render_holistic_report(final: Mapping[str, Any]) -> str:
         ),
         "",
         (
-            f"Windows: {coverage['reviewed_windows']} reviewed, "
-            f"{coverage['omitted_windows']} omitted, "
-            f"{coverage['planned_windows']} planned. Window inputs: "
-            f"{coverage['reviewed_window_input_bytes']} reviewed of "
-            f"{coverage['planned_window_input_bytes']} planned UTF-8 bytes; "
-            f"{coverage['omitted_window_input_bytes']} omitted. Luna outputs: "
+            f"Run parts: {coverage['reviewed_parts']} reviewed, "
+            f"{coverage['unreviewed_parts']} unreviewed, "
+            f"{coverage['planned_parts']} planned. Part inputs: "
+            f"{coverage['reviewed_part_input_bytes']} reviewed of "
+            f"{coverage['planned_part_input_bytes']} planned UTF-8 bytes; "
+            f"{coverage['unreviewed_part_input_bytes']} unreviewed. Luna outputs: "
             f"{coverage['reviewed_luna_output_bytes']} reviewed of "
             f"{coverage['accepted_luna_output_bytes']} accepted UTF-8 bytes "
             f"against {coverage['planned_luna_output_bytes']} planned output bytes."
         ),
         "",
-        "## Run-window byte accounting",
+        "## Run-part byte accounting",
         "",
-        "| Run | Window | Records | Input bytes | Luna output allowance | Actual output bytes | Status |",
+        "| Run | Part | Records | Input bytes | Luna output allowance | Actual output bytes | Status |",
         "|---|---|---:|---:|---:|---:|---|",
     ]
     run_labels = {
         str(run["turn_id"]): str(run.get("started_at") or run["turn_id"])
         for run in final["run_accounting"]
     }
-    for window in final["window_accounting"]:
+    for window in final["part_accounting"]:
         lines.append(
             f"| {run_labels.get(str(window['turn_id']), window['turn_id'])} | "
             f"{window['run_window_ordinal']}/{window['run_window_count']} | "
@@ -7089,10 +6640,13 @@ def _finalize_holistic(
         not in {"complete", "omitted"}
         for task in state["manifest"]["luna_tasks"]
     ):
-        raise CreditAnalysisError("Luna coverage ledger is incomplete")
-    if state["model_attempts"]["luna"] > 50:
+        raise CreditAnalysisError("Luna coverage record is incomplete")
+    if state["model_attempts"]["luna"] > 70:
         raise CreditAnalysisError("Luna attempt cap was exceeded")
-    routing = _routing_value(state)
+    if state["model_attempts"]["sol"] > int(
+        contract["semantic_call_contract"]["sol_max_calls"]
+    ):
+        raise CreditAnalysisError("Sol attempt cap was exceeded")
     expected_sol = sum(
         state["execution"][task["task_id"]]["status"] == "complete"
         for task in state["manifest"]["sol_tasks"]
@@ -7184,6 +6738,52 @@ def _diagnosed_luna_retry(error: CreditAnalysisError) -> bool:
     )
 
 
+def _sol_validation_error_count(execution: Mapping[str, Any]) -> int:
+    """Count rejected semantic results without treating runner failures as data."""
+
+    return sum(
+        attempt.get("outcome") == "validation-error"
+        for attempt in execution["attempts"]
+    )
+
+
+def _sol_attempt_capacity(
+    state: Mapping[str, Any],
+    contract: Mapping[str, Any],
+    task: Mapping[str, Any],
+) -> int:
+    """Return launchable Sol attempts while preserving the dependent final slot."""
+
+    maximum = int(contract["semantic_call_contract"]["sol_max_calls"])
+    reserve_final = int(
+        task["phase"] != "sol-final"
+        and state["execution"]["sol.final"]["status"] == "pending"
+    )
+    return max(
+        0,
+        maximum - int(state["model_attempts"]["sol"]) - reserve_final,
+    )
+
+
+def _can_retry_sol_validation(
+    state: Mapping[str, Any],
+    contract: Mapping[str, Any],
+    task: Mapping[str, Any],
+) -> bool:
+    """Allow one task-local correction only inside the global Sol attempt cap."""
+
+    execution = state["execution"][task["task_id"]]
+    rejected = _sol_validation_error_count(execution)
+    retry_limit = int(
+        contract["semantic_call_contract"][
+            "sol_max_validation_retries_per_task"
+        ]
+    )
+    return 0 < rejected <= retry_limit and _sol_attempt_capacity(
+        state, contract, task
+    ) > 0
+
+
 def _holistic_model_attempt(
     *,
     runner: Any | None,
@@ -7234,7 +6834,6 @@ def _holistic_model_attempt(
             schema_path=schema_path,
             attempt_dir=attempt_dir,
             execution_cwd=pathlib.Path(str(task["execution_cwd"])),
-            ephemeral=task["phase"] == "luna-discovery",
         )
     else:
         raw, attempt = _invoke_injected_runner(
@@ -7282,9 +6881,75 @@ def _omit_luna_task(
         "candidate_ids": list(task["candidate_ids"]),
         "record_count": len(task["candidate_ids"]),
         "candidate_count": len(task["candidate_ids"]),
-        "evidence_bytes": int(task["input_bytes"]),
+        "evidence_bytes": int(task["evidence_bytes"]),
         "input_bytes": int(task["input_bytes"]),
         "output_bytes": output_bytes,
+    }
+    if error:
+        omission["error"] = error
+    if not any(
+        item.get("task_id") == task["task_id"]
+        for item in state["omissions"]
+        if isinstance(item, Mapping)
+    ):
+        state["omissions"].append(omission)
+
+
+def _omit_sol_task(
+    state: dict[str, Any],
+    task: Mapping[str, Any],
+    *,
+    reason: str,
+    error: str | None = None,
+) -> None:
+    """Retain exact inventory for one non-final Sol task that cannot be accepted."""
+
+    if task["phase"] == "sol-final":
+        raise CreditAnalysisError("the final Sol result cannot be omitted")
+    execution = state["execution"][task["task_id"]]
+    execution["status"] = "omitted"
+    output_bytes = 0
+    for attempt in reversed(execution["attempts"]):
+        raw_artifact = attempt.get("artifacts", {}).get("raw_output")
+        if not isinstance(raw_artifact, Mapping):
+            continue
+        raw_path = pathlib.Path(str(raw_artifact.get("path")))
+        if raw_path.is_file() and not raw_path.is_symlink():
+            output_bytes = raw_path.stat().st_size
+            break
+    source_record_ids = list(task.get("candidate_ids", []))
+    candidate_ids = list(
+        task.get("luna_candidate_ids", source_record_ids)
+    )
+    call_ids = list(task.get("call_ids", []))
+    if not call_ids:
+        call_ids = list(
+            dict.fromkeys(
+                call_id
+                for window in task.get("audit_windows", [])
+                for call_id in window.get("call_ids", [])
+            )
+        )
+    input_path = pathlib.Path(str(task["artifacts"]["input"]))
+    input_bytes = (
+        input_path.stat().st_size
+        if input_path.is_file() and not input_path.is_symlink()
+        else 0
+    )
+    omission: dict[str, Any] = {
+        "stage": task["phase"],
+        "reason": reason,
+        "task_id": task["task_id"],
+        "turn_ids": list(task.get("turn_ids", [])),
+        "candidate_ids": candidate_ids,
+        "source_record_ids": source_record_ids,
+        "call_ids": call_ids,
+        "record_count": len(source_record_ids),
+        "candidate_count": len(candidate_ids),
+        "evidence_bytes": int(task.get("routing_bytes") or input_bytes),
+        "input_bytes": input_bytes,
+        "output_bytes": output_bytes,
+        "attempt_count": len(execution["attempts"]),
     }
     if error:
         omission["error"] = error
@@ -7304,7 +6969,7 @@ def command_execute_orchestration(
     task_limit: int | None = None,
     expected_request_path: pathlib.Path | None = None,
 ) -> dict[str, Any]:
-    """Execute run windows and independent Sol stages with bounded concurrency."""
+    """Execute run parts and independent Sol stages with bounded concurrency."""
 
     state, evidence, contract, compact = _holistic_read_state(state_path)
     if expected_request_path is not None:
@@ -7353,6 +7018,16 @@ def command_execute_orchestration(
     luna_attempt_limit = int(
         contract["semantic_call_contract"]["luna_max_attempts"]
     )
+    sol_attempt_limit = int(
+        contract["semantic_call_contract"]["sol_max_calls"]
+    )
+    sol_retry_limit = int(
+        contract["semantic_call_contract"][
+            "sol_max_validation_retries_per_task"
+        ]
+    )
+    if int(state["model_attempts"]["sol"]) > sol_attempt_limit:
+        raise CreditAnalysisError("Sol attempt cap was exceeded")
     state["phase"] = "executing"
     _holistic_save_state(state)
 
@@ -7381,6 +7056,47 @@ def command_execute_orchestration(
             _freeze_sol_routing(state, compact, contract)
             tasks = _holistic_task_map(state["manifest"])
 
+        sol_omission_changed = False
+        for base_task in state["manifest"]["sol_tasks"]:
+            execution = state["execution"][base_task["task_id"]]
+            if execution["status"] != "pending":
+                continue
+            rejected = _sol_validation_error_count(execution)
+            if not rejected:
+                continue
+            task = _holistic_runtime_task(state, base_task)
+            if rejected > sol_retry_limit:
+                if task["phase"] == "sol-final":
+                    _holistic_save_state(state)
+                    raise CreditAnalysisError(
+                        "final Sol failed validation after its automatic retry"
+                    )
+                _omit_sol_task(
+                    state,
+                    task,
+                    reason="sol-invalid-output",
+                    error=str(execution["attempts"][-1].get("error") or "invalid result"),
+                )
+                progressed += 1
+                sol_omission_changed = True
+                continue
+            if _sol_attempt_capacity(state, contract, task) == 0:
+                if task["phase"] == "sol-final":
+                    _holistic_save_state(state)
+                    raise CreditAnalysisError(
+                        "Sol attempt ceiling leaves no corrective final retry"
+                    )
+                _omit_sol_task(
+                    state,
+                    task,
+                    reason="sol-retry-capacity",
+                    error=str(execution["attempts"][-1].get("error") or "invalid result"),
+                )
+                progressed += 1
+                sol_omission_changed = True
+        if sol_omission_changed:
+            _holistic_save_state(state)
+
         ready: list[dict[str, Any]] = []
         for task_id in state["task_order"]:
             execution = state["execution"][task_id]
@@ -7406,15 +7122,55 @@ def command_execute_orchestration(
                 contract["semantic_call_contract"]["luna_max_concurrency"]
             )
             ready = ready[: min(concurrency, max(0, remaining_attempts))]
-        elif phase in {"sol-adjudication", "sol-audit"}:
+        elif phase in {"sol-adjudication", "sol-direct-evidence"}:
             ready = [
                 task
                 for task in ready
-                if task["phase"] in {"sol-adjudication", "sol-audit"}
+                if task["phase"] in {"sol-adjudication", "sol-direct-evidence"}
             ]
+            launch_capacity = _sol_attempt_capacity(
+                state, contract, ready[0]
+            )
+            deferred = ready[launch_capacity:]
+            deferred_omission_changed = False
+            for task in deferred:
+                execution = state["execution"][task["task_id"]]
+                if _sol_validation_error_count(execution):
+                    _omit_sol_task(
+                        state,
+                        task,
+                        reason="sol-retry-capacity",
+                        error=str(
+                            execution["attempts"][-1].get("error")
+                            or "invalid result"
+                        ),
+                    )
+                    progressed += 1
+                    deferred_omission_changed = True
+            ready = ready[:launch_capacity]
+            if deferred_omission_changed:
+                _holistic_save_state(state)
+            if not ready and deferred:
+                fresh = [
+                    task
+                    for task in deferred
+                    if state["execution"][task["task_id"]]["status"] == "pending"
+                ]
+                if fresh:
+                    _holistic_save_state(state)
+                    raise CreditAnalysisError(
+                        "Sol attempt ceiling leaves no first-stage capacity"
+                    )
             concurrency = len(ready)
         else:
             ready = [ready[0]]
+            if phase == "sol-final" and _sol_attempt_capacity(
+                state, contract, ready[0]
+            ) == 0:
+                _holistic_save_state(state)
+                raise CreditAnalysisError(
+                    "Sol attempt ceiling leaves no final result capacity"
+                )
             concurrency = 1
         if task_budget is not None:
             remaining_tasks = task_budget - progressed
@@ -7532,13 +7288,19 @@ def command_execute_orchestration(
                             "error": str(error),
                         }
                     )
-                    can_retry = (
+                    can_retry_luna = (
                         task["phase"] == "luna-discovery"
                         and _diagnosed_luna_retry(error)
                         and len(execution["attempts"]) == 1
                         and state["model_attempts"]["luna"] < luna_attempt_limit
                     )
-                    if not can_retry:
+                    can_retry_sol = (
+                        task["phase"].startswith("sol-")
+                        and _can_retry_sol_validation(
+                            state, contract, task
+                        )
+                    )
+                    if not can_retry_luna and not can_retry_sol:
                         if task["phase"] == "luna-discovery":
                             _omit_luna_task(
                                 state,
@@ -7548,11 +7310,21 @@ def command_execute_orchestration(
                             )
                             progressed += 1
                             continue
+                        if task["phase"] != "sol-final":
+                            _omit_sol_task(
+                                state,
+                                task,
+                                reason="sol-invalid-output",
+                                error=str(error),
+                            )
+                            progressed += 1
+                            continue
                         _holistic_sync_child_lineage(state)
                         _holistic_save_state(state)
                         raise
                     _holistic_sync_child_lineage(state)
                     _holistic_save_state(state)
+                    continue
                 else:
                     _holistic_accept_result(
                         state=state,
@@ -7667,19 +7439,34 @@ def command_execute_orchestration(
                         "error": str(error),
                     }
                 )
-                can_retry = (
+                can_retry_luna = (
                     task["phase"] == "luna-discovery"
                     and _diagnosed_luna_retry(error)
                     and len(execution["attempts"]) == 1
                     and state["model_attempts"]["luna"] < luna_attempt_limit
                 )
-                if can_retry:
+                can_retry_sol = (
+                    task["phase"].startswith("sol-")
+                    and _can_retry_sol_validation(
+                        state, contract, task
+                    )
+                )
+                if can_retry_luna or can_retry_sol:
                     continue
                 if task["phase"] == "luna-discovery":
                     _omit_luna_task(
                         state,
                         task,
                         reason="luna-invalid-output",
+                        error=str(error),
+                    )
+                    progressed += 1
+                    continue
+                if task["phase"] != "sol-final":
+                    _omit_sol_task(
+                        state,
+                        task,
+                        reason="sol-invalid-output",
                         error=str(error),
                     )
                     progressed += 1
@@ -7839,8 +7626,7 @@ __all__ = (
     "_holistic_model_specs",
     "_holistic_partition",
     "_holistic_prepare_task",
-    "_holistic_prior_analysis_activity",
-    "_holistic_projection",
+    "_prepare_bounded_evidence",
     "_holistic_prompt",
     "_holistic_prompt_prefix",
     "_holistic_public_status",
@@ -7852,13 +7638,12 @@ __all__ = (
     "_holistic_save_state",
     "_holistic_sol_input",
     "_holistic_sol_schema",
-    "_holistic_split_episode",
-    "_holistic_state_paths",
     "_holistic_surface_ids",
     "_holistic_sync_child_lineage",
     "_holistic_task_map",
     "_holistic_workstream_by_call",
     "_invoke_injected_runner",
+    "_persistent_descendant_references",
     "_json_bytes",
     "_jsonl_event_summary",
     "_observable_high_signal_reasons",

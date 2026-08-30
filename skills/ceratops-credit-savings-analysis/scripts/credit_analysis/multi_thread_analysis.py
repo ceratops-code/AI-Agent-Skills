@@ -3,15 +3,15 @@
 
 from __future__ import annotations
 
-from .core import *
+from .single_thread_analysis import *
 
 
-def _holistic_controller() -> ModuleType:
+def _luna_sol_controller() -> ModuleType:
     """Resolve the owning per-thread controller lazily to avoid an import cycle."""
 
-    from . import holistic
+    from . import luna_sol_analysis
 
-    return holistic
+    return luna_sol_analysis
 
 def _project_selector(raw: Any) -> dict[str, str] | None:
     """Normalize one exact project selector without filesystem discovery."""
@@ -108,7 +108,7 @@ def _batch_request_paths(
 def _validated_batch_request(
     request_path: pathlib.Path,
     contract: Mapping[str, Any],
-    ledger: ModuleType,
+    collector: ModuleType,
 ) -> dict[str, Any]:
     """Validate one bounded, analysis-only batch request before side effects."""
 
@@ -161,7 +161,7 @@ def _validated_batch_request(
         raise CreditAnalysisError("batch selector kind is invalid")
     project = _project_selector(selector_raw.get("project"))
     try:
-        as_of = ledger.parse_utc_timestamp(request.get("as_of"), "batch as_of")
+        as_of = collector.parse_utc_timestamp(request.get("as_of"), "batch as_of")
     except RuntimeError as exc:
         raise CreditAnalysisError(str(exc)) from exc
     if as_of > dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5):
@@ -204,11 +204,11 @@ def _validated_batch_request(
 
 def _select_batch_candidates(
     request: Mapping[str, Any],
-    ledger: ModuleType,
+    collector: ModuleType,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, str]]]:
     """Freeze index-ordered candidates and reject ambiguous project names."""
 
-    index = ledger.load_thread_index()
+    index = collector.load_thread_index()
     as_of = request["as_of"]
     selector = request["selector"]
     assert isinstance(as_of, dt.datetime)
@@ -221,15 +221,15 @@ def _select_batch_candidates(
     candidates: list[dict[str, Any]] = []
     exclusions: list[dict[str, str]] = []
     for entry in index["entries"]:
-        updated_at = ledger.parse_utc_timestamp(
+        updated_at = collector.parse_utc_timestamp(
             entry["updated_at"], "thread index updated_at"
         )
         if updated_at > as_of or start is not None and updated_at < start:
             continue
         thread_id = entry["thread_id"]
         try:
-            session = ledger.resolve_thread_session(thread_id)
-            metadata = ledger.read_session_source_metadata(
+            session = collector.resolve_thread_session(thread_id)
+            metadata = collector.read_session_source_metadata(
                 session,
                 expected_thread_id=thread_id,
             )
@@ -371,7 +371,7 @@ def _recover_prepared_batch_item(
     if not state_path.exists():
         return None
     child_state, evidence, child_contract, _ = (
-        _holistic_controller()._holistic_read_state(state_path)
+        _luna_sol_controller()._holistic_read_state(state_path)
     )
     request_path = pathlib.Path(child_state["immutable_artifacts"]["request"]["path"])
     if request_path.resolve() != child_paths["request"].resolve():
@@ -425,7 +425,7 @@ def _resume_batch_preparation(
         if isinstance(pricing_record, Mapping)
         else None
     )
-    holistic = _holistic_controller()
+    holistic = _luna_sol_controller()
     available_models: Mapping[str, Mapping[str, Any]] | None = None
     while state["candidate_index"] < len(state["candidates"]):
         if isinstance(target_count, int) and len(state["items"]) >= target_count:
@@ -1297,7 +1297,7 @@ def _batch_public_status(
             "batch_summary_result_path": state["batch_summary"]["result_path"],
         }
     item = state["items"][state["current_index"]]
-    child_status = _holistic_controller().command_orchestration_status(
+    child_status = _luna_sol_controller().command_orchestration_status(
         pathlib.Path(item["state_path"])
     )
     return {
@@ -1329,9 +1329,9 @@ def command_prepare_batch(request_path: pathlib.Path) -> dict[str, Any]:
             _resume_batch_preparation(state, contract)
         return _batch_public_status(state, contract)
     contract = _load_contract()
-    ledger = _load_ledger()
-    request = _validated_batch_request(request_path, contract, ledger)
-    index, candidates, exclusions = _select_batch_candidates(request, ledger)
+    collector = _load_evidence_collector()
+    request = _validated_batch_request(request_path, contract, collector)
+    index, candidates, exclusions = _select_batch_candidates(request, collector)
     for key in ("requests_dir", "analyses_dir", "evidence_dir"):
         request["paths"][key].mkdir()
     state = {
@@ -1445,7 +1445,7 @@ def command_advance_batch(
     item = state["items"][state["current_index"]]
     if result.resolve() != pathlib.Path(item["final_result_path"]).resolve():
         raise CreditAnalysisError("batch result is not for the exact pending thread")
-    child_state, _, _, _ = _holistic_controller()._holistic_read_state(
+    child_state, _, _, _ = _luna_sol_controller()._holistic_read_state(
         pathlib.Path(item["state_path"])
     )
     if child_state["phase"] != "complete":

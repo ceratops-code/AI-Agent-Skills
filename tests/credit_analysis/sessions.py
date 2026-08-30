@@ -670,36 +670,60 @@ def surface_decision_record(
     }
 
 
-def _attach_prior_analysis_state(
+def _attach_persistent_descendants(
     session: pathlib.Path,
-    state_path: pathlib.Path,
+    *,
+    child_session_ids: list[str],
+    native_thread_id: str | None = None,
 ) -> None:
+    """Expose persistent children through completed structured tool results."""
+
     rows = [
-        json.loads(line)
-        for line in session.read_text(encoding="utf-8").splitlines()
+        json.loads(line) for line in session.read_text(encoding="utf-8").splitlines()
     ]
-    attached = 0
-    quoted_marker = False
-    for row in rows:
+    attached_children = False
+    attached_native = native_thread_id is None
+    native_event_index: int | None = None
+    for index, row in enumerate(rows):
         payload = row.get("payload", {})
         if (
             payload.get("type") == "function_call_output"
-            and payload.get("call_id") in {"read-1", "read-2"}
+            and payload.get("call_id") == "read-1"
         ):
             output = json.loads(payload["output"])
-            output["state_path"] = str(state_path)
+            output["child_session_ids"] = child_session_ids
             payload["output"] = json.dumps(output)
-            attached += 1
-        if (
-            not quoted_marker
-            and payload.get("type") == "message"
-            and payload.get("role") == "user"
-        ):
-            payload["content"][0]["text"] += (
-                " Quoted diagnostic text: CERATOPS_CREDIT_ANALYSIS_CHILD v1."
-            )
-            quoted_marker = True
-    assert attached == 2 and quoted_marker
+            attached_children = True
+        if native_thread_id is not None and payload.get("call_id") == "read-2":
+            if payload.get("type") == "function_call":
+                payload["name"] = "mcp__codex_app__create_thread"
+                native_event_index = index + 1
+            elif payload.get("type") == "function_call_output":
+                attached_native = True
+    assert attached_children and attached_native
+    if native_thread_id is not None:
+        assert native_event_index is not None
+        rows.insert(
+            native_event_index,
+            {
+                "timestamp": "2026-08-01T00:00:02Z.050",
+                "type": "event_msg",
+                "payload": {
+                    "type": "mcp_tool_call_end",
+                    "call_id": "read-2",
+                    "invocation": {
+                        "server": "codex_app",
+                        "tool": "create_thread",
+                    },
+                    "result": {
+                        "Ok": {
+                            "isError": False,
+                            "structuredContent": {"threadId": native_thread_id},
+                        }
+                    },
+                },
+            },
+        )
     session.write_text(
         "".join(json.dumps(row) + "\n" for row in rows),
         encoding="utf-8",
