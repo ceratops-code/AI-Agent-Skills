@@ -33,7 +33,7 @@ MEDIUM_REASONING_AUTOMATION_IDS = frozenset(
     {"diskfinventorycheck", "pc-cleanup"}
 )
 RESERVED_PROJECT_TREE_NAMES = frozenset({"tmp", "worktrees"})
-D_RULE_RE = re.compile(r"^\s*-\s+\(D\)\s+(.+)$")
+D_RULE_RE = re.compile(r"^\s*(?:-\s+)?\(D\)\s+(.+)$")
 ALL_BULLETS_FORCE_RE = re.compile(
     r"All instruction bullets in this file are mandatory,\s*blocking,\s*and\s*closure-gating",
     re.IGNORECASE,
