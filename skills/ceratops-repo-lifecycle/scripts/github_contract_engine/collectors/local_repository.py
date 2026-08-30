@@ -652,6 +652,27 @@ def _manifest_facts(local: dict[str, Any]) -> dict[str, Any]:
             }
         )
     pom = texts.get("pom.xml", "")
+    gradle_build_files = matching_paths(
+        files,
+        [
+            "build.gradle",
+            "build.gradle.kts",
+            "**/build.gradle",
+            "**/build.gradle.kts",
+        ],
+    )
+    gradle_text = "\n".join(texts.get(path, "") for path in gradle_build_files)
+    gradle_group_present = bool(
+        re.search(r"(?m)^\s*(?:group|groupId)\s*(?:=|\.set\s*\()", gradle_text)
+    )
+    gradle_version_present = bool(
+        re.search(r"(?m)^\s*version\s*(?:=|\.set\s*\()", gradle_text)
+    )
+    # MavenPublication inherits artifactId from the project name, while group and
+    # version remain unusable defaults unless the build declares them.
+    gradle_publication_present = bool(
+        re.search(r"\bMavenPublication\b", gradle_text)
+    )
     cargo = texts.get("Cargo.toml", "")
     gemspec_text = "\n".join(
         texts.get(path, "") for path in matching_paths(files, ["*.gemspec"])
@@ -726,6 +747,16 @@ def _manifest_facts(local: dict[str, Any]) -> dict[str, Any]:
             "version_present": bool(re.search(r"<version>[^<]+</version>", pom)),
             "license_present": "<licenses>" in pom,
             "url_present": "<url>" in pom,
+        },
+        "gradle": {
+            "build_file_present": bool(gradle_build_files),
+            "maven_publish_plugin_present": "maven-publish" in gradle_text,
+            "publication_identity_present": bool(
+                gradle_publication_present
+                and gradle_group_present
+                and gradle_version_present
+            ),
+            "pom_metadata_present": bool(re.search(r"\bpom\s*\{", gradle_text)),
         },
         "nuget": {
             "project_files": matching_paths(

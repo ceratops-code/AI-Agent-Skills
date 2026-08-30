@@ -1205,7 +1205,7 @@
       "id": "maven.metadata_publish_and_verify",
       "category": "maven_package",
       "kind": "manifest_build_registry",
-      "applies_when": "artifact_type intersects maven_package,gradle_maven_package",
+      "applies_when": "artifact_type has maven_package",
       "assertions": [
         {
           "path": "/local/manifests/maven/pom_present",
@@ -1235,6 +1235,40 @@
         },
         {
           "path": "/local/manifests/maven/url_present",
+          "operator": "equal",
+          "expected": true,
+          "level": "WARN"
+        },
+        {
+          "path": "/registries/maven/all_resolved",
+          "operator": "equal",
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "gradle.metadata_publish_and_verify",
+      "category": "gradle_maven_package",
+      "kind": "manifest_build_registry",
+      "applies_when": "artifact_type has gradle_maven_package",
+      "assertions": [
+        {
+          "path": "/local/manifests/gradle/build_file_present",
+          "operator": "equal",
+          "expected": true
+        },
+        {
+          "path": "/local/manifests/gradle/maven_publish_plugin_present",
+          "operator": "equal",
+          "expected": true
+        },
+        {
+          "path": "/local/manifests/gradle/publication_identity_present",
+          "operator": "equal",
+          "expected": true
+        },
+        {
+          "path": "/local/manifests/gradle/pom_metadata_present",
           "operator": "equal",
           "expected": true,
           "level": "WARN"
