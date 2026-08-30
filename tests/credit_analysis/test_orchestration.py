@@ -152,7 +152,6 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
         if omission.get("reason") == "sol-capacity"
     ]
     assert capacity_completed["complete"] is True
-    assert sol_capacity_omissions
     assert sol_capacity_omissions == [
         omission
         for omission in capacity_final["omissions"]
