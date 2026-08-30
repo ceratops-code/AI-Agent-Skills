@@ -33,10 +33,6 @@ from types import ModuleType
 from typing import Any
 
 from . import session_evidence_collector
-from .analysis_contract_snapshot import (
-    freeze_contract_snapshot,
-    load_contract_snapshot,
-)
 
 PACKAGE_DIR = pathlib.Path(__file__).resolve().parent
 SCRIPT_DIR = PACKAGE_DIR.parent
@@ -668,11 +664,8 @@ def _action_title(action_id: str) -> str:
     return " ".join(part.capitalize() for part in action_id.split("-"))
 
 
-def _load_contract(path: pathlib.Path | None = None) -> dict[str, Any]:
-    contract = _read_json(
-        CONTRACT_PATH if path is None else path,
-        "surface contract",
-    )
+def _load_contract() -> dict[str, Any]:
+    contract = _read_json(CONTRACT_PATH, "surface contract")
     if contract.get("schema") != "ceratops-credit-analysis-contract.v1":
         raise CreditAnalysisError("unsupported surface contract schema")
     version = contract.get("surface_contract_version")
@@ -2411,11 +2404,6 @@ def _initialize_analysis(
     """Persist one validated controller from an already collected evidence set."""
 
     analysis_id = secrets.token_hex(12)
-    contract_record = freeze_contract_snapshot(
-        CONTRACT_PATH,
-        pathlib.Path(request["task_root"]) / "surface-contract.json",
-        task_root=pathlib.Path(request["task_root"]),
-    )
     if collected["collection"]["model_calls"] < 1:
         raise CreditAnalysisError("selected completed-run window has no model calls")
     collector_schema = collected.pop("schema")
@@ -2427,7 +2415,7 @@ def _initialize_analysis(
         "source": request["source"],
         "requested_window": request["window"],
         "surface_contract_version": contract["surface_contract_version"],
-        "surface_contract_hash": contract_record["sha256"],
+        "surface_contract_hash": _file_hash(CONTRACT_PATH),
         "mutation_authority": False,
     }
     fingerprint = _content_hash(evidence)
@@ -2469,7 +2457,10 @@ def _initialize_analysis(
                 "path": str(request["request_path"]),
                 "sha256": request["request_hash"],
             },
-            "surface_contract": contract_record,
+            "surface_contract": {
+                "path": str(CONTRACT_PATH),
+                "sha256": _file_hash(CONTRACT_PATH),
+            },
             "evidence": {
                 "path": str(request["evidence_path"]),
                 "sha256": evidence_hash,
@@ -2632,14 +2623,7 @@ def _load_state(
     for key, expected in expected_paths.items():
         if pathlib.Path(str(paths[key])).resolve() != expected.resolve():
             raise CreditAnalysisError(f"state {key} path escapes controller ownership")
-    artifacts = state.get("immutable_artifacts")
-    if not isinstance(artifacts, dict):
-        raise CreditAnalysisError("state immutable artifacts are invalid")
-    contract_record = artifacts.get("surface_contract")
-    if not isinstance(contract_record, dict):
-        raise CreditAnalysisError("state surface_contract artifact is invalid")
-    load_contract_snapshot(contract_record, task_root=task_root)
-    contract = _load_contract(pathlib.Path(contract_record["path"]))
+    contract = _load_contract()
     if state.get("surface_contract_version") != contract["surface_contract_version"]:
         raise CreditAnalysisError("state surface contract version is stale")
     queue = state.get("queue")
@@ -2658,7 +2642,10 @@ def _load_state(
         or current_index > len(queue)
     ):
         raise CreditAnalysisError("state current index is invalid")
-    for label in ("request", "evidence"):
+    artifacts = state.get("immutable_artifacts")
+    if not isinstance(artifacts, dict):
+        raise CreditAnalysisError("state immutable artifacts are invalid")
+    for label in ("request", "surface_contract", "evidence"):
         record = artifacts.get(label)
         if not isinstance(record, dict):
             raise CreditAnalysisError(f"state {label} artifact is invalid")

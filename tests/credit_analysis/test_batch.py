@@ -382,25 +382,6 @@ def test_credit_analysis_batch_selects_recent_threads_and_projects_once(
         manifest = json.loads(
             pathlib.Path(status["manifest_path"]).read_text(encoding="utf-8")
         )
-        batch_state_path = pathlib.Path(status["batch_state_path"])
-        batch_state = json.loads(batch_state_path.read_text(encoding="utf-8"))
-        contract_record = batch_state["immutable_artifacts"]["surface_contract"]
-        contract_snapshot = pathlib.Path(contract_record["path"])
-        assert contract_snapshot == batch_state_path.parent / "surface-contract.json"
-        assert contract_snapshot != CREDIT_ANALYSIS_CONTRACT
-        if name == "count-overall":
-            changed_contract = tmp_path / "later-installed-batch-contract.json"
-            changed_contract_value = json.loads(
-                CREDIT_ANALYSIS_CONTRACT.read_text(encoding="utf-8")
-            )
-            changed_contract_value["surface_contract_version"] += 1
-            write_json_file(changed_contract, changed_contract_value)
-            with monkeypatch.context() as contract_patch:
-                contract_patch.setattr(workflow, "CONTRACT_PATH", changed_contract)
-                _, resumed_contract = workflow._load_batch_state(batch_state_path)
-            assert resumed_contract["surface_contract_version"] != (
-                changed_contract_value["surface_contract_version"]
-            )
         assert [item["thread_id"] for item in manifest["items"]] == expected_ids
         assert manifest["as_of"] == "2026-08-07T18:00:00Z"
         if name == "days-overall":

@@ -33,24 +33,14 @@ applies them.
   closure; active runs and the boundary run are excluded.
 - For a single-thread full or standalone analysis, run
   `python scripts/credit-analysis-workflow.py run --request REQUEST`.
-- On every fresh single-thread or per-thread-batch plan, validate the current
-  installed contract, copy its exact bytes inside the caller-selected task
-  root, and bind state to that frozen copy. Resume from the frozen task-local
-  contract even after the installed skill changes; require current contract
-  versions only for fresh planning. Reject a missing, changed, linked, or
-  out-of-root frozen copy. Require mutation authority `false`, use a task root
-  under `<repo-parent>/tmp/<repo-name>/<thread-name>`, and keep retained
-  evidence inside it.
-  Planning resolves the selected source as a frozen thread tree, reads each
-  included session exactly once, freezes the cutoff before child execution, and
-  assigns exact lineage. Treat completed descendant Luna and Sol threads from an
-  earlier credit analysis as ordinary runs under the same preparation, capacity,
-  heuristic, and semantic rules as every other descendant. Use retained
-  controller state only to resolve child identities, provenance, and
-  attribution;
-  never place earlier prompts, results, or event excerpts in a shared child
-  input. Exclude only descendants created by the current analysis, and keep
-  analysis-generated work separate from producer savings attribution.
+- On every fresh single-thread or per-thread-batch plan, validate the installed
+  contract and bind its version and hash to controller state. Resume only from
+  state whose immutable artifacts still validate. Require mutation authority
+  `false`, use a task root under `<repo-parent>/tmp/<repo-name>/<thread-name>`,
+  and keep retained evidence inside it.
+  Analyze every available retained descendant discovered from source lineage as
+  ordinary source runs; report unavailable references and exclude only
+  descendants created by the current analysis.
 - Planning retains complete protected evidence and read-only canonical
   snapshots. Full analysis treats every completed run as one semantic unit,
   freezes run order and UTF-8 byte counts, and divides only an oversized run

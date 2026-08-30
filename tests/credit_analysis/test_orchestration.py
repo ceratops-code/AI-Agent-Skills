@@ -14,18 +14,11 @@ from tests.credit_analysis.models import (
     holistic_model_catalog,
     load_credit_analysis_workflow_module,
 )
-from tests.credit_analysis.paths import (
-    CREDIT_ANALYSIS_CONTRACT,
-)
-from tests.credit_analysis.sessions import (
-    credit_analysis_request,
-    write_json_file,
-)
+from tests.credit_analysis.sessions import credit_analysis_request
 
 
 def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
     tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workflow = load_credit_analysis_workflow_module()
     request, _, _ = credit_analysis_request(tmp_path)
@@ -34,19 +27,6 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
         request, available_models=runner.available_models
     )
     state = json.loads(pathlib.Path(plan["state_path"]).read_text(encoding="utf-8"))
-    contract_record = state["immutable_artifacts"]["surface_contract"]
-    contract_snapshot = pathlib.Path(contract_record["path"])
-    assert contract_snapshot.parent == pathlib.Path(plan["state_path"]).parent / "orchestration"
-    assert contract_snapshot != CREDIT_ANALYSIS_CONTRACT
-    assert hashlib.sha256(contract_snapshot.read_bytes()).hexdigest() == contract_record[
-        "sha256"
-    ]
-    changed_contract = tmp_path / "later-installed-contract.json"
-    changed_contract_value = json.loads(
-        CREDIT_ANALYSIS_CONTRACT.read_text(encoding="utf-8")
-    )
-    changed_contract_value["surface_contract_version"] += 1
-    write_json_file(changed_contract, changed_contract_value)
     manifest = state["manifest"]
     assert state["model_specs"]["luna"]["reasoning_effort"] == "max"
     assert "input_byte_budget" in state["model_specs"]["luna"]
@@ -70,13 +50,11 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
         task["execution_cwd"] == state["execution_context"]["primary_cwd"]
         for task in manifest["sol_tasks"]
     )
-    with monkeypatch.context() as contract_patch:
-        contract_patch.setattr(workflow, "CONTRACT_PATH", changed_contract)
-        completed = workflow.command_execute_orchestration(
-            pathlib.Path(plan["state_path"]),
-            runner=runner,
-            available_models=runner.available_models,
-        )
+    completed = workflow.command_execute_orchestration(
+        pathlib.Path(plan["state_path"]),
+        runner=runner,
+        available_models=runner.available_models,
+    )
     phases = [call["phase"] for call in runner.calls]
     assert completed["complete"] is True
     assert phases.count("sol-adjudication") == 3

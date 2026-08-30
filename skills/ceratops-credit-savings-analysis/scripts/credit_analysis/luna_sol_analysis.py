@@ -5,13 +5,10 @@ from __future__ import annotations
 
 import concurrent.futures
 
-from .analysis_contract_snapshot import (
-    freeze_contract_snapshot,
-    load_contract_snapshot,
-)
+from .model_input_preparation import *
 from .model_capacity_planning import *
 from .multi_thread_analysis import *
-from .prior_analysis_runs import *
+from .persistent_subthread_analysis import *
 from .single_thread_analysis import *
 
 def _exclusive_text(path: pathlib.Path, value: str, label: str) -> None:
@@ -1808,14 +1805,12 @@ def _collect_holistic_evidence(
     contract: Mapping[str, Any],
     collector: ModuleType,
     analysis_id: str,
-    contract_path: pathlib.Path,
-) -> tuple[dict[str, Any], str, str, list[tuple[str, str]], set[str]]:
+) -> tuple[dict[str, Any], str, str, list[tuple[str, str]]]:
     """Read a frozen source thread tree once and normalize every child run."""
 
     cutoff = dt.datetime.now(dt.timezone.utc).isoformat(timespec="microseconds")
     try:
         rows, source_fingerprint = collector.load_rows_with_fingerprint(request["session"])
-        raw_state_paths_by_call = _holistic_raw_state_paths_by_call(rows)
         execution_context = _source_execution_context(rows)
         path_roots = collector.review_path_roots(rows)
         collected = collector.collect_session_evidence_from_rows(
@@ -1833,11 +1828,6 @@ def _collect_holistic_evidence(
     if collected.get("collection", {}).get("model_calls", 0) < 1:
         raise CreditAnalysisError("selected completed-run window has no model calls")
     collector_schema = collected.pop("schema", None)
-    prior_sources, analysis_call_ids = _holistic_prior_analysis_sources(
-        collected,
-        current_analysis_id=analysis_id,
-        raw_state_paths_by_call=raw_state_paths_by_call,
-    )
     descendants: list[dict[str, Any]] = []
     included_descendants: list[dict[str, Any]] = []
     unresolved_descendants: list[dict[str, Any]] = []
@@ -1847,83 +1837,125 @@ def _collect_holistic_evidence(
         for chain in execution_context["instruction_chains"]
     }
     root_session = pathlib.Path(request["session"]).resolve()
-    for source in prior_sources:
-        for descendant in source["descendants"]:
-            session_id = str(descendant["session_id"])
-            if session_id in seen_sessions:
+    root_session_id = _session_identity(rows, fallback=str(root_session))
+    try:
+        seen_sessions.add(collector.canonical_thread_id(root_session_id))
+    except (RuntimeError, ValueError):
+        pass
+    pending = _persistent_descendant_references(
+        rows,
+        parent_session_id=root_session_id,
+        lineage_depth=1,
+        completed_call_ids=_completed_tool_call_ids(collected),
+    )
+    pending_index = 0
+    while pending_index < len(pending):
+        descendant = pending[pending_index]
+        pending_index += 1
+        raw_session_id = str(descendant["session_id"])
+        try:
+            session_id = collector.canonical_thread_id(raw_session_id)
+        except (RuntimeError, ValueError) as exc:
+            invalid_key = f"invalid:{raw_session_id}"
+            if invalid_key in seen_sessions:
                 continue
-            seen_sessions.add(session_id)
-            try:
-                child_session = collector.resolve_thread_session(session_id).resolve(
-                    strict=True
-                )
-                if child_session == root_session:
-                    raise CreditAnalysisError("descendant resolves to the source session")
-                child_rows, child_fingerprint = collector.load_rows_with_fingerprint(
-                    child_session
-                )
-                child_context = _source_execution_context(child_rows)
-                child_collected = collector.collect_session_evidence_from_rows(
-                    child_rows,
-                    session=child_session,
-                    source_fingerprint=child_fingerprint,
-                    last_runs=None,
-                    completed_turn_ids=None,
-                    pricing_profile=request["pricing"],
-                )
-            except (CreditAnalysisError, OSError, RuntimeError, ValueError) as exc:
-                unresolved_descendants.append(
-                    {
-                        **descendant,
-                        "analysis_id": source["analysis_id"],
-                        "reason": "session-unavailable",
-                        "detail": str(exc)[:500],
-                    }
-                )
-                continue
-            if child_collected.get("collection", {}).get("session_reads") != 1:
-                raise CreditAnalysisError(
-                    "descendant session collector did not report exactly one read"
-                )
-            if child_collected.get("collection", {}).get("model_calls", 0) < 1:
-                unresolved_descendants.append(
-                    {
-                        **descendant,
-                        "analysis_id": source["analysis_id"],
-                        "reason": "no-completed-model-calls",
-                    }
-                )
-                continue
-            child_collected.pop("schema", None)
-            namespaced, turn_ids = _namespace_descendant_evidence(
-                child_collected,
-                session_id=session_id,
-                analysis_id=str(source["analysis_id"]),
-                source_cwd=str(child_context["primary_cwd"]),
-            )
-            descendants.append(namespaced)
-            analysis_call_ids.update(namespaced["call_inventory"])
-            path_roots.extend(collector.review_path_roots(child_rows))
-            for chain in child_context["instruction_chains"]:
-                cwd = str(chain["cwd"])
-                if cwd in instruction_chains and instruction_chains[cwd] != chain:
-                    raise CreditAnalysisError(
-                        f"descendant instruction chain conflicts for cwd: {cwd}"
-                    )
-                instruction_chains[cwd] = chain
-            for original_turn_id, namespaced_turn_id in turn_ids.items():
-                execution_context["run_cwds"][namespaced_turn_id] = child_context[
-                    "run_cwds"
-                ].get(original_turn_id, child_context["primary_cwd"])
-            included_descendants.append(
+            seen_sessions.add(invalid_key)
+            unresolved_descendants.append(
                 {
                     **descendant,
-                    "analysis_id": source["analysis_id"],
-                    "session": str(child_session),
-                    "source_fingerprint": child_fingerprint,
-                    "completed_runs": child_collected["collection"]["completed_runs"],
+                    "reason": "invalid-session-id",
+                    "detail": str(exc)[:500],
                 }
             )
+            continue
+        if session_id in seen_sessions:
+            continue
+        seen_sessions.add(session_id)
+        descendant = {**descendant, "session_id": session_id}
+        try:
+            child_session = collector.resolve_thread_session(session_id).resolve(
+                strict=True
+            )
+            if child_session == root_session:
+                unresolved_descendants.append(
+                    {**descendant, "reason": "source-cycle"}
+                )
+                continue
+            child_rows, child_fingerprint = collector.load_rows_with_fingerprint(
+                child_session
+            )
+            retained_child_id = _session_identity(
+                child_rows,
+                fallback=session_id,
+            )
+            if collector.canonical_thread_id(retained_child_id) != session_id:
+                raise CreditAnalysisError(
+                    "descendant session metadata does not match its reference"
+                )
+            child_context = _source_execution_context(child_rows)
+            child_collected = collector.collect_session_evidence_from_rows(
+                child_rows,
+                session=child_session,
+                source_fingerprint=child_fingerprint,
+                last_runs=None,
+                completed_turn_ids=None,
+                pricing_profile=request["pricing"],
+            )
+        except (CreditAnalysisError, OSError, RuntimeError, ValueError) as exc:
+            unresolved_descendants.append(
+                {
+                    **descendant,
+                    "reason": "session-unavailable",
+                    "detail": str(exc)[:500],
+                }
+            )
+            continue
+        if child_collected.get("collection", {}).get("session_reads") != 1:
+            raise CreditAnalysisError(
+                "descendant session collector did not report exactly one read"
+            )
+        if child_collected.get("collection", {}).get("model_calls", 0) < 1:
+            unresolved_descendants.append(
+                {**descendant, "reason": "no-completed-model-calls"}
+            )
+            continue
+        pending.extend(
+            _persistent_descendant_references(
+                child_rows,
+                parent_session_id=session_id,
+                lineage_depth=int(descendant["lineage_depth"]) + 1,
+                completed_call_ids=_completed_tool_call_ids(child_collected),
+            )
+        )
+        child_collected.pop("schema", None)
+        namespaced, turn_ids = _namespace_descendant_evidence(
+            child_collected,
+            session_id=session_id,
+            parent_session_id=str(descendant["parent_session_id"]),
+            lineage_depth=int(descendant["lineage_depth"]),
+            source_cwd=str(child_context["primary_cwd"]),
+        )
+        descendants.append(namespaced)
+        path_roots.extend(collector.review_path_roots(child_rows))
+        for chain in child_context["instruction_chains"]:
+            cwd = str(chain["cwd"])
+            if cwd in instruction_chains and instruction_chains[cwd] != chain:
+                raise CreditAnalysisError(
+                    f"descendant instruction chain conflicts for cwd: {cwd}"
+                )
+            instruction_chains[cwd] = chain
+        for original_turn_id, namespaced_turn_id in turn_ids.items():
+            execution_context["run_cwds"][namespaced_turn_id] = child_context[
+                "run_cwds"
+            ].get(original_turn_id, child_context["primary_cwd"])
+        included_descendants.append(
+            {
+                **descendant,
+                "session": str(child_session),
+                "source_fingerprint": child_fingerprint,
+                "completed_runs": child_collected["collection"]["completed_runs"],
+            }
+        )
     execution_context["instruction_chains"] = [
         instruction_chains[key] for key in sorted(instruction_chains)
     ]
@@ -1936,7 +1968,7 @@ def _collect_holistic_evidence(
         "source": request["source"],
         "requested_window": request["window"],
         "surface_contract_version": contract["surface_contract_version"],
-        "surface_contract_hash": _file_hash(contract_path),
+        "surface_contract_hash": _file_hash(CONTRACT_PATH),
         "mutation_authority": False,
         "execution_context": execution_context,
     }
@@ -1951,18 +1983,16 @@ def _collect_holistic_evidence(
     evidence["analysis_lineage"] = {
         "controller_analysis_id": analysis_id,
         "source_session": str(request["session"]),
+        "source_session_id": root_session_id,
         "source_fingerprint": evidence["source_fingerprint"],
         "collection_cutoff_utc": cutoff,
-        "included_prior_analysis_ids": [
-            item["analysis_id"] for item in prior_sources
-        ],
+        "lineage_source": "structured-tool-results",
         "included_descendant_sessions": included_descendants,
         "unresolved_descendant_sessions": unresolved_descendants,
         "included_session_reads": evidence["collection"]["session_reads"],
         "excluded_own_descendant_task_ids": [],
         "source_selection_uses_prompt_markers": False,
         "execution_recollects_session": False,
-        "producer_and_analysis_work_are_separate": True,
     }
     fingerprint = _content_hash(evidence)
     evidence["evidence_fingerprint"] = fingerprint
@@ -1973,7 +2003,6 @@ def _collect_holistic_evidence(
         fingerprint,
         _file_hash(evidence_path),
         list(dict.fromkeys(path_roots)),
-        analysis_call_ids,
     )
 
 
@@ -1985,7 +2014,6 @@ def _holistic_compact_bundle(
     canonical_state: Mapping[str, Mapping[str, Any]],
     contract: Mapping[str, Any],
     surface_order: Sequence[str],
-    analysis_call_ids: set[str],
 ) -> dict[str, Any]:
     """Format every selected call once as compact, causally usable evidence."""
 
@@ -2024,7 +2052,7 @@ def _holistic_compact_bundle(
             {
                 "message_id": str(message["message_id"]),
                 "timestamp": message.get("timestamp"),
-                "text": _holistic_projection(
+                "text": _prepare_bounded_evidence(
                     message.get("text", ""),
                     limit=limit,
                     surface_ids=surfaces,
@@ -2051,7 +2079,7 @@ def _holistic_compact_bundle(
                     "kind": raw.get("kind"),
                     "name": raw.get("name"),
                     "timestamp": raw.get("timestamp"),
-                    "content": _holistic_projection(
+                    "content": _prepare_bounded_evidence(
                         content,
                         limit=limit,
                         surface_ids=surfaces,
@@ -2101,20 +2129,20 @@ def _holistic_compact_bundle(
                 "run_started_at": run.get("started_at"),
                 "model_call_index": call.get("index"),
                 "timestamp": call.get("timestamp"),
-                "workstream": (
-                    "analysis-overhead" if call_id in analysis_call_ids else "producer"
-                ),
+                "workstream": "producer",
                 "surface_lenses": surfaces,
                 "user_messages": messages,
                 "assistant_and_tool_evidence": review_records,
-                "actions": _holistic_projection(
+                "actions": _prepare_bounded_evidence(
                     call.get("actions", []), limit=limit, surface_ids=surfaces
                 ),
-                "semantic_actions": _holistic_projection(
+                "semantic_actions": _prepare_bounded_evidence(
                     call.get("semantic_actions", []), limit=limit, surface_ids=surfaces
                 ),
                 "tool_results": [
-                    _holistic_projection(item, limit=limit, surface_ids=surfaces)
+                    _prepare_bounded_evidence(
+                        item, limit=limit, surface_ids=surfaces
+                    )
                     for item in call.get("tool_results", [])
                 ],
                 "run_telemetry": {
@@ -2148,7 +2176,7 @@ def _holistic_compact_bundle(
             "kind": record.get("kind"),
             "source_bytes": record.get("source_bytes"),
             "source_sha256": record.get("source_sha256"),
-            "projection": _holistic_projection(
+            "projection": _prepare_bounded_evidence(
                 record.get("projection"),
                 limit=limit,
                 surface_ids=surface_order,
@@ -2302,7 +2330,7 @@ def _holistic_capacity_record(
     return {
         **identity,
         "capacity_reduced": True,
-        "capacity_projection": _holistic_projection(
+        "capacity_projection": _prepare_bounded_evidence(
             detail,
             limit=max(600, min(4_000, budget_bytes // 8)),
             surface_ids=record.get("surface_lenses", []),
@@ -2448,7 +2476,6 @@ def _holistic_public_status(state: Mapping[str, Any]) -> dict[str, Any]:
             ),
             None,
         ),
-        "included_prior_analysis_ids": state["lineage"]["included_prior_analysis_ids"],
         "omissions": list(state.get("omissions", [])),
     }
 
@@ -2458,7 +2485,6 @@ def command_plan_orchestration(
     *,
     available_models: set[str] | Mapping[str, Mapping[str, Any]] | None = None,
     task_root_boundary: pathlib.Path | None = None,
-    contract_path: pathlib.Path | None = None,
 ) -> dict[str, Any]:
     """Collect once and freeze the finite holistic Luna-plus-Sol plan.
 
@@ -2466,12 +2492,7 @@ def command_plan_orchestration(
     omit it and must provide a canonical repository-bound task root directly.
     """
 
-    contract_source = (
-        CONTRACT_PATH
-        if contract_path is None
-        else contract_path.expanduser().resolve(strict=True)
-    )
-    contract = _load_contract(contract_source)
+    contract = _load_contract()
     catalog = _codex_model_catalog() if available_models is None else available_models
     model_specs = _holistic_model_specs(contract, catalog)
     collector = _load_evidence_collector()
@@ -2483,13 +2504,12 @@ def command_plan_orchestration(
     )
     surface_order = _surface_order_for_request(request, contract)
     analysis_id = secrets.token_hex(12)
-    evidence, fingerprint, evidence_sha, path_roots, analysis_call_ids = (
+    evidence, fingerprint, evidence_sha, path_roots = (
         _collect_holistic_evidence(
             request=request,
             contract=contract,
             collector=collector,
             analysis_id=analysis_id,
-            contract_path=contract_source,
         )
     )
     orchestration_root = pathlib.Path(request["task_root"]) / "orchestration"
@@ -2497,11 +2517,6 @@ def command_plan_orchestration(
         raise CreditAnalysisError("task root already contains orchestration state")
     for name in ("inputs", "prompts", "schemas", "results", "attempts", "transient"):
         (orchestration_root / name).mkdir(parents=True, exist_ok=False)
-    contract_record = freeze_contract_snapshot(
-        contract_source,
-        orchestration_root / "surface-contract.json",
-        task_root=pathlib.Path(request["task_root"]),
-    )
     canonical_state, canonical_record = _collect_canonical_state_snapshot(
         evidence=evidence,
         path_roots=path_roots,
@@ -2515,7 +2530,6 @@ def command_plan_orchestration(
         canonical_state=canonical_state,
         contract=contract,
         surface_order=surface_order,
-        analysis_call_ids=analysis_call_ids,
     )
     eligible_episodes = _holistic_episodes(eligible_bundle)
     bundle = eligible_bundle
@@ -2716,7 +2730,10 @@ def command_plan_orchestration(
         "manifest": {**manifest, "path": str(manifest_path), "sha256": _file_hash(manifest_path)},
         "immutable_artifacts": {
             "request": {"path": str(request["request_path"]), "sha256": request["request_hash"]},
-            "surface_contract": contract_record,
+            "surface_contract": {
+                "path": str(CONTRACT_PATH),
+                "sha256": _file_hash(CONTRACT_PATH),
+            },
             "evidence": {"path": str(request["evidence_path"]), "sha256": evidence_sha},
             "manifest": {"path": str(manifest_path), "sha256": _file_hash(manifest_path)},
             "compact_evidence": manifest["compact_evidence"],
@@ -2809,16 +2826,7 @@ def _holistic_read_state(
         raise CreditAnalysisError("holistic state mutation authority changed")
     if state.get("mode") not in {"full-analysis", "standalone"}:
         raise CreditAnalysisError("holistic state mode changed")
-    immutable = state.get("immutable_artifacts")
-    if not isinstance(immutable, Mapping):
-        raise CreditAnalysisError("holistic immutable artifact index is invalid")
-    contract_record = immutable.get("surface_contract")
-    if not isinstance(contract_record, Mapping):
-        raise CreditAnalysisError(
-            "holistic immutable artifact is missing: surface_contract"
-        )
-    load_contract_snapshot(contract_record, task_root=resolved.parent)
-    contract = _load_contract(pathlib.Path(str(contract_record["path"])))
+    contract = _load_contract()
     expected_action = (
         state["mode"] if state["mode"] == "full-analysis" else None
     )
@@ -2832,8 +2840,12 @@ def _holistic_read_state(
         raise CreditAnalysisError("holistic state action changed")
     if state.get("surface_contract_version") != contract["surface_contract_version"]:
         raise CreditAnalysisError("holistic state contract version changed")
+    immutable = state.get("immutable_artifacts")
+    if not isinstance(immutable, Mapping):
+        raise CreditAnalysisError("holistic immutable artifact index is invalid")
     immutable_labels = [
         "request",
+        "surface_contract",
         "evidence",
         "manifest",
         "compact_evidence",
@@ -6581,9 +6593,7 @@ def _finalize_holistic(
     evidence: Mapping[str, Any],
     compact: Mapping[str, Any],
 ) -> None:
-    contract = _load_contract(
-        pathlib.Path(state["immutable_artifacts"]["surface_contract"]["path"])
-    )
+    contract = _load_contract()
     if any(
         state["execution"][task["task_id"]]["status"]
         not in {"complete", "omitted"}
@@ -7575,8 +7585,7 @@ __all__ = (
     "_holistic_model_specs",
     "_holistic_partition",
     "_holistic_prepare_task",
-    "_holistic_prior_analysis_sources",
-    "_holistic_projection",
+    "_prepare_bounded_evidence",
     "_holistic_prompt",
     "_holistic_prompt_prefix",
     "_holistic_public_status",
@@ -7588,12 +7597,12 @@ __all__ = (
     "_holistic_save_state",
     "_holistic_sol_input",
     "_holistic_sol_schema",
-    "_holistic_state_paths",
     "_holistic_surface_ids",
     "_holistic_sync_child_lineage",
     "_holistic_task_map",
     "_holistic_workstream_by_call",
     "_invoke_injected_runner",
+    "_persistent_descendant_references",
     "_json_bytes",
     "_jsonl_event_summary",
     "_observable_high_signal_reasons",

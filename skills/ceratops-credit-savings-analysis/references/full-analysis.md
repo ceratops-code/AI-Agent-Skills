@@ -33,21 +33,14 @@ Preserve every confirmed finding and report every capacity omission.
 
 ## Workflow
 
-1. Run controller `run --request REQUEST`. On a fresh request it resolves the
-   selected source as a frozen thread tree, reads each included session once,
-   and
-   freezes the cutoff and exact lineage before creating children. Treat
-   completed
-   descendant Luna and Sol threads from an earlier credit analysis as ordinary
-   runs under the same preparation, capacity, heuristic, and semantic rules as
-   every other descendant. Retained controller state may resolve child
-   identities,
-   provenance, and attribution but never supplies shared prompt, result, or
-   event
-   excerpts to model inputs. Exclude only descendants created by the current
-   analysis. Retain complete run evidence, read-only canonical snapshots,
-   effective global and run-local `AGENTS.md` chains, record counts, UTF-8 input
-   bytes, planned Luna-output bytes, and actual output bytes.
+1. Run controller command `run --request REQUEST` to freeze the selected source
+   and every reachable persistent descendant exposed by structured tool-result
+   lineage, then read each included session once before creating analysis
+   children. Analyze their completed runs as ordinary source runs, report
+   unavailable references, and use lineage only for identity and provenance.
+   Retain complete run evidence, read-only canonical snapshots, effective global
+   and run-local `AGENTS.md` chains, record counts, UTF-8 input bytes, planned
+   Luna-output bytes, and actual output bytes.
 2. The same controller run executes the frozen plan without recollection. Keep
    each completed run as one semantic unit. Divide only an oversized run into
    the

@@ -3,10 +3,6 @@
 
 from __future__ import annotations
 
-from .analysis_contract_snapshot import (
-    freeze_contract_snapshot,
-    load_contract_snapshot,
-)
 from .single_thread_analysis import *
 
 
@@ -475,9 +471,6 @@ def _resume_batch_preparation(
                 child_paths["request"],
                 available_models=available_models,
                 task_root_boundary=pathlib.Path(state["paths"]["state"]).parent,
-                contract_path=pathlib.Path(
-                    state["immutable_artifacts"]["surface_contract"]["path"]
-                ),
             )
         except CreditAnalysisError as exc:
             if str(exc) != "selected completed-run window has no model calls":
@@ -1074,21 +1067,17 @@ def _load_batch_state(
     for key, path in expected.items():
         if pathlib.Path(paths[key]).resolve() != path.resolve():
             raise CreditAnalysisError(f"batch {key} path escapes controller ownership")
-    artifacts = state.get("immutable_artifacts")
-    if not isinstance(artifacts, dict):
-        raise CreditAnalysisError("batch immutable artifacts are invalid")
-    contract_record = artifacts.get("surface_contract")
-    if not isinstance(contract_record, dict):
-        raise CreditAnalysisError("batch surface_contract artifact is invalid")
-    load_contract_snapshot(contract_record, task_root=root)
-    contract = _load_contract(pathlib.Path(contract_record["path"]))
+    contract = _load_contract()
     if state["surface_contract_version"] != contract["surface_contract_version"]:
         raise CreditAnalysisError("batch surface contract version is stale")
     if state["source_selection_contract_version"] != contract[
         "source_selection_contract_version"
     ]:
         raise CreditAnalysisError("batch source selection contract is stale")
-    for label in ("request",):
+    artifacts = state.get("immutable_artifacts")
+    if not isinstance(artifacts, dict):
+        raise CreditAnalysisError("batch immutable artifacts are invalid")
+    for label in ("request", "surface_contract"):
         record = artifacts.get(label)
         if not isinstance(record, dict):
             raise CreditAnalysisError(f"batch {label} artifact is invalid")
@@ -1345,11 +1334,6 @@ def command_prepare_batch(request_path: pathlib.Path) -> dict[str, Any]:
     index, candidates, exclusions = _select_batch_candidates(request, collector)
     for key in ("requests_dir", "analyses_dir", "evidence_dir"):
         request["paths"][key].mkdir()
-    contract_record = freeze_contract_snapshot(
-        CONTRACT_PATH,
-        pathlib.Path(request["task_root"]) / "surface-contract.json",
-        task_root=pathlib.Path(request["task_root"]),
-    )
     state = {
         "schema": BATCH_STATE_SCHEMA,
         "version": BATCH_STATE_VERSION,
@@ -1381,7 +1365,10 @@ def command_prepare_batch(request_path: pathlib.Path) -> dict[str, Any]:
                 "path": str(request_path),
                 "sha256": request["request_hash"],
             },
-            "surface_contract": contract_record,
+            "surface_contract": {
+                "path": str(CONTRACT_PATH),
+                "sha256": _file_hash(CONTRACT_PATH),
+            },
             "manifest": None,
             "pricing_profile": (
                 {
