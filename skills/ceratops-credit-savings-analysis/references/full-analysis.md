@@ -43,20 +43,22 @@ Preserve every confirmed finding and report every capacity omission.
    Luna-output bytes, and actual output bytes.
 2. The same controller run executes the frozen plan without recollection. Keep
    each completed run as one semantic unit. Divide only an oversized run into
-   the
-   minimum ordered input parts that each fit Luna, preserve run order and
+   the minimum ordered input parts that each fit Luna, preserve run order and
    cross-part context, and recombine accepted parts into one run report. If all
    prepared evidence needs no more than seventy Luna attempts, admit every part.
    Otherwise prioritize the largest runs and their immediate successors, admit
-   as
-   many ordered parts as the remaining slots allow, and record the exact
+   as many ordered parts as the remaining slots allow, and record the exact
    unreviewed remainder. Never use calls as independent semantic units or create
    per-surface Luna tasks. Run up to fifteen Luna tasks concurrently and no more
    than seventy attempts including corrective reruns. Launch Luna with retained
-   native sessions. Let `W` be admitted Luna tasks, `A` be `min(6, W)`, and `X`
-   be usable Luna-report input bytes per Sol reviewer after fixed reserves. Size
-   Luna outputs so every reviewer's assigned reports fit `X`; a uniform safe
-   allowance is `floor(X / ceil(W / A))` minus per-report framing.
+   native sessions. Before launch, assign the admitted tasks among `A = min(6,
+   W)` Sol reviewers. For each reviewer, subtract fixed prompts, schemas, rules,
+   reserves, report framing, and exact inventory bytes from its proven input
+   capacity; divide the remainder among its assigned Lunas and cap each
+   allowance
+   at 64,000 bytes. Freeze the assignments and allowances only after proving
+   each
+   reviewer's planned maximum fits.
 3. Reject a Luna result only when it violates the frozen schema or output-byte
    allowance, not because it found many supported candidates. Rerun that exact
    task once with a smaller allowance; if it still fails, report that run part
@@ -66,29 +68,38 @@ Preserve every confirmed finding and report every capacity omission.
    or unaccepted run part with its run and part identity, record count, input
    bytes, candidate count when known, output bytes when produced, and reason.
    Never truncate a result.
-4. Measure the accepted Luna reports before Sol assignment. A temporary-control
-   review governs only its described owner/control subclaim and does not veto an
-   independent finding carried by the same candidate. Route every retained
-   candidate exactly once among up to six Luna-output reviewers using
-   `gpt-5.6-sol` at maximum effort. Each receives only its assigned Luna reports
-   and embedded evidence references. Select one additional direct-evidence Sol
-   only when
-   deterministic signals identify an important run and scheduling it leaves
-   capacity for the final merger and one corrective Sol retry.
+4. A temporary-control review governs only its described owner/control subclaim
+   and does not veto an independent finding carried by the same candidate. Route
+   every retained candidate exactly once to its preassigned Luna-output reviewer
+   using `gpt-5.6-sol` at maximum effort. Each receives only its assigned Luna
+   reports and embedded evidence references. Validate actual report bytes
+   against
+   the frozen allowances; never repack or omit an accepted report after Luna
+   runs. Select one additional direct-evidence Sol only when deterministic
+   signals
+   identify an important run and scheduling it leaves capacity for the final
+   merger and one corrective Sol retry.
 5. Apply the unassessed-call ceiling to the complete routed call set, never to
-   one preliminary Sol result in isolation. After the parallel reviewers and any
-   direct-evidence review finish, run one dependent final Sol. It merges compact
-   judgments, temporary-control reviews, classifications, risks, and ROI inputs;
-   deduplicates likely owner/control identity; and deeply verifies and expands
-   the
-   top three findings without suppressing other confirmed findings. Each
-   rejected Sol task receives one automatic corrective retry when the
-   eight-attempt ceiling permits. After a non-final task fails validation twice,
-   mark its exact candidate, call, and byte inventory unreviewed and continue to
-   the final merger. A revalidated retained result completes its task without a
-   new model call; an invalid retained result follows the same automatic retry
-   and omission policy. Use no more than eight Sol calls total, counting every
-   attempt.
+   one preliminary Sol result in isolation. If the aggregate exceeds the ceiling
+   and one Sol slot remains, prioritize one focused recovery over the optional
+   direct-evidence review. Give it only the unassessed calls, their retained
+   Luna
+   reports, and complete ordered run-part context, then replace those calls'
+   earlier classifications with its validated result. After the parallel
+   reviewers and any recovery or direct-evidence review finish, run one
+   dependent
+   final Sol. It merges compact judgments, temporary-control reviews,
+   classifications, risks, and ROI inputs; deduplicates likely owner/control
+   identity; and deeply verifies and expands the top three findings without
+   suppressing other confirmed findings. Each rejected Sol task receives one
+   automatic corrective retry when the eight-attempt ceiling permits. After a
+   non-final task fails validation twice, mark its exact candidate, call, and
+   byte
+   inventory unreviewed and continue to the final merger. A revalidated retained
+   result completes its task without a new model call; an invalid retained
+   result
+   follows the same automatic retry and omission policy. Use no more than eight
+   Sol calls total, counting every attempt.
 6. Persist immutable identities, prompts, results, attempts, latency, and usage.
    Before surfacing one parallel sibling failure, record every already-completed
    sibling attempt. On resume, revalidate complete task-owned attempt artifacts

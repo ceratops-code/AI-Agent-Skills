@@ -13,6 +13,26 @@ from tests.repository_lifecycle.support import (
 )
 
 
+def test_failed_log_excerpt_retains_decisive_lines_before_long_tail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ship = load_pr_workflow_module(monkeypatch, "ship")
+    log = (
+        "FAILED tests/test_contract.py::test_state - AssertionError: wrong state\n"
+        "E       assert actual == expected\n"
+        + "\n".join(f"cleanup-{index}-" + "x" * 180 for index in range(40))
+        + "\nlast cleanup line\n"
+    )
+
+    excerpt = ship._compact_failed_log(log)
+
+    assert excerpt is not None
+    assert "FAILED tests/test_contract.py::test_state" in excerpt
+    assert "E       assert actual == expected" in excerpt
+    assert "last cleanup line" in excerpt
+    assert len(excerpt.encode("utf-8")) <= 2_000
+
+
 def test_integrated_ship_delegates_admin_semantics_to_merge_owner(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,

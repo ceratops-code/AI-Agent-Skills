@@ -24,7 +24,6 @@ from typing import Any, cast
 
 import managed_runtime_builder as runtime_builder
 
-
 BUNDLE_ROOT = pathlib.Path(__file__).resolve().parents[2]
 MANIFEST_RELATIVE = pathlib.PurePosixPath("skills/skill-sections.json")
 MANIFEST_NAME = ".runtime-manifest.json"
@@ -611,6 +610,9 @@ def main(argv: list[str] | None = None) -> int:
         )
     repo_root = args.repo_root.expanduser().resolve()
     try:
+        # A Windows process cannot retire a directory held as its own CWD.
+        # The required source repository is outside every runtime target.
+        os.chdir(repo_root)
         if args.base_revision is not None:
             affected = affected_from_base(repo_root, args.base_revision)
         elif args.skill is not None or args.remove_skill is not None:

@@ -27,6 +27,49 @@ from tests.support.repositories import (
 )
 
 
+def test_runtime_installer_releases_installed_working_directory(
+    tmp_path: pathlib.Path,
+) -> None:
+    repo = tmp_path / "compatible"
+    install_root = tmp_path / "installed"
+    skill = "ceratops-skill-lifecycle"
+    create_compatible_repo(repo, "example/compatible", [skill])
+    assert run_builder(repo, install_root, "--skill", skill).returncode == 0
+    installed_skill = install_root / skill
+    installed_runtime = installed_skill / "scripts" / "runtime"
+    shutil.copytree(
+        RUNTIME_INSTALLER.parent,
+        installed_runtime,
+        dirs_exist_ok=True,
+    )
+    source = repo / "skills" / skill / "SKILL.md"
+    source.write_text(
+        source.read_text(encoding="utf-8") + "\nRepository update.\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(installed_runtime / RUNTIME_INSTALLER.name),
+            "--repo-root",
+            str(repo),
+            "--install-root",
+            str(install_root),
+            "--skill",
+            skill,
+        ],
+        cwd=installed_skill,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Repository update." in runtime_skill_text(install_root, skill)
+
+
 def test_full_install_removes_only_same_source_stale_skills(tmp_path: pathlib.Path) -> None:
     repo_a = tmp_path / "repo-a"
     repo_b = tmp_path / "repo-b"

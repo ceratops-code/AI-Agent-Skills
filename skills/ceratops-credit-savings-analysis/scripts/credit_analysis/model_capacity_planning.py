@@ -1,7 +1,7 @@
 """Pure capacity planning for the holistic credit-analysis controller.
 
 This module owns byte-bounded run partitioning, Luna admission priority,
-flexible Luna result allowances, and measured Sol report packing.  It never
+flexible Luna result allowances, and preassigned Sol review capacity.  It never
 reads sessions, launches models, or mutates controller state.  Calls remain
 attached to their source run; transport parts are an input-capacity mechanism,
 not independent semantic runs.
@@ -203,90 +203,173 @@ def select_luna_tasks(
     }
 
 
-def luna_output_allowance(
-    *,
-    admitted_tasks: int,
-    sol_reviewer_capacity_bytes: int,
-    maximum_reviewers: int,
-    per_report_framing_bytes: int = 1_000,
-) -> int:
-    """Compute one safe uniform Luna result allowance for downstream Sol."""
-
-    if admitted_tasks < 1 or maximum_reviewers < 1:
-        raise CreditAnalysisError("Luna output allocation requires admitted tasks")
-    reviewer_count = min(maximum_reviewers, admitted_tasks)
-    reports_per_reviewer = math.ceil(admitted_tasks / reviewer_count)
-    usable = (
-        sol_reviewer_capacity_bytes
-        - reports_per_reviewer * per_report_framing_bytes
-    )
-    allowance = usable // reports_per_reviewer
-    if allowance < 1_000:
-        raise CreditAnalysisError(
-            "accepted Luna reports cannot fit the proven Sol reviewer envelope"
-        )
-    return min(64_000, allowance)
-
-
-def pack_report_groups(
+def _exact_reviewer_bins(
     groups: Sequence[Mapping[str, Any]],
     *,
     bin_count: int,
     capacity_bytes: int,
-    allow_omissions: bool,
-) -> tuple[list[list[dict[str, Any]]], list[dict[str, Any]]] | None:
-    """Best-fit measured Luna report groups across fixed Sol reviewers."""
+    minimum_output_bytes: int,
+) -> list[list[dict[str, Any]]]:
+    """Find a complete packing, using exact search only when best-fit fails."""
 
-    bins: list[list[dict[str, Any]]] = [[] for _ in range(bin_count)]
-    loads = [0] * bin_count
-    omitted: list[dict[str, Any]] = []
     ordered = sorted(
         (dict(group) for group in groups),
         key=lambda group: (
-            -int(group["routing_bytes"]),
+            -int(group["inventory_bytes"]),
             int(group["run_ordinal"]),
             int(group["run_window_ordinal"]),
         ),
     )
-    for group in ordered:
-        size = int(group["routing_bytes"])
-        choices = [
-            index
-            for index in range(bin_count)
-            if loads[index] + size <= capacity_bytes
-        ]
-        if not choices:
-            if not allow_omissions:
-                return None
-            omitted.append(group)
-            continue
-        empty = [index for index in choices if loads[index] == 0]
-        selected = (
-            min(empty)
-            if empty
-            else max(choices, key=lambda index: (loads[index], -index))
+    sizes = [
+        int(group["inventory_bytes"])
+        + int(group.get("framing_bytes") or 0)
+        + minimum_output_bytes
+        for group in ordered
+    ]
+    if any(size > capacity_bytes for size in sizes):
+        raise CreditAnalysisError(
+            "one Luna report cannot fit the proven Sol reviewer envelope"
         )
-        bins[selected].append(group)
-        loads[selected] += size
-    for group_bin in bins:
-        group_bin.sort(
+    if sum(sizes) > bin_count * capacity_bytes:
+        raise CreditAnalysisError(
+            "accepted Luna reports cannot fit the proven Sol reviewer envelope"
+        )
+
+    def greedy() -> list[list[int]] | None:
+        bins: list[list[int]] = [[] for _ in range(bin_count)]
+        loads = [0] * bin_count
+        for item_index, size in enumerate(sizes):
+            choices = [
+                index
+                for index in range(bin_count)
+                if loads[index] + size <= capacity_bytes
+            ]
+            if not choices:
+                return None
+            selected = min(choices, key=lambda index: (loads[index], index))
+            bins[selected].append(item_index)
+            loads[selected] += size
+        return bins
+
+    assigned = greedy()
+    if assigned is None:
+        bins: list[list[int]] = [[] for _ in range(bin_count)]
+        loads = [0] * bin_count
+        failed: set[tuple[int, tuple[int, ...]]] = set()
+
+        def search(item_index: int) -> bool:
+            if item_index == len(ordered):
+                return True
+            state = (item_index, tuple(sorted(loads)))
+            if state in failed:
+                return False
+            size = sizes[item_index]
+            choices = sorted(
+                range(bin_count),
+                key=lambda index: (-loads[index], index),
+            )
+            seen_loads: set[int] = set()
+            for selected in choices:
+                load = loads[selected]
+                if load in seen_loads or load + size > capacity_bytes:
+                    continue
+                seen_loads.add(load)
+                bins[selected].append(item_index)
+                loads[selected] += size
+                if search(item_index + 1):
+                    return True
+                loads[selected] -= size
+                bins[selected].pop()
+            failed.add(state)
+            return False
+
+        if not search(0):
+            raise CreditAnalysisError(
+                "accepted Luna reports cannot fit the proven Sol reviewer envelope"
+            )
+        assigned = bins
+
+    return [[ordered[index] for index in group_bin] for group_bin in assigned]
+
+
+def plan_luna_reviewers(
+    groups: Sequence[Mapping[str, Any]],
+    *,
+    bin_count: int,
+    capacity_bytes: int,
+    per_report_framing_bytes: int = 1_000,
+    minimum_output_bytes: int = 1_000,
+    maximum_output_bytes: int = 64_000,
+) -> list[list[dict[str, Any]]]:
+    """Preassign Luna tasks and prove every reviewer's maximum input fits.
+
+    Fixed inventory and framing are packed first. Each task on one reviewer then
+    receives the same flexible allowance from that reviewer's exact remainder.
+    Actual Luna reports may be smaller but are never repacked after execution.
+    """
+
+    if not groups or bin_count < 1 or capacity_bytes < 1:
+        raise CreditAnalysisError("Luna reviewer planning requires admitted tasks")
+    if not 0 < minimum_output_bytes <= maximum_output_bytes:
+        raise CreditAnalysisError("Luna output allowance bounds are invalid")
+    prepared = [
+        {**dict(group), "framing_bytes": per_report_framing_bytes}
+        for group in groups
+    ]
+    bins = [
+        group_bin
+        for group_bin in _exact_reviewer_bins(
+            prepared,
+            bin_count=min(bin_count, len(prepared)),
+            capacity_bytes=capacity_bytes,
+            minimum_output_bytes=minimum_output_bytes,
+        )
+        if group_bin
+    ]
+    planned: list[list[dict[str, Any]]] = []
+    for reviewer_index, group_bin in enumerate(bins, start=1):
+        fixed_bytes = sum(
+            int(group["inventory_bytes"]) + int(group["framing_bytes"])
+            for group in group_bin
+        )
+        allowance = min(
+            maximum_output_bytes,
+            (capacity_bytes - fixed_bytes) // len(group_bin),
+        )
+        if allowance < minimum_output_bytes:
+            raise CreditAnalysisError(
+                "accepted Luna reports cannot fit the proven Sol reviewer envelope"
+            )
+        enriched = [
+            {
+                **group,
+                "reviewer_ordinal": reviewer_index,
+                "output_byte_limit": allowance,
+                "planned_routing_bytes": (
+                    int(group["inventory_bytes"])
+                    + int(group["framing_bytes"])
+                    + allowance
+                ),
+            }
+            for group in group_bin
+        ]
+        enriched.sort(
             key=lambda group: (
                 int(group["run_ordinal"]),
                 int(group["run_window_ordinal"]),
             )
         )
-    omitted.sort(
-        key=lambda group: (
-            int(group["run_ordinal"]),
-            int(group["run_window_ordinal"]),
-        )
-    )
-    return bins, omitted
+        if (
+            sum(int(group["planned_routing_bytes"]) for group in enriched)
+            > capacity_bytes
+        ):
+            raise CreditAnalysisError("Sol reviewer capacity proof failed")
+        planned.append(enriched)
+    return planned
 
 
 __all__ = (
-    "luna_output_allowance",
-    "pack_report_groups",
     "partition_luna_inputs",
+    "plan_luna_reviewers",
     "select_luna_tasks",
 )

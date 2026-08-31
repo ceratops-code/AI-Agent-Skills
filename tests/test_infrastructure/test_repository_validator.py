@@ -56,10 +56,13 @@ def test_build_checks_owns_order_both_platforms_and_space_safe_paths(
     )
     assert checks[3].command[-2:] == ("--platform", "linux")
     assert checks[4].command[-2:] == ("--platform", "win32")
+    diagnostic = repo_root / "build" / "test-diagnostics" / "pytest-failure.json"
     assert checks[5].command == (
         "python executable",
         "scripts/run-tests.py",
         "--all",
+        "--diagnostic-output",
+        str(diagnostic),
     )
     assert len(
         VALIDATOR.build_checks(
@@ -91,11 +94,26 @@ def test_ci_runs_repository_validator_that_owns_both_mypy_platforms() -> None:
     full_step = next(
         step for step in steps if step.get("name") == "Run full main-branch tests"
     )
-    assert " ".join(pull_request_step["run"].split()).startswith(
+    pull_request_command = " ".join(pull_request_step["run"].split())
+    assert pull_request_command.startswith(
         "python scripts/run-tests.py --base "
     )
-    assert " --head " in " ".join(pull_request_step["run"].split())
-    assert full_step["run"] == "python scripts/run-tests.py --all"
+    assert " --head " in pull_request_command
+    assert (
+        "--diagnostic-output ${{ runner.temp }}/pytest-failure.json"
+        in pull_request_command
+    )
+    assert " ".join(full_step["run"].split()) == (
+        "python scripts/run-tests.py --all "
+        "--diagnostic-output ${{ runner.temp }}/pytest-failure.json"
+    )
+    upload_step = next(
+        step for step in steps if step.get("name") == "Upload validation evidence"
+    )
+    assert upload_step["with"]["path"].splitlines() == [
+        "${{ runner.temp }}/repository-validation.log",
+        "${{ runner.temp }}/pytest-failure.json",
+    ]
 
     checks = VALIDATOR.build_checks(
         ROOT,
@@ -111,6 +129,8 @@ def test_ci_runs_repository_validator_that_owns_both_mypy_platforms() -> None:
         "python",
         "scripts/run-tests.py",
         "--all",
+        "--diagnostic-output",
+        str(ROOT / "build" / "test-diagnostics" / "pytest-failure.json"),
     )
 
 

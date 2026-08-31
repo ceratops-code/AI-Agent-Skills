@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import pathlib
 import sys
 from typing import Any, Mapping
@@ -179,7 +180,7 @@ class FakeCreditModelRunner:
             ]
             if selected:
                 add(suffix, "temporary-control", records[-1], selected)
-        return {
+        result = {
             "schema": "ceratops-credit-analysis-luna-result.v5",
             "analysis_id": packet["analysis_id"],
             "task_id": task["task_id"],
@@ -192,6 +193,21 @@ class FakeCreditModelRunner:
             },
             "candidates": candidates,
         }
+        output_limit = task.get("output_byte_limit")
+        if isinstance(output_limit, int):
+            encoded = len(
+                json.dumps(
+                    result,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            )
+            if encoded > output_limit:
+                for candidate in candidates:
+                    candidate["hypothesis"] = "Supported by the retained evidence."
+                    candidate["producer_owner_hint"] = "workflow"
+        return result
 
     def _audit(
         self,
@@ -216,11 +232,24 @@ class FakeCreditModelRunner:
     @staticmethod
     def _final(packet: Mapping[str, Any]) -> dict[str, Any]:
         prior = list(packet["prior_adjudication_results"])
-        decisions = [
-            dict(item)
+        recovery = packet.get("recovery_result")
+        outcome_results = [
+            *prior,
+            *([recovery] if isinstance(recovery, Mapping) else []),
+        ]
+        decision_by_candidate = {
+            str(item["luna_candidate_id"]): dict(item)
             for result in prior
             for item in result["candidate_decisions"]
-        ]
+        }
+        if isinstance(recovery, Mapping):
+            decision_by_candidate.update(
+                {
+                    str(item["luna_candidate_id"]): dict(item)
+                    for item in recovery["candidate_decisions"]
+                }
+            )
+        decisions = list(decision_by_candidate.values())
         decision_order = {
             candidate_id: index
             for index, candidate_id in enumerate(packet["luna_candidate_ids"])
@@ -234,7 +263,7 @@ class FakeCreditModelRunner:
 
         def merge_outcomes(key: str) -> list[dict[str, Any]]:
             merged: dict[tuple[Any, ...], dict[str, Any]] = {}
-            for result in prior:
+            for result in outcome_results:
                 for item in result[key]:
                     identity: tuple[Any, ...]
                     if key == "confirmed_findings":
@@ -317,11 +346,11 @@ class FakeCreditModelRunner:
                 for key, value in item.items()
                 if key != "contributing_surfaces"
             }
-            for result in prior
+            for result in outcome_results
             for item in result["temporary_control_reviews"]
         ]
         merge_index: dict[tuple[str, str], dict[str, Any]] = {}
-        for result in prior:
+        for result in outcome_results:
             for item in result["temporary_control_merges"]:
                 key = (str(item["owning_producer"]), str(item["control_key"]))
                 if key not in merge_index:
@@ -391,7 +420,7 @@ class FakeCreditModelRunner:
             )
         classification_by_call = {
             call_id: dict(group)
-            for result in prior
+            for result in outcome_results
             for group in result["call_classifications"]
             for call_id in group["call_ids"]
         }
@@ -742,6 +771,7 @@ class FakeCreditModelRunner:
             {
                 "model": model,
                 "phase": task["phase"],
+                "review_kind": task.get("review_kind"),
                 "reasoning_effort": task["reasoning_effort"],
                 "input_sha256": input_sha256,
                 "input_payload": input_payload,
