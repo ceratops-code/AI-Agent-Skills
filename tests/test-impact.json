@@ -76,7 +76,7 @@
       "id": "repository-lifecycle-source",
       "paths": [
         "skills/ceratops-repo-lifecycle/**",
-        "deploy/**"
+        "sdlc/**"
       ],
       "suites": [
         "repository-lifecycle"

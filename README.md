@@ -123,12 +123,12 @@ without repository deduplication.
 | `skills/ceratops-governance-lifecycle/scripts/rule_graph.py` | Parses canonical AGENTS rules and rejects structural syntax or rule-local explicit-user override escape clauses. |
 | `skills/ceratops-repo-lifecycle/scripts/github_contract_engine/` | Package CLI for compact local audit snapshots, contract evaluation, shared GitHub API access, sanitized evidence, and evidence-gated CodeQL disposition. |
 | `skills/ceratops-repo-lifecycle/scripts/github_pr_workflow/` | Package CLI for individual PR operations, one-call retry-safe review replies and resolutions, decision-complete gate blockers, single-snapshot terminal Actions outage detection, exact-commit checkpointed shipping, four-proof obsolete-prepared-checkpoint cleanup before automatic resume, scoped pending-work checks, concurrent gates, integrated admin merge, reusable-branch restoration, and terminal cleanup. |
-| `skills/ceratops-repo-lifecycle/scripts/promote-repository.py` | Prepares `release/local`; promotes selected branches with no deployment or one named operation; or composes promotion into exact-head shipping, remote release publication, local deployment, finalization, and cleanup. |
+| `skills/ceratops-repo-lifecycle/scripts/promote-repository.py` | Prepares `release/local`; promotes selected branches with no deployment or an explicit ordered operation selection; or composes promotion into exact-head shipping with ordered release and deploy selections, finalization, and cleanup. |
 | `skills/ceratops-repo-lifecycle/scripts/manage-pending-work.py` | Records, checks, automatically resumes the retained target commit, and progressively finalizes the exact selected scope; preflight preserves and reports non-cleanup-eligible worktrees, while eligible residual-worktree and identity-matched task-temp cleanup stays within validated named directory boundaries and preserves active skill-update state for post-deployment finalization. |
 | `skills/ceratops-repo-lifecycle/scripts/repository_operation.py` | Prepares complete ordered operation sequences before execution and shares exact argv handling, strict parameters, repository path boundaries, compact results, and bounded structured failures. |
-| `skills/ceratops-repo-lifecycle/scripts/run-deploy-operation.py` | Validates and executes one named local operation from the `deploy` section of `sdlc/sdlc.yml`, returning any optional declarative agent handoff. |
-| `skills/ceratops-repo-lifecycle/scripts/run-release-operation.py` | Validates and executes one named remote publication operation from the `release` section of `sdlc/sdlc.yml`. |
-| `skills/ceratops-repo-lifecycle/scripts/ship-repository.py` | Orchestrates scoped pre-push checking, guarded GitHub shipping, main synchronization, separately checkpointed release publication and local deployment, and resumable selected-source cleanup. |
+| `skills/ceratops-repo-lifecycle/scripts/run-deploy-operation.py` | Prevalidates and executes ordered named local operations from the `deploy` section of `sdlc/sdlc.yml`, returning optional declarative agent handoffs per operation. |
+| `skills/ceratops-repo-lifecycle/scripts/run-release-operation.py` | Prevalidates and executes ordered named remote publication operations from the `release` section of `sdlc/sdlc.yml`. |
+| `skills/ceratops-repo-lifecycle/scripts/ship-repository.py` | Prevalidates one SDLC contract and ordered phase selections before orchestrating guarded GitHub shipping, main synchronization, per-operation publication and deployment checkpoints, and resumable selected-source cleanup. |
 | `skills/ceratops-skill-lifecycle/scripts/skills-consistency-source-validator.py` | Skill-lifecycle-owned source, metadata, runtime-input, contract, and portability validator used only by explicit skill workflows. |
 | `skills/ceratops-skill-lifecycle/scripts/fast-change.py` | Classifies exact structured replacements, generates their diff, and owns the eligible direct-release change through declared Markdown lint, exact helper tests, targeted installation, commit, and failure compensation. |
 
@@ -147,10 +147,11 @@ required, targeted installation, staging, commit, and compensation.
 
 Promotion and deployment are separate repository actions. `promote` assembles
 the selected branches into `release/local` without deployment;
-`promote-and-deploy` additionally runs the contract's optional `deploy`
-operation and executes its returned handoff when the promoted manifest has
-managed skills. Managed skills without a declared handoff are reported as not
-deployed without changing the repository deployment result.
+`promote-and-deploy` additionally prevalidates and runs explicitly selected
+`deploy.operations` in order and executes their returned handoffs in the same
+order when the promoted manifest has managed skills. Managed skills without a
+declared handoff are reported as not deployed without changing the repository
+deployment result.
 The runner never converts prose instructions into commands.
 
 `ship` takes either an exact pending-work scope or an explicit disabled-check
@@ -390,7 +391,8 @@ skill's `deploy` action to refresh it; never use bootstrap as a reinstall path.
 When shipping a staged batch, reuse the same `release/local` branch name locally
 and remotely by default. Use `$ceratops-repo-lifecycle` `promote` to assemble
 selected reviewed branches without installation, or `promote-and-deploy` to run
-the optional live `deploy` operation and any returned handoff. Use `ship` for
+an explicit ordered deploy-operation selection and any returned handoffs. Use
+`ship` for
 the complete
 scoped pre-push check, exact-commit PR publication, readiness and review gates,
 final merge, main synchronization, optional repository deployment,

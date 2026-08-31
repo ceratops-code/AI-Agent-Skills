@@ -44,10 +44,17 @@ def test_sdlc_template_is_a_schema_valid_empty_skeleton(
     optional = run_deploy_operation(repo, "missing", if_declared=True)
     assert optional.returncode == 0, optional.stderr
     assert json.loads(optional.stdout) == {
-        "status": "no_op",
-        "operation": "missing",
-        "steps": [],
-        "reason": "operation_not_declared",
+        "status": "completed",
+        "completed_operations": ["missing"],
+        "pending_operations": [],
+        "results": [
+            {
+                "status": "no_op",
+                "operation": "missing",
+                "steps": [],
+                "reason": "operation_not_declared",
+            }
+        ],
     }
 
 
@@ -62,10 +69,17 @@ def test_absent_sdlc_section_is_a_successful_no_op(
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {
-        "status": "no_op",
-        "operation": "deploy",
-        "steps": [],
-        "reason": "contract_section_not_declared",
+        "status": "completed",
+        "completed_operations": ["deploy"],
+        "pending_operations": [],
+        "results": [
+            {
+                "status": "no_op",
+                "operation": "deploy",
+                "steps": [],
+                "reason": "contract_section_not_declared",
+            }
+        ],
     }
 
 
@@ -110,11 +124,18 @@ def test_deploy_operation_preserves_argv_without_a_shell(
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {
-        "status": "deployed",
-        "operation": "verify",
-        "commit": None,
-        "steps": ["argv"],
-        "handoff": "ceratops-skill-lifecycle/deploy",
+        "status": "completed",
+        "completed_operations": ["verify"],
+        "pending_operations": [],
+        "results": [
+            {
+                "status": "deployed",
+                "operation": "verify",
+                "commit": None,
+                "steps": ["argv"],
+                "handoff": "ceratops-skill-lifecycle/deploy",
+            }
+        ],
     }
     assert json.loads(output.read_text(encoding="utf-8")) == [
         "value with spaces",
@@ -145,10 +166,17 @@ def test_deploy_operation_preserves_argv_without_a_shell(
 
     assert published.returncode == 0, published.stderr
     assert json.loads(published.stdout) == {
-        "status": "published",
-        "operation": "publish",
-        "commit": None,
-        "steps": ["argv"],
+        "status": "completed",
+        "completed_operations": ["publish"],
+        "pending_operations": [],
+        "results": [
+            {
+                "status": "published",
+                "operation": "publish",
+                "commit": None,
+                "steps": ["argv"],
+            }
+        ],
     }
     assert json.loads(output.read_text(encoding="utf-8")) == [
         "release value",
@@ -505,6 +533,111 @@ def test_prepare_operations_validates_the_whole_sequence_before_execution(
             _deployment_profile(),
         )
 
+    assert not marker.exists()
+
+
+def test_operation_cli_prevalidates_and_runs_explicit_ids_in_order(
+    tmp_path: pathlib.Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    log = repo / "order.txt"
+    for name in ("promotion-check.py", "custom-deploy.py"):
+        (repo / name).write_text(
+            "import pathlib, sys\n"
+            "with pathlib.Path('order.txt').open('a', encoding='utf-8') as stream:\n"
+            "    stream.write(sys.argv[1] + '\\n')\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+    write_sdlc_contract(
+        repo,
+        deploy_operations={
+            "promotion-check": {
+                "steps": [
+                    {
+                        "id": "promotion-check",
+                        "run": [sys.executable, "promotion-check.py", "promotion"],
+                    }
+                ]
+            },
+            "custom-deploy": {
+                "steps": [
+                    {
+                        "id": "custom-deploy",
+                        "run": [sys.executable, "custom-deploy.py", "deployment"],
+                    }
+                ]
+            },
+        },
+    )
+
+    prepared = run_deploy_operation(
+        repo,
+        ("promotion-check", "custom-deploy"),
+        prepare_only=True,
+    )
+    assert prepared.returncode == 0, prepared.stderr
+    assert json.loads(prepared.stdout) == {
+        "status": "prepared",
+        "operations": ["promotion-check", "custom-deploy"],
+    }
+    assert not log.exists()
+
+    executed = run_deploy_operation(
+        repo,
+        ("promotion-check", "custom-deploy"),
+    )
+    assert executed.returncode == 0, executed.stderr
+    result = json.loads(executed.stdout)
+    assert result["completed_operations"] == ["promotion-check", "custom-deploy"]
+    assert [item["operation"] for item in result["results"]] == [
+        "promotion-check",
+        "custom-deploy",
+    ]
+    assert log.read_text(encoding="utf-8") == "promotion\ndeployment\n"
+
+
+def test_operation_cli_rejects_a_later_invalid_operation_before_execution(
+    tmp_path: pathlib.Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    marker = repo / "must-not-run.txt"
+    write_sdlc_contract(
+        repo,
+        deploy_operations={
+            "first": {
+                "steps": [
+                    {
+                        "id": "mutate",
+                        "run": [
+                            sys.executable,
+                            "-c",
+                            "import pathlib; pathlib.Path('must-not-run.txt').write_text('ran')",
+                        ],
+                    }
+                ]
+            },
+            "invalid-later": {
+                "steps": [
+                    {
+                        "id": "escape",
+                        "cwd": "../outside",
+                        "run": [sys.executable, "-V"],
+                    }
+                ]
+            },
+        },
+    )
+    (tmp_path / "outside").mkdir()
+
+    result = run_deploy_operation(repo, ("first", "invalid-later"))
+
+    assert result.returncode == 1
+    assert "step cwd must be a directory inside the repository" in json.loads(
+        result.stderr
+    )["message"]
     assert not marker.exists()
 
 

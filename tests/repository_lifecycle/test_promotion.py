@@ -19,6 +19,7 @@ from tests.repository_lifecycle.support import (
 )
 from tests.support.repositories import (
     run_git,
+    write_sdlc_contract,
 )
 
 
@@ -123,18 +124,29 @@ def test_promote_repository_requires_an_explicit_deployment_choice(
     assert result["head"] == approved_head
     assert result["release_start"] == release_start
     if expected_operation is None:
-        assert result["operation"] is None
+        assert result["operations"] is None
     else:
-        assert result["operation"] == {
-            **expected_operation,
-            "commit": approved_head,
+        assert result["operations"] == {
+            "status": "completed",
+            "completed_operations": ["deploy"],
+            "pending_operations": [],
+            "results": [
+                {
+                    **expected_operation,
+                    "commit": approved_head,
+                }
+            ],
         }
     if expected_managed_skills is None:
         assert "managed_skills" not in result
-        assert "handoff" not in result
+        assert "handoffs" not in result
     else:
         assert result["managed_skills"] is expected_managed_skills
-        assert result["handoff"] == expected_handoff
+        assert result["handoffs"] == (
+            []
+            if expected_handoff is None
+            else [{"operation": "deploy", "handoff": expected_handoff}]
+        )
     scope_path = pathlib.Path(result["pending_work_scope"])
     assert json.loads(scope_path.read_text(encoding="utf-8")) == {
         "sources": [
@@ -156,6 +168,68 @@ def test_promote_repository_requires_an_explicit_deployment_choice(
         assert log.read_text(encoding="utf-8") == f"{release_start}\n"
     else:
         assert log.read_text(encoding="utf-8") == "no-base\n"
+
+
+def test_promote_repository_runs_explicit_operation_ids_in_order(
+    tmp_path: pathlib.Path,
+) -> None:
+    repo, _, _, environment = prepare_repository_lifecycle_repo(tmp_path)
+    log = tmp_path / "operation-order.txt"
+    (repo / "ordered-operation.py").write_text(
+        "import pathlib, sys\n"
+        "with pathlib.Path(sys.argv[2]).open('a', encoding='utf-8') as stream:\n"
+        "    stream.write(sys.argv[1] + '\\n')\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    write_sdlc_contract(
+        repo,
+        deploy_operations={
+            operation: {
+                "steps": [
+                    {
+                        "id": operation,
+                        "run": [
+                            sys.executable,
+                            "ordered-operation.py",
+                            operation,
+                            str(log),
+                        ],
+                    }
+                ]
+            }
+            for operation in ("promotion-check", "custom-deploy")
+        },
+    )
+    assert run_git(repo, "add", ".").returncode == 0
+    assert run_git(repo, "commit", "-m", "add ordered operations").returncode == 0
+
+    promoted = subprocess.run(
+        [
+            sys.executable,
+            str(PROMOTE_REPOSITORY),
+            "--repo-root",
+            str(repo),
+            "--source-branch",
+            "approved",
+            "--run-operation",
+            "promotion-check",
+            "--run-operation",
+            "custom-deploy",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=environment,
+    )
+
+    assert promoted.returncode == 0, promoted.stderr
+    result = json.loads(promoted.stdout)
+    assert result["operations"]["completed_operations"] == [
+        "promotion-check",
+        "custom-deploy",
+    ]
+    assert log.read_text(encoding="utf-8") == "promotion-check\ncustom-deploy\n"
 
 
 def test_promote_repository_ship_after_promotion_composes_terminal_workflow(
@@ -266,15 +340,12 @@ def test_promote_repository_ship_after_promotion_composes_terminal_workflow(
     assert ship_command[ship_command.index("--remote-name") + 1] == "origin"
     assert ship_command[ship_command.index("--commit") + 1] == approved_head
     assert pathlib.Path(
-        ship_command[ship_command.index("--release-contract") + 1]
+        ship_command[ship_command.index("--sdlc-contract") + 1]
     ) == pathlib.Path("sdlc/sdlc.yml")
     assert ship_command[
         ship_command.index("--release-preflight-operation") + 1
     ] == "preflight"
     assert ship_command[ship_command.index("--release-operation") + 1] == "publish"
-    assert pathlib.Path(
-        ship_command[ship_command.index("--deploy-contract") + 1]
-    ) == pathlib.Path("sdlc/sdlc.yml")
     assert ship_command[ship_command.index("--deploy-operation") + 1] == "deploy"
     assert "--reusable-head" in ship_command
     assert str(PROMOTE_REPOSITORY.parent / "run-deploy-operation.py") not in (
@@ -498,7 +569,12 @@ def test_promote_and_deploy_does_not_inject_base_revision(
     assert second.returncode == 0, second.stderr
     second_result = json.loads(second.stdout)
     assert second_result["release_start"] == approved_head
-    assert second_result["handoff"] == "ceratops-skill-lifecycle/deploy"
+    assert second_result["handoffs"] == [
+        {
+            "operation": "deploy",
+            "handoff": "ceratops-skill-lifecycle/deploy",
+        }
+    ]
     assert second_result["preserved_sources"] == [
         {
             "branch": "approved",

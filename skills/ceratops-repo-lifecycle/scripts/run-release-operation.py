@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute one named remote publication from the repository SDLC contract."""
+"""Execute ordered remote publications from the repository SDLC contract."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def run_operation(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Execute one release operation and emit one compact result."""
+    """Execute an ordered release selection and emit one compact result."""
 
     return operation_main(PROFILE, argv)
 

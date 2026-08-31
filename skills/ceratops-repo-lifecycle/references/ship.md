@@ -4,9 +4,10 @@
 
 Ship one staged integration branch through GitHub, synchronize local main,
 recheck selected local work, execute or explicitly no-op declared remote
-release publication, then execute or explicitly no-op local repository
-`deploy`, handle its managed-skill handoff, recheck again, and clean only the
-selected merged source branches and worktrees.
+release operations in order, then execute or explicitly no-op selected local
+repository deploy operations in order, handle their managed-skill handoffs,
+recheck again, and clean only the selected merged source branches and
+worktrees.
 
 ## Context
 
@@ -20,6 +21,9 @@ selected merged source branches and worktrees.
   `--repo-root` identifies the target repository; never search that target for
   this helper. The helper owns preflight; after a terminal blocker, inspect
   only the exact blocker-named surface.
+- Select a nondefault contract only with `--sdlc-contract PATH`. Repeat
+  `--release-preflight-operation ID`, `--release-operation ID`, or
+  `--deploy-operation ID` to replace that phase's ordered default selection.
 - The helper derives the canonical pending-work scope from `--head-branch`.
   When a retained scope exists, the wrapper reuses its recorded exact target
   commit; a caller-supplied `--commit` must match it. An absent scope is a
@@ -39,6 +43,9 @@ selected merged source branches and worktrees.
 - Repository checkout, staged `release/local`, base branch, remote, merge method,
   and PR title/body.
 - Whether the head is reusable after merge.
+- Optional repository-owned `sdlc/sdlc.yml` path and ordered release preflight,
+  release publication, and deploy operation IDs. Repeat the phase-specific CLI
+  flag to replace that phase's default selection.
 
 ## Constraints
 
@@ -92,15 +99,20 @@ selected merged source branches and worktrees.
    and critical recovery semantics; ship contains no independent toggle logic.
 6. After merge, the helper synchronizes local main and restores a reusable
    integration branch when selected.
-7. Before remote mutation, the wrapper classifies release publication and
-   deployment. An absent default `sdlc/sdlc.yml` makes both successful no-ops;
+7. Before remote mutation, the wrapper resolves one `--sdlc-contract`, using
+   `sdlc/sdlc.yml` by default. It resolves the ordered defaults `preflight`,
+   `publish`, and `deploy`, or replaces each default with that phase's repeated
+   explicit operation IDs. It prevalidates every selected operation, exact argv,
+   parameter, and repository-bounded working directory before the first remote
+   mutation, then runs all selected release preflight operations in order. An
+   absent default contract makes publication and deployment successful no-ops;
    an absent `release` or `deploy` section makes only that section a successful
-   no-op. Shipping continues after either case. A missing explicitly selected
-   custom contract blocks. Run a declared release preflight before the first
-   remote mutation. After
+   no-op. A missing explicitly selected custom contract or operation ID blocks.
+   After
    synchronization, recheck the selected scope, run declared release
-   publication or record its no-op, then run declared local deployment or
-   record its no-op, and recheck. Before removing a selected worktree or branch
+   publication operations in order or record their no-ops, then run declared
+   local deployment operations in order or record their no-ops, and recheck.
+   Before removing a selected worktree or branch
    for a retained source, finalization atomically changes its state to
    `deleting`; an existing `deleting` branch first passes the same cleanliness
    and ancestry checks. Before removing a selected worktree, finalization
@@ -131,11 +143,12 @@ selected merged source branches and worktrees.
    task-temp directories are absent. After successful branch
    deletion, it atomically removes the source record and deletes the scope after
    the final source is removed.
-8. After declared release publication or deployment succeeds, the helper
-   checkpoints each result independently against the exact target, operation,
-   and resolved contract before the next phase. A retry reuses each completed
-   result while later work remains pending and removes both checkpoints only
-   after cleanup succeeds. Every terminal blocker after remote mutation returns
+8. After each declared release publication or deployment operation succeeds,
+   the helper checkpoints its result independently against the exact target,
+   ordered position, operation ID, and resolved contract before continuing. A
+   retry reuses the completed ordered prefix while later work remains pending
+   and removes all operation checkpoints only after cleanup succeeds. Every
+   terminal blocker after remote mutation returns
    the phases proven complete, the exact remaining phase, and a structured
    `resume_action` containing the owning ship helper's argv and working
    directory; consumed review-reply input is excluded. A publication failure
@@ -143,20 +156,21 @@ selected merged source branches and worktrees.
    Terminal success also removes every exact helper-owned atomic-write `.tmp`
    sibling for retired scopes, residual-cleanup records, operation checkpoints,
    and PR checkpoints; it never scans for or removes unrelated temporary files.
-   Both operations must remain retry-safe across interruption.
+   Every selected operation must remain retry-safe across interruption.
 9. After the helper completes, when synchronized main declares managed skills,
-   execute the handoff returned in its deployment result against that exact
-   checkout. If none was declared, report the managed skills as not deployed
-   without changing the completed repository result.
+   execute each handoff returned by its ordered deployment results against that
+   exact checkout. If none was declared, report the managed skills as not
+   deployed without changing the completed repository result.
 
 ## Done When
 
 ### Completion Gate
 
 - PR publication, all gates, exact-head admin merge, main synchronization,
-  declared or explicit no-op remote release publication, and declared or
-  explicit no-op local repository deployment completed; any returned handoff
-  completed, and managed skills without one were reported.
+  every selected or explicit no-op remote release publication, and every
+  selected or explicit no-op local repository deployment completed in order;
+  any returned handoffs completed in order, and managed skills without one
+  were reported.
 - Every existing cleanup-selected source branch passed pending-work checks; an
   or proven-empty scope completed as a cleanup no-op.
 - Only an evidence-proven interrupted `deleting` record was recovered

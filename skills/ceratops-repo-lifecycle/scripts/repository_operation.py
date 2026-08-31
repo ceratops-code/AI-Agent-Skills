@@ -421,6 +421,7 @@ def execute_prepared_operations(
         results.append(result)
         if result.get("status") == "operation_failed":
             return {
+                **result,
                 "status": "operation_failed",
                 "completed_operations": completed,
                 "pending_operations": [
@@ -470,7 +471,7 @@ def build_parser(profile: OperationProfile) -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         description=(
-            f"Execute one {profile.section} operation from "
+            f"Execute ordered {profile.section} operations from "
             f"{profile.default_contract.as_posix()}."
         )
     )
@@ -478,13 +479,23 @@ def build_parser(profile: OperationProfile) -> argparse.ArgumentParser:
     parser.add_argument(
         "--contract", type=pathlib.Path, default=profile.default_contract
     )
-    parser.add_argument("--operation", required=True)
+    parser.add_argument(
+        "--operation",
+        action="append",
+        required=True,
+        help="Operation ID; repeat to preserve an explicit execution order.",
+    )
     parser.add_argument("--parameter", action="append", default=[])
     parser.add_argument("--parameter-if-declared", action="append", default=[])
     parser.add_argument(
         "--if-declared",
         action="store_true",
         help="Return an explicit no-op when the selected operation is absent.",
+    )
+    parser.add_argument(
+        "--prepare-only",
+        action="store_true",
+        help="Validate every selected operation without executing commands.",
     )
     return parser
 
@@ -497,14 +508,31 @@ def operation_main(
 
     args = build_parser(profile).parse_args(argv)
     try:
-        result = run_operation(
+        parameters = parse_parameters(args.parameter, profile)
+        conditional_parameters = parse_parameters(
+            args.parameter_if_declared, profile
+        )
+        prepared = prepare_operations(
             args.repo_root,
-            args.operation,
+            [
+                OperationRequest(
+                    operation=operation,
+                    parameters=parameters,
+                    parameters_if_declared=conditional_parameters,
+                    if_declared=args.if_declared,
+                )
+                for operation in args.operation
+            ],
             profile,
             args.contract,
-            parse_parameters(args.parameter, profile),
-            parse_parameters(args.parameter_if_declared, profile),
-            if_declared=args.if_declared,
+        )
+        result = (
+            {
+                "status": "prepared",
+                "operations": [operation.operation for operation in prepared],
+            }
+            if args.prepare_only
+            else execute_prepared_operations(prepared)
         )
     except (OperationError, OSError, ValueError) as exc:
         print(

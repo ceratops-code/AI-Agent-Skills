@@ -69,23 +69,26 @@ def merged_pr_state(head: str) -> str:
 
 def run_deploy_operation(
     repo: pathlib.Path,
-    operation: str,
+    operation: str | tuple[str, ...],
     *,
     contract: pathlib.Path | None = None,
     parameters: tuple[str, ...] = (),
     parameters_if_declared: tuple[str, ...] = (),
     if_declared: bool = False,
+    prepare_only: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    """Run one isolated deployment operation."""
+    """Run an isolated ordered deployment selection."""
 
     command = [
         sys.executable,
         str(DEPLOY_OPERATION),
         "--repo-root",
         str(repo),
-        "--operation",
-        operation,
     ]
+    for operation_id in (
+        (operation,) if isinstance(operation, str) else operation
+    ):
+        command.extend(("--operation", operation_id))
     if contract is not None:
         command.extend(("--contract", str(contract)))
     for parameter in parameters:
@@ -94,6 +97,8 @@ def run_deploy_operation(
         command.extend(("--parameter-if-declared", parameter))
     if if_declared:
         command.append("--if-declared")
+    if prepare_only:
+        command.append("--prepare-only")
     return subprocess.run(
         command,
         capture_output=True,
@@ -104,20 +109,22 @@ def run_deploy_operation(
 
 def run_release_operation(
     repo: pathlib.Path,
-    operation: str,
+    operation: str | tuple[str, ...],
     *,
     contract: pathlib.Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run one isolated release-publication operation."""
+    """Run an isolated ordered release-publication selection."""
 
     command = [
         sys.executable,
         str(RELEASE_OPERATION),
         "--repo-root",
         str(repo),
-        "--operation",
-        operation,
     ]
+    for operation_id in (
+        (operation,) if isinstance(operation, str) else operation
+    ):
+        command.extend(("--operation", operation_id))
     if contract is not None:
         command.extend(("--contract", str(contract)))
     return subprocess.run(

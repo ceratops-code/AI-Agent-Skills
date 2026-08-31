@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute one named local deployment from the repository SDLC contract."""
+"""Execute ordered local deployments from the repository SDLC contract."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def run_operation(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Execute one deployment operation and emit one compact result."""
+    """Execute an ordered deployment selection and emit one compact result."""
 
     return operation_main(PROFILE, argv)
 

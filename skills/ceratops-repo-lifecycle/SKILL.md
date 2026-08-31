@@ -37,10 +37,10 @@ release publication, artifact identity, and local deployment in
 - Target repository, checkout, task worktree, branch, selected source branches,
   PR, artifact, dependency queue, compatibility gap, or creation request that
   identifies the action.
-- Whether promotion should stop after assembling `release/local`, run its
-  optional `deploy` operation before shipping, or continue directly into
-  terminal shipping with release publication and local deployment only after
-  merge.
+- Whether promotion should stop after assembling `release/local`, run an
+  explicit ordered selection of `deploy.operations`, or continue directly
+  into terminal shipping with selected release and deployment operations only
+  at their lifecycle-owned phases.
 - Required live GitHub, local repository, CI, artifact, credential, and
   deployment context named by the selected action reference.
 
@@ -81,14 +81,14 @@ release publication, artifact identity, and local deployment in
   named repository surfaces.
 - Use `promote` when selected committed branches should join a local
   `release/local` branch without deployment.
-- Use `promote-and-deploy` when the same promotion should run optional
-  repository deployment, execute a returned handoff, and report managed skills
-  when no handoff is declared.
+- Use `promote-and-deploy` when the same promotion should run explicitly
+  selected repository operations in order, execute returned handoffs in that
+  order, and report managed skills when no handoff is declared.
 - Use composed promotion and shipping when selected committed branches should
   enter the complete ship workflow immediately after promotion; only shipping
   may publish a release or deploy in this mode.
 - Use `ship` for the complete staged-branch PR, gate, merge, main sync,
-  optional remote release publication, optional local repository deployment,
+  ordered remote release publication, ordered local repository deployment,
   returned handoff handling, late recheck, and selected-source cleanup
   workflow.
 - Use `merge-pr` only when standalone PR finalization is the whole task.
