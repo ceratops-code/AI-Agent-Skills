@@ -152,24 +152,92 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
         if omission.get("reason") == "sol-capacity"
     ]
     assert capacity_completed["complete"] is True
-    assert sol_capacity_omissions == [
-        omission
+    assert sol_capacity_omissions == []
+    assert not any(
+        omission.get("reason") == "sol-capacity"
         for omission in capacity_final["omissions"]
-        if omission.get("reason") == "sol-capacity"
-    ]
-    omitted_luna_candidate_ids = {
-        candidate["id"]
-        for omission in sol_capacity_omissions
-        for task_id in omission["task_ids"]
-        for candidate in json.loads(
-            pathlib.Path(
-                capacity_state["execution"][task_id]["result"]["path"]
-            ).read_text(encoding="utf-8")
-        )["candidates"]
+    )
+    routing = json.loads(
+        pathlib.Path(capacity_state["routing"]["path"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    reviewer_plan = capacity_state["manifest"]["sol_reviewer_plan"]
+    assert all(
+        reviewer["planned_routing_bytes"]
+        <= reviewer_plan["capacity_bytes_per_reviewer"]
+        for reviewer in reviewer_plan["reviewers"]
+    )
+    assert all(
+        shard["routing_bytes"] <= routing["capacity_bytes_per_adjudicator"]
+        for shard in routing["shards"]
+    )
+    assert {
+        task["task_id"]
+        for task in capacity_state["manifest"]["luna_tasks"]
+        if capacity_state["execution"][task["task_id"]]["status"] == "complete"
+    } == {
+        task_id
+        for shard in routing["shards"]
+        for task_id in shard["luna_task_ids"]
     }
-    assert omitted_luna_candidate_ids.isdisjoint(
-        decision["luna_candidate_id"]
-        for decision in capacity_final["candidate_decisions"]
+
+    class UnassessedPreliminaryRunner(FakeCreditModelRunner):
+        def _sol(
+            self,
+            task: Mapping[str, Any],
+            packet: Mapping[str, Any],
+            digest: str,
+        ) -> dict[str, Any]:
+            result = super()._sol(task, packet, digest)
+            if task.get("review_kind") == "unassessed-recovery":
+                return result
+            for group in result["call_classifications"]:
+                if group["classification"] == "reviewed_no_confirmed_waste":
+                    group["classification"] = "unassessed"
+                    group["rationale"] = "The preliminary review lacked context."
+            return result
+
+    recovery_root = tmp_path / "unassessed-recovery"
+    recovery_root.mkdir()
+    recovery_request, _, _ = credit_analysis_request(
+        recovery_root,
+        extra_completed_turns=2,
+        extra_calls_per_turn=8,
+    )
+    recovery_runner = UnassessedPreliminaryRunner(temporary_controls=False)
+    recovery_plan = workflow.command_plan_orchestration(
+        recovery_request,
+        available_models=recovery_runner.available_models,
+    )
+    recovery_completed = workflow.command_execute_orchestration(
+        pathlib.Path(recovery_plan["state_path"]),
+        runner=recovery_runner,
+        available_models=recovery_runner.available_models,
+    )
+    recovery_calls = [
+        call
+        for call in recovery_runner.calls
+        if call["review_kind"] == "unassessed-recovery"
+    ]
+    assert recovery_completed["complete"] is True
+    assert len(recovery_calls) == 1
+    assert recovery_calls[0]["input_payload"]["recovery_run_parts"]
+    assert {
+        row[1]
+        for row in recovery_calls[0]["input_payload"]["call_inventory"]["rows"]
+    }
+    recovery_final_call = next(
+        call for call in recovery_runner.calls if call["phase"] == "sol-final"
+    )
+    assert recovery_final_call["input_payload"]["recovery_result"] is not None
+    recovery_final = json.loads(
+        pathlib.Path(recovery_completed["final_result_path"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert recovery_final["classification_totals"]["unassessed"] <= (
+        recovery_final["manifest"]["candidate_count"] // 5
     )
 
 
@@ -233,20 +301,25 @@ def test_luna_admission_caps_at_seventy_attempts_and_fifteen_workers(
         for task in planned_state["manifest"]["luna_tasks"]
         if planned_state["execution"][task["task_id"]]["status"] == "pending"
     ]
-    output_allocator = workflow.command_plan_orchestration.__globals__[
-        "luna_output_allowance"
-    ]
-    assert {task["output_byte_limit"] for task in admitted} == {
-        output_allocator(
-            admitted_tasks=70,
-            sol_reviewer_capacity_bytes=max(
-                16_000,
-                planned_state["model_specs"]["sol"]["evidence_byte_budget"]
-                - 64_000,
-            ),
-            maximum_reviewers=6,
-        )
+    reviewer_plan = planned_state["manifest"]["sol_reviewer_plan"]
+    assert {
+        task["task_id"] for task in admitted
+    } == {
+        task_id
+        for reviewer in reviewer_plan["reviewers"]
+        for task_id in reviewer["luna_task_ids"]
     }
+    assert all(
+        1_000 <= int(task["output_byte_limit"]) <= 64_000
+        and task["sol_reviewer_task_id"]
+        and task["planned_routing_bytes"]
+        for task in admitted
+    )
+    assert all(
+        reviewer["planned_routing_bytes"]
+        <= reviewer_plan["capacity_bytes_per_reviewer"]
+        for reviewer in reviewer_plan["reviewers"]
+    )
     selector = workflow.command_plan_orchestration.__globals__["select_luna_tasks"]
     priority_tasks = [
         {
@@ -278,27 +351,32 @@ def test_luna_admission_caps_at_seventy_attempts_and_fifteen_workers(
         },
     ]
     assert selector(priority_tasks, maximum_attempts=2) == {"b.1", "c.1"}
-    packer = workflow.command_plan_orchestration.__globals__["pack_report_groups"]
-    packed = packer(
+    planner = workflow.command_plan_orchestration.__globals__["plan_luna_reviewers"]
+    bins = planner(
         [
             {
-                "routing_bytes": size,
+                "task_id": f"task-{ordinal}",
+                "inventory_bytes": size,
                 "run_ordinal": ordinal,
                 "run_window_ordinal": 1,
             }
-            for ordinal, size in enumerate((9, 9, 9, 9, 7, 6, 3, 2, 2), start=1)
+            for ordinal, size in enumerate(
+                (4_000, 4_000, 4_000, 4_000, 2_000, 2_000, 1_000, 1_000, 1_000),
+                start=1,
+            )
         ],
         bin_count=6,
-        capacity_bytes=10,
-        allow_omissions=True,
+        capacity_bytes=6_000,
+        per_report_framing_bytes=0,
     )
-    assert packed is not None
-    bins, omissions = packed
-    assert omissions == []
     assert sorted(
-        sum(group["routing_bytes"] for group in group_bin)
+        sorted(group["inventory_bytes"] for group in group_bin)
         for group_bin in bins
-    ) == [9, 9, 9, 9, 10, 10]
+    ) == [[1_000, 1_000, 1_000], [2_000, 2_000], [4_000], [4_000], [4_000], [4_000]]
+    assert all(
+        sum(group["planned_routing_bytes"] for group in group_bin) <= 6_000
+        for group_bin in bins
+    )
     fitter = workflow.command_plan_orchestration.__globals__[
         "_fit_final_supplemental_evidence"
     ]

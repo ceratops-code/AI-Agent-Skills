@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import functools
+import hashlib
 import json
 import os
 import pathlib
@@ -32,6 +33,10 @@ from typing import Any
 SCHEMA = "ai-agent-skills-test-impact-result.v1"
 COLLECTION_SCHEMA = "ai-agent-skills-pytest-collection.v1"
 NODE_MAP_SCHEMA = "ai-agent-skills-pytest-node-map.v1"
+PYTEST_DIAGNOSTIC_SCHEMA = "ai-agent-skills-pytest-diagnostic.v1"
+DEFAULT_DIAGNOSTIC_PATH = pathlib.Path(
+    "build", "test-diagnostics", "pytest-failure.json"
+)
 MANIFEST_VERSION = 1
 MAPPING_GAP_EXIT_CODE = 3
 COLLECTION_MISMATCH_EXIT_CODE = 4
@@ -717,7 +722,7 @@ def write_json_atomic(path: pathlib.Path, payload: Mapping[str, object]) -> None
     """Atomically replace one caller-selected JSON artifact and clean its temp file."""
 
     if not path.parent.is_dir():
-        raise ImpactError(f"collection output parent does not exist: {path.parent}")
+        raise ImpactError(f"JSON output parent does not exist: {path.parent}")
     temporary: pathlib.Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -737,10 +742,109 @@ def write_json_atomic(path: pathlib.Path, payload: Mapping[str, object]) -> None
         os.replace(temporary, path)
         temporary = None
     except OSError as exc:
-        raise ImpactError(f"cannot write collection snapshot: {exc}") from exc
+        raise ImpactError(f"cannot write JSON artifact: {exc}") from exc
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
+
+
+def _utf8_prefix(value: str, limit: int) -> str:
+    """Return a valid UTF-8 prefix whose encoded representation fits ``limit``."""
+
+    encoded = value.encode("utf-8")
+    if len(encoded) <= limit:
+        return value
+    if limit <= 3:
+        return "." * limit
+    prefix = encoded[: limit - 3].decode("utf-8", errors="ignore").rstrip()
+    return prefix + "..."
+
+
+def _stable_unique(values: Iterable[str]) -> list[str]:
+    """Return nonempty values once while preserving their source order."""
+
+    return list(dict.fromkeys(value for value in values if value))
+
+
+def pytest_failure_summary(stdout: str, stderr: str) -> dict[str, object]:
+    """Extract bounded failing identities, decisive assertions, and tail context."""
+
+    lines = [
+        line.strip()
+        for stream in (stdout, stderr)
+        for line in stream.splitlines()
+        if line.strip()
+    ]
+    failing_tests: list[str] = []
+    decisive: list[str] = []
+    for line in lines:
+        if line.startswith(("FAILED ", "ERROR ")):
+            identity = line.split(" - ", 1)[0].split(maxsplit=1)
+            if len(identity) == 2:
+                failing_tests.append(_utf8_prefix(identity[1], 400))
+        if line.startswith(("E ", "AssertionError", "assert ")):
+            decisive.append(_utf8_prefix(line, 500))
+    return {
+        "failed_tests": _stable_unique(failing_tests)[:10],
+        "decisive_excerpt": _utf8_prefix(
+            "\n".join(_stable_unique(decisive)[:8]), 2_000
+        ),
+        "context_excerpt": _utf8_prefix(
+            "\n".join(_utf8_prefix(line, 200) for line in lines[-8:]),
+            2_000,
+        ),
+    }
+
+
+def write_pytest_diagnostic(
+    path: pathlib.Path,
+    *,
+    command: Sequence[str],
+    cwd: pathlib.Path,
+    result: subprocess.CompletedProcess[str],
+) -> dict[str, object]:
+    """Persist complete failed-pytest streams and return bounded file evidence."""
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ImpactError(f"cannot create diagnostic output parent: {exc}") from exc
+    write_json_atomic(
+        path,
+        {
+            "schema": PYTEST_DIAGNOSTIC_SCHEMA,
+            "command": list(command),
+            "cwd": str(cwd),
+            "exit_code": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+        },
+    )
+    try:
+        content = path.read_bytes()
+    except OSError as exc:
+        raise ImpactError(f"cannot read written diagnostic output: {exc}") from exc
+    return {
+        "bytes": len(content),
+        "path": str(path),
+        "sha256": hashlib.sha256(content).hexdigest(),
+    }
+
+
+def cleanup_pytest_diagnostic(path: pathlib.Path, *, prune_parent: bool) -> None:
+    """Remove stale pytest failure evidence after a successful pytest run."""
+
+    path.unlink(missing_ok=True)
+    if not prune_parent:
+        return
+    try:
+        path.parent.rmdir()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        if not path.parent.is_dir() or any(path.parent.iterdir()):
+            return
+        raise
 
 
 def node_identity(nodeid: str) -> str:
@@ -1176,6 +1280,7 @@ def execute(
     parser = argparse.ArgumentParser()
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--base")
+    parser.add_argument("--diagnostic-output", type=pathlib.Path)
     parser.add_argument("--head")
     parser.add_argument("--node-map", type=pathlib.Path)
     parser.add_argument("--reconcile-collection", type=pathlib.Path)
@@ -1336,28 +1441,50 @@ def execute(
         payload["status"] = "collection-invalid"
         emit(payload)
         return CONFIGURATION_EXIT_CODE
-    result = text_runner(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-q",
-            *selection.pytest_targets,
-        ],
-        root,
+    diagnostic_path = resolve_data_path(
+        root, args.diagnostic_output or DEFAULT_DIAGNOSTIC_PATH
     )
+    pytest_command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-q",
+        *selection.pytest_targets,
+    ]
+    result = text_runner(pytest_command, root)
     pytest_payload: dict[str, object] = {
         "exit_code": result.returncode,
         "outcome": outcome_name(result.returncode),
     }
     if result.returncode != 0:
-        pytest_payload["stderr"] = result.stderr
-        pytest_payload["stdout"] = result.stdout
+        pytest_payload.update(pytest_failure_summary(result.stdout, result.stderr))
+        try:
+            pytest_payload["diagnostic"] = write_pytest_diagnostic(
+                diagnostic_path,
+                command=pytest_command,
+                cwd=root,
+                result=result,
+            )
+        except ImpactError as exc:
+            pytest_payload["diagnostic"] = {
+                "error": str(exc),
+                "path": str(diagnostic_path),
+            }
     payload["pytest"] = pytest_payload
     if result.returncode != 0:
         payload["status"] = "pytest-failed"
         emit(payload)
         return result.returncode if result.returncode > 0 else 1
+    try:
+        cleanup_pytest_diagnostic(
+            diagnostic_path,
+            prune_parent=args.diagnostic_output is None,
+        )
+    except OSError as exc:
+        pytest_payload["diagnostic_error"] = f"{type(exc).__name__}: {exc}"
+        payload["status"] = "diagnostic-cleanup-failed"
+        emit(payload)
+        return CONFIGURATION_EXIT_CODE
     if selection.mapping_gaps:
         payload["status"] = "mapping-gap"
         emit(payload)

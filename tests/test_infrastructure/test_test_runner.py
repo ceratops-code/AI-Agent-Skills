@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import pathlib
 import subprocess
@@ -22,10 +23,16 @@ class DeterministicExecution:
         diff: bytes,
         *,
         untracked: bytes = b"",
+        final_returncode: int = 0,
+        final_stdout: str = "all selected tests passed\n",
+        final_stderr: str = "",
     ) -> None:
         self.runner = runner
         self.diff = diff
         self.untracked = untracked
+        self.final_returncode = final_returncode
+        self.final_stdout = final_stdout
+        self.final_stderr = final_stderr
         self.commands: list[tuple[str, ...]] = []
         self.final_pytest: list[tuple[str, ...]] = []
 
@@ -43,7 +50,12 @@ class DeterministicExecution:
         if "--collect-only" in argv:
             return self.runner.run_text(command, cwd)
         self.final_pytest.append(argv)
-        return subprocess.CompletedProcess(command, 0, "all selected tests passed\n", "")
+        return subprocess.CompletedProcess(
+            command,
+            self.final_returncode,
+            self.final_stdout,
+            self.final_stderr,
+        )
 
     def bytes(
         self, command: Any, cwd: pathlib.Path
@@ -144,6 +156,87 @@ def test_committed_diff_mode_collects_and_invokes_only_selected_suite(
         or command[:3] == (sys.executable, "-m", "pytest")
         for command in execution.commands
     )
+
+
+def test_pytest_failure_writes_full_diagnostic_and_emits_bounded_summary(
+    test_runner_module: Any,
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    runner = test_runner_module
+    stdout = (
+        "FAILED tests/test_example.py::test_contract - AssertionError: mismatch\n"
+        "E       assert 1 == 2\n"
+        + "\n".join(f"noise-{index}-" + "x" * 200 for index in range(80))
+        + "\nfinal context\n"
+    )
+    stderr = "complete stderr diagnostic\n"
+    execution = DeterministicExecution(
+        runner,
+        b"M\0skills/ceratops-credit-savings-analysis/SKILL.md\0",
+        final_returncode=1,
+        final_stdout=stdout,
+        final_stderr=stderr,
+    )
+    diagnostic = tmp_path / "pytest diagnostic.json"
+
+    exit_code = runner.execute(
+        [
+            "--base",
+            BASE,
+            "--head",
+            HEAD,
+            "--diagnostic-output",
+            str(diagnostic),
+        ],
+        repo_root=ROOT,
+        text_runner=execution.text,
+        bytes_runner=execution.bytes,
+    )
+    captured = capsys.readouterr().out
+    result = json.loads(captured)
+
+    assert exit_code == 1
+    assert result["status"] == "pytest-failed"
+    assert result["pytest"]["failed_tests"] == [
+        "tests/test_example.py::test_contract"
+    ]
+    assert result["pytest"]["decisive_excerpt"] == "E       assert 1 == 2"
+    assert "final context" in result["pytest"]["context_excerpt"]
+    assert stdout not in captured
+    assert stderr not in captured
+    complete = json.loads(diagnostic.read_text(encoding="utf-8"))
+    assert complete["stdout"] == stdout
+    assert complete["stderr"] == stderr
+    content = diagnostic.read_bytes()
+    assert result["pytest"]["diagnostic"] == {
+        "bytes": len(content),
+        "path": str(diagnostic.resolve()),
+        "sha256": hashlib.sha256(content).hexdigest(),
+    }
+
+    passing = DeterministicExecution(
+        runner,
+        b"M\0skills/ceratops-credit-savings-analysis/SKILL.md\0",
+    )
+    assert (
+        runner.execute(
+            [
+                "--base",
+                BASE,
+                "--head",
+                HEAD,
+                "--diagnostic-output",
+                str(diagnostic),
+            ],
+            repo_root=ROOT,
+            text_runner=passing.text,
+            bytes_runner=passing.bytes,
+        )
+        == 0
+    )
+    payload(capsys)
+    assert not diagnostic.exists()
 
 
 def test_committed_diff_maps_test_rename_source_through_destination(

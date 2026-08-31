@@ -25,6 +25,9 @@ deployment operations or the first-install bootstrap.
   [--remove-skill <name>...] [--base-revision <full-sha>]` from the installed
   or source lifecycle bundle.
 
+- Before classifying or replacing runtime paths, the installer changes its
+  process working directory to the verified `<repo-root>`.
+
 ### Inputs To Capture
 
 - Source checkout, install root, validation profile, and deployment mode.

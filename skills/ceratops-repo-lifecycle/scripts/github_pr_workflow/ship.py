@@ -883,13 +883,44 @@ def _short_check_uncertainty(finding: readiness.Finding) -> bool:
 
 
 def _compact_failed_log(value: str, *, limit: int = 2_000) -> str | None:
-    """Return the last nonempty failed-log lines within a fixed payload bound."""
+    """Keep decisive failure lines plus recent context within a UTF-8 byte bound."""
 
     lines = [line.strip() for line in value.splitlines() if line.strip()]
     if not lines:
         return None
-    excerpt = "\n".join(lines[-20:])
-    return excerpt if len(excerpt) <= limit else excerpt[-limit:]
+    decisive = [
+        index
+        for index, line in enumerate(lines)
+        if line.startswith(("FAILED ", "ERROR ", "E ", "AssertionError", "assert "))
+        or "AssertionError" in line
+    ][:6]
+    recent = list(range(max(0, len(lines) - 8), len(lines)))
+    selected: dict[int, str] = {}
+    used = 0
+    for index in [*decisive, *reversed(recent)]:
+        if index in selected:
+            continue
+        separator = 1 if selected else 0
+        remaining = limit - used - separator
+        if remaining <= 0:
+            break
+        line_limit = min(350 if index in decisive else 220, remaining)
+        encoded = lines[index].encode("utf-8")
+        if len(encoded) > line_limit:
+            if line_limit <= 3:
+                compact = "." * line_limit
+            else:
+                compact = (
+                    encoded[: line_limit - 3]
+                    .decode("utf-8", errors="ignore")
+                    .rstrip()
+                    + "..."
+                )
+        else:
+            compact = lines[index]
+        selected[index] = compact
+        used += separator + len(compact.encode("utf-8"))
+    return "\n".join(selected[index] for index in sorted(selected)) or None
 
 
 def _read_pr_checks(

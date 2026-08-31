@@ -2424,9 +2424,36 @@ def _validate_holistic_manifest(
         "sol-final",
     ]:
         raise CreditAnalysisError("holistic Sol phase order is invalid")
-    luna_ids = [task["task_id"] for task in tasks]
-    if any(task.get("dependencies") != luna_ids for task in sol_tasks[:-1]):
-        raise CreditAnalysisError("first-stage Sol tasks must depend on every Luna window")
+    reviewer_plan = manifest.get("sol_reviewer_plan")
+    if not isinstance(reviewer_plan, Mapping):
+        raise CreditAnalysisError("holistic Sol reviewer plan is missing")
+    reviewers = reviewer_plan.get("reviewers")
+    if not isinstance(reviewers, list) or not 0 < len(reviewers) <= min(
+        6, len(admitted_luna_ids)
+    ):
+        raise CreditAnalysisError("holistic Sol reviewer plan is invalid")
+    planned_luna_ids = [
+        str(task_id)
+        for reviewer in reviewers
+        for task_id in reviewer.get("luna_task_ids", [])
+    ]
+    if set(planned_luna_ids) != admitted_luna_ids or len(planned_luna_ids) != len(
+        admitted_luna_ids
+    ):
+        raise CreditAnalysisError("Sol reviewer plan changed Luna admission")
+    planned_by_task = {
+        str(reviewer["task_id"]): list(reviewer["luna_task_ids"])
+        for reviewer in reviewers
+    }
+    if any(
+        task.get("dependencies") != planned_by_task.get(task["task_id"], [])
+        for task in sol_tasks[:6]
+    ):
+        raise CreditAnalysisError("Sol reviewer dependencies changed after planning")
+    if sol_tasks[6].get("dependencies") != [
+        task["task_id"] for task in sol_tasks[:6]
+    ]:
+        raise CreditAnalysisError("focused Sol dependencies are invalid")
     if sol_tasks[-1].get("dependencies") != [task["task_id"] for task in sol_tasks[:-1]]:
         raise CreditAnalysisError("final Sol dependencies are invalid")
 
@@ -2543,16 +2570,31 @@ def command_plan_orchestration(
     compact_path = orchestration_root / "compact-causal-evidence.json"
     _exclusive_json(compact_path, bundle, "compact causal evidence")
     limits = contract["semantic_call_contract"]
-    sol_variable_bytes = max(
-        16_000,
-        int(model_specs["sol"]["evidence_byte_budget"]) - 64_000,
-    )
     instruction_chains = {
         str(chain["cwd"]): chain
         for chain in evidence["execution_context"]["instruction_chains"]
     }
+    primary_cwd = str(evidence["execution_context"]["primary_cwd"])
+    rule_handoff_bytes = _json_bytes(
+        _execution_rule_handoff(
+            {"execution_context": evidence["execution_context"]},
+            {"execution_cwd": primary_cwd},
+        )
+    )
+    reviewer_capacity_bytes = max(
+        0,
+        int(model_specs["sol"]["evidence_byte_budget"])
+        - 64_000
+        - rule_handoff_bytes,
+    )
     record_by_candidate = {
         str(record["candidate_id"]): record for record in bundle["records"]
+    }
+    run_order = list(
+        dict.fromkeys(str(packet[0]["turn_id"]) for packet in packets)
+    )
+    run_ordinals = {
+        turn_id: ordinal for ordinal, turn_id in enumerate(run_order, start=1)
     }
     luna_tasks: list[dict[str, Any]] = []
     for ordinal, packet in enumerate(packets, start=1):
@@ -2594,7 +2636,23 @@ def command_plan_orchestration(
                 "evidence_bytes": _json_bytes(
                     [record_by_candidate[item] for item in payload["candidate_ids"]]
                 ),
+                "inventory_bytes": _json_bytes(
+                    [
+                        [
+                            record_by_candidate[item]["candidate_id"],
+                            record_by_candidate[item]["call_id"],
+                            record_by_candidate[item]["workstream"],
+                            record_by_candidate[item]["surface_lenses"],
+                            record_by_candidate[item]["high_signal_reasons"],
+                            record_by_candidate[item]["volume"],
+                            record_by_candidate[item]["evidence_refs"][0],
+                        ]
+                        for item in payload["candidate_ids"]
+                    ]
+                ),
                 "output_byte_limit": None,
+                "sol_reviewer_task_id": None,
+                "planned_routing_bytes": None,
                 "capacity_omitted": capacity_omitted,
                 "artifacts": artifacts,
             }
@@ -2603,15 +2661,44 @@ def command_plan_orchestration(
         luna_tasks,
         maximum_attempts=int(limits["luna_max_attempts"]),
     )
-    output_byte_limit = luna_output_allowance(
-        admitted_tasks=len(admitted_luna_ids),
-        sol_reviewer_capacity_bytes=sol_variable_bytes,
-        maximum_reviewers=int(limits["sol_adjudicator_max"]),
-    )
     for task in luna_tasks:
-        task["output_byte_limit"] = output_byte_limit
-    luna_ids = [task["task_id"] for task in luna_tasks]
-    primary_cwd = str(evidence["execution_context"]["primary_cwd"])
+        task["normalization_reserve_bytes"] = 512
+    reviewer_bins = plan_luna_reviewers(
+        [
+            {
+                "task_id": task["task_id"],
+                "inventory_bytes": (
+                    int(task["inventory_bytes"])
+                    + int(task["normalization_reserve_bytes"])
+                ),
+                "run_ordinal": run_ordinals[str(task["turn_id"])],
+                "run_window_ordinal": task["run_window_ordinal"],
+            }
+            for task in luna_tasks
+            if task["task_id"] in admitted_luna_ids
+        ],
+        bin_count=int(limits["sol_adjudicator_max"]),
+        capacity_bytes=reviewer_capacity_bytes,
+    )
+    assignment_by_task = {
+        str(group["task_id"]): group
+        for group_bin in reviewer_bins
+        for group in group_bin
+    }
+    for task in luna_tasks:
+        assignment = assignment_by_task.get(str(task["task_id"]))
+        if assignment is None:
+            task["output_byte_limit"] = 0
+            task["planned_routing_bytes"] = 0
+            continue
+        reviewer_ordinal = int(assignment["reviewer_ordinal"])
+        task["output_byte_limit"] = int(assignment["output_byte_limit"])
+        task["sol_reviewer_task_id"] = (
+            f"sol.adjudication.{reviewer_ordinal:04d}"
+        )
+        task["planned_routing_bytes"] = int(
+            assignment["planned_routing_bytes"]
+        )
     sol_tasks: list[dict[str, Any]] = []
     for ordinal in range(1, 7):
         task_id = f"sol.adjudication.{ordinal:04d}"
@@ -2620,7 +2707,11 @@ def command_plan_orchestration(
                 "task_id": task_id,
                 "phase": "sol-adjudication",
                 "ordinal": ordinal,
-                "dependencies": luna_ids,
+                "dependencies": [
+                    task["task_id"]
+                    for task in luna_tasks
+                    if task.get("sol_reviewer_task_id") == task_id
+                ],
                 "execution_cwd": primary_cwd,
                 "instruction_chain_sha256": str(
                     instruction_chains[primary_cwd]["chain_sha256"]
@@ -2630,12 +2721,13 @@ def command_plan_orchestration(
             }
         )
     audit_id = "sol.direct-evidence"
+    adjudicator_ids = [task["task_id"] for task in sol_tasks]
     sol_tasks.append(
         {
             "task_id": audit_id,
             "phase": "sol-direct-evidence",
             "ordinal": 1,
-            "dependencies": luna_ids,
+            "dependencies": adjudicator_ids,
             "execution_cwd": primary_cwd,
             "instruction_chain_sha256": str(
                 instruction_chains[primary_cwd]["chain_sha256"]
@@ -2683,6 +2775,23 @@ def command_plan_orchestration(
         "episode_count": len(episodes),
         "luna_tasks": luna_tasks,
         "sol_tasks": sol_tasks,
+        "sol_reviewer_plan": {
+            "capacity_bytes_per_reviewer": reviewer_capacity_bytes,
+            "execution_rule_handoff_bytes": rule_handoff_bytes,
+            "reviewers": [
+                {
+                    "task_id": f"sol.adjudication.{index:04d}",
+                    "luna_task_ids": [
+                        str(group["task_id"]) for group in group_bin
+                    ],
+                    "planned_routing_bytes": sum(
+                        int(group["planned_routing_bytes"])
+                        for group in group_bin
+                    ),
+                }
+                for index, group_bin in enumerate(reviewer_bins, start=1)
+            ],
+        },
         "projected_luna_calls": len(admitted_luna_ids),
         "projected_sol_calls": int(limits["sol_target_calls"]),
         "maximum_sol_calls": int(limits["sol_max_calls"]),
@@ -2757,6 +2866,7 @@ def command_plan_orchestration(
         "model_attempts": {"luna": 0, "sol": 0},
         "child_lineage": [],
         "routing": None,
+        "focused_review": None,
         "omissions": [
             {
                 "stage": "luna",
@@ -3635,7 +3745,7 @@ def _holistic_read_sol_aliases(
 def _freeze_sol_routing(
     state: dict[str, Any], compact: Mapping[str, Any], contract: Mapping[str, Any]
 ) -> None:
-    """Freeze measured Luna-to-Sol routing exactly once after discovery."""
+    """Validate actual Luna bytes against the pre-Luna reviewer assignment."""
 
     if state.get("routing") is not None:
         return
@@ -3644,11 +3754,13 @@ def _freeze_sol_routing(
     record_by_id = {
         str(record["candidate_id"]): record for record in compact["records"]
     }
-    run_order = [str(episode["turn_id"]) for episode in _holistic_episodes(compact)]
+    run_order = [
+        str(episode["turn_id"]) for episode in _holistic_episodes(compact)
+    ]
     run_ordinals = {
         turn_id: ordinal for ordinal, turn_id in enumerate(run_order, start=1)
     }
-    groups: list[dict[str, Any]] = []
+    groups_by_task: dict[str, dict[str, Any]] = {}
     for task in manifest["luna_tasks"]:
         execution = state["execution"][task["task_id"]]
         if execution["status"] == "omitted":
@@ -3656,38 +3768,37 @@ def _freeze_sol_routing(
         result_record = execution["result"]
         if not isinstance(result_record, Mapping):
             raise CreditAnalysisError("Sol routing requires every retained Luna result")
-        result_bytes = pathlib.Path(str(result_record["path"])).stat().st_size
+        result_bytes = _json_bytes(
+            _read_json(
+                pathlib.Path(str(result_record["path"])),
+                "accepted Luna result",
+            )
+        )
         turn_id = str(task["turn_id"])
         candidate_ids = list(task["candidate_ids"])
         evidence_bytes = int(task.get("evidence_bytes") or 0)
-        inventory_bytes = _json_bytes(
-            [
-                [
-                    record_by_id[candidate]["candidate_id"],
-                    record_by_id[candidate]["call_id"],
-                    record_by_id[candidate]["workstream"],
-                    record_by_id[candidate]["surface_lenses"],
-                    record_by_id[candidate]["high_signal_reasons"],
-                    record_by_id[candidate]["volume"],
-                    record_by_id[candidate]["evidence_refs"][0],
-                ]
-                for candidate in candidate_ids
-            ]
-        )
-        groups.append(
-            {
-                "turn_id": turn_id,
-                "run_ordinal": run_ordinals[turn_id],
-                "run_window_ordinal": int(task["run_window_ordinal"]),
-                "run_window_count": int(task["run_window_count"]),
-                "luna_task_ids": [task["task_id"]],
-                "candidate_ids": candidate_ids,
-                "call_ids": [record_by_id[candidate]["call_id"] for candidate in candidate_ids],
-                "luna_result_bytes": result_bytes,
-                "evidence_bytes": evidence_bytes,
-                "routing_bytes": result_bytes + inventory_bytes + 1_000,
-            }
-        )
+        inventory_bytes = int(task["inventory_bytes"])
+        routing_bytes = result_bytes + inventory_bytes + 1_000
+        if routing_bytes > int(task["planned_routing_bytes"]):
+            raise CreditAnalysisError(
+                "accepted Luna result exceeded its frozen Sol routing allowance"
+            )
+        groups_by_task[str(task["task_id"])] = {
+            "turn_id": turn_id,
+            "run_ordinal": run_ordinals[turn_id],
+            "run_window_ordinal": int(task["run_window_ordinal"]),
+            "run_window_count": int(task["run_window_count"]),
+            "luna_task_ids": [task["task_id"]],
+            "candidate_ids": candidate_ids,
+            "call_ids": [
+                record_by_id[candidate]["call_id"] for candidate in candidate_ids
+            ],
+            "luna_result_bytes": result_bytes,
+            "evidence_bytes": evidence_bytes,
+            "routing_bytes": routing_bytes,
+            "planned_routing_bytes": int(task["planned_routing_bytes"]),
+            "reviewer_task_id": str(task["sol_reviewer_task_id"]),
+        }
     rule_handoff_bytes = _json_bytes(
         _execution_rule_handoff(
             state,
@@ -3696,42 +3807,26 @@ def _freeze_sol_routing(
             },
         )
     )
-    capacity = max(
-        0,
-        int(state["model_specs"]["sol"]["evidence_byte_budget"])
-        - 64_000
-        - rule_handoff_bytes,
-    )
+    reviewer_plan = manifest["sol_reviewer_plan"]
+    capacity = int(reviewer_plan["capacity_bytes_per_reviewer"])
+    if rule_handoff_bytes != int(reviewer_plan["execution_rule_handoff_bytes"]):
+        raise CreditAnalysisError("Sol rule handoff changed after planning")
     limits = contract["semantic_call_contract"]
-    packed = pack_report_groups(
-        groups,
-        bin_count=int(limits["sol_adjudicator_max"]),
-        capacity_bytes=capacity,
-        allow_omissions=True,
-    )
-    if packed is None:
-        raise CreditAnalysisError("could not create bounded Sol routing")
-    bins, omitted_groups = packed
+    bins = [
+        [
+            groups_by_task[task_id]
+            for task_id in reviewer["luna_task_ids"]
+            if task_id in groups_by_task
+        ]
+        for reviewer in reviewer_plan["reviewers"]
+    ]
     bins = [group_bin for group_bin in bins if group_bin]
+    if any(
+        sum(int(group["routing_bytes"]) for group in group_bin) > capacity
+        for group_bin in bins
+    ):
+        raise CreditAnalysisError("frozen Sol reviewer capacity proof failed")
     adjudicator_count = len(bins)
-    for group in omitted_groups:
-        state["omissions"].append(
-            {
-                "stage": "sol-routing",
-                "reason": "sol-capacity",
-                "turn_id": group["turn_id"],
-                "run_window_ordinal": group["run_window_ordinal"],
-                "run_window_count": group["run_window_count"],
-                "candidate_ids": group["candidate_ids"],
-                "call_ids": group["call_ids"],
-                "task_ids": group["luna_task_ids"],
-                "record_count": len(group["candidate_ids"]),
-                "candidate_count": len(group["candidate_ids"]),
-                "evidence_bytes": group["evidence_bytes"],
-                "luna_result_bytes": group["luna_result_bytes"],
-                "output_bytes": group["luna_result_bytes"],
-            }
-        )
     normalized_luna = _holistic_sol_luna_results(state, compact)
     normalized_by_task = {result["task_id"]: result for result in normalized_luna}
     surfaced = {
@@ -3885,13 +3980,19 @@ def _freeze_sol_routing(
         for candidate_id in window["candidate_ids"]
     ]
     shard_records = []
-    for index, group_bin in enumerate(bins, start=1):
+    for group_bin in bins:
         task_ids = [
             task_id for group in group_bin for task_id in group["luna_task_ids"]
         ]
+        reviewer_task_id = str(group_bin[0]["reviewer_task_id"])
+        if any(
+            str(group["reviewer_task_id"]) != reviewer_task_id
+            for group in group_bin
+        ):
+            raise CreditAnalysisError("Sol reviewer assignment changed")
         shard_records.append(
             {
-                "task_id": f"sol.adjudication.{index:04d}",
+                "task_id": reviewer_task_id,
                 "turn_ids": list(
                     dict.fromkeys(group["turn_id"] for group in group_bin)
                 ),
@@ -3917,7 +4018,7 @@ def _freeze_sol_routing(
         "shards": shard_records,
         "audit_candidate_ids": audit_candidate_ids,
         "audit_windows": audit_windows,
-        "omitted_turn_ids": [group["turn_id"] for group in omitted_groups],
+        "omitted_turn_ids": [],
     }
     routing_path = pathlib.Path(state["paths"]["orchestration_root"]) / "routing-manifest.json"
     _exclusive_json(routing_path, routing_value, "Sol routing manifest")
@@ -3926,10 +4027,11 @@ def _freeze_sol_routing(
         "sha256": _file_hash(routing_path),
         "content_hash": _content_hash(routing_value),
     }
-    for ordinal in range(adjudicator_count + 1, 7):
-        state["execution"][f"sol.adjudication.{ordinal:04d}"]["status"] = "skipped"
-    if not audit_windows:
-        state["execution"]["sol.direct-evidence"]["status"] = "skipped"
+    routed_adjudicators = {shard["task_id"] for shard in shard_records}
+    for ordinal in range(1, 7):
+        task_id = f"sol.adjudication.{ordinal:04d}"
+        if task_id not in routed_adjudicators:
+            state["execution"][task_id]["status"] = "skipped"
     _holistic_save_state(state)
 
 
@@ -4011,15 +4113,33 @@ def _holistic_runtime_task(
             raise CreditAnalysisError(f"Sol shard is not routed: {task['task_id']}")
         result.update(shard)
     elif task["phase"] == "sol-direct-evidence":
-        routing = _routing_value(state)
-        candidate_ids = list(routing["audit_candidate_ids"])
-        result.update(
-            {
-                "candidate_ids": candidate_ids,
-                "candidate_ids_sha256": _content_hash(candidate_ids),
-                "audit_windows": list(routing["audit_windows"]),
-            }
-        )
+        focused = state.get("focused_review")
+        if not isinstance(focused, Mapping):
+            raise CreditAnalysisError("focused Sol review is not frozen")
+        if focused.get("kind") == "unassessed-recovery":
+            candidate_ids = list(focused["candidate_ids"])
+            result.update(
+                {
+                    "phase": "sol-adjudication",
+                    "review_kind": "unassessed-recovery",
+                    "candidate_ids": candidate_ids,
+                    "candidate_ids_sha256": _content_hash(candidate_ids),
+                    "call_ids": list(focused["call_ids"]),
+                    "luna_task_ids": list(focused["luna_task_ids"]),
+                    "turn_ids": list(focused["turn_ids"]),
+                }
+            )
+        elif focused.get("kind") == "direct-evidence":
+            candidate_ids = list(focused["candidate_ids"])
+            result.update(
+                {
+                    "candidate_ids": candidate_ids,
+                    "candidate_ids_sha256": _content_hash(candidate_ids),
+                    "audit_windows": list(focused["audit_windows"]),
+                }
+            )
+        else:
+            raise CreditAnalysisError("focused Sol review has no runnable work")
     return result
 
 
@@ -4032,6 +4152,106 @@ def _routed_call_ids(state: Mapping[str, Any]) -> list[str]:
     return [
         call_id for call_id in state["manifest"]["call_ids"] if call_id in routed
     ]
+
+
+def _aggregate_unassessed_call_ids(state: Mapping[str, Any]) -> list[str]:
+    """Return unresolved calls across all accepted preliminary reviewers."""
+
+    unresolved: set[str] = set()
+    for shard in _completed_routing_shards(state):
+        result_record = state["execution"][shard["task_id"]]["result"]
+        if not isinstance(result_record, Mapping):
+            raise CreditAnalysisError("accepted Sol reviewer result is missing")
+        result = _read_json(
+            pathlib.Path(str(result_record["path"])),
+            "accepted Sol reviewer result",
+        )
+        unresolved.update(
+            str(call_id)
+            for group in result["call_classifications"]
+            if group["classification"] == "unassessed"
+            for call_id in group["call_ids"]
+        )
+    return [
+        call_id
+        for call_id in state["manifest"]["call_ids"]
+        if call_id in unresolved
+    ]
+
+
+def _freeze_focused_review(
+    state: dict[str, Any],
+    compact: Mapping[str, Any],
+    contract: Mapping[str, Any],
+) -> None:
+    """Choose aggregate unassessed recovery before the optional evidence audit."""
+
+    if state.get("focused_review") is not None:
+        return
+    support_id = "sol.direct-evidence"
+    if state["execution"][support_id]["status"] != "pending":
+        return
+    adjudicator_tasks = state["manifest"]["sol_tasks"][:6]
+    if any(
+        state["execution"][task["task_id"]]["status"]
+        not in {"complete", "skipped", "omitted"}
+        for task in adjudicator_tasks
+    ):
+        return
+    routed_call_ids = _routed_call_ids(state)
+    unassessed_call_ids = _aggregate_unassessed_call_ids(state)
+    maximum_unassessed = math.floor(
+        len(routed_call_ids)
+        * float(contract["coverage"]["maximum_unassessed_fraction"])
+    )
+    support_task = _holistic_task_map(state["manifest"])[support_id]
+    support_capacity = _sol_attempt_capacity(state, contract, support_task)
+    if len(unassessed_call_ids) > maximum_unassessed and support_capacity:
+        record_by_call = {
+            str(record["call_id"]): record for record in compact["records"]
+        }
+        target_candidate_ids = [
+            str(record_by_call[call_id]["candidate_id"])
+            for call_id in unassessed_call_ids
+        ]
+        target_set = set(target_candidate_ids)
+        luna_task_ids = [
+            str(task["task_id"])
+            for task in state["manifest"]["luna_tasks"]
+            if target_set & set(task["candidate_ids"])
+        ]
+        state["focused_review"] = {
+            "kind": "unassessed-recovery",
+            "call_ids": unassessed_call_ids,
+            "candidate_ids": target_candidate_ids,
+            "luna_task_ids": luna_task_ids,
+            "turn_ids": list(
+                dict.fromkeys(
+                    str(record_by_call[call_id]["turn_id"])
+                    for call_id in unassessed_call_ids
+                )
+            ),
+            "aggregate_call_count": len(routed_call_ids),
+            "maximum_unassessed": maximum_unassessed,
+        }
+    elif len(unassessed_call_ids) <= maximum_unassessed and support_capacity:
+        routing = _routing_value(state)
+        if routing["audit_windows"]:
+            state["focused_review"] = {
+                "kind": "direct-evidence",
+                "candidate_ids": list(routing["audit_candidate_ids"]),
+                "audit_windows": list(routing["audit_windows"]),
+            }
+        else:
+            state["focused_review"] = {"kind": "skipped"}
+            state["execution"][support_id]["status"] = "skipped"
+    else:
+        state["focused_review"] = {
+            "kind": "skipped",
+            "reason": "sol-attempt-cap",
+        }
+        state["execution"][support_id]["status"] = "skipped"
+    _holistic_save_state(state)
 
 
 def _deep_review_findings(
@@ -4096,13 +4316,28 @@ def _holistic_sol_input(
     normalized_luna = _holistic_sol_luna_results(state, compact)
     adjudication_results: list[dict[str, Any]] = []
     audit_result: dict[str, Any] | None = None
+    recovery_result: dict[str, Any] | None = None
+    recovery_run_parts: list[dict[str, Any]] = []
     deep_review_evidence: list[dict[str, Any]] = []
+    alias_compact = compact
     if task["phase"] == "sol-adjudication":
         allowed_tasks = set(task["luna_task_ids"])
         luna_results = [
             result for result in normalized_luna if result["task_id"] in allowed_tasks
         ]
         allowed_records = set(task["candidate_ids"])
+        if task.get("review_kind") == "unassessed-recovery":
+            luna_results = [
+                {
+                    **result,
+                    "candidates": [
+                        candidate
+                        for candidate in result["candidates"]
+                        if allowed_records & set(candidate["candidate_ids"])
+                    ],
+                }
+                for result in luna_results
+            ]
         compact = {
             **compact,
             "records": [
@@ -4113,6 +4348,38 @@ def _holistic_sol_input(
             "candidate_ids": list(task["candidate_ids"]),
             "call_ids": list(task["call_ids"]),
         }
+        if task.get("review_kind") == "unassessed-recovery":
+            luna_task_by_id = {
+                str(item["task_id"]): item
+                for item in state["manifest"]["luna_tasks"]
+            }
+            context_candidate_ids: list[str] = []
+            for luna_task_id in task["luna_task_ids"]:
+                luna_task = luna_task_by_id[str(luna_task_id)]
+                luna_input = _read_json(
+                    pathlib.Path(str(luna_task["artifacts"]["input"])),
+                    "recovery Luna run part",
+                )
+                context_candidate_ids.extend(luna_task["candidate_ids"])
+                recovery_run_parts.append(
+                    {
+                        "luna_task_id": luna_task_id,
+                        "turn_id": luna_task["turn_id"],
+                        "run_window_ordinal": luna_task["run_window_ordinal"],
+                        "run_window_count": luna_task["run_window_count"],
+                        "episodes": luna_input["episodes"],
+                    }
+                )
+            context_set = set(context_candidate_ids)
+            alias_compact = {
+                **alias_compact,
+                "records": [
+                    record
+                    for record in alias_compact["records"]
+                    if record["candidate_id"] in context_set
+                ],
+                "candidate_ids": context_candidate_ids,
+            }
     elif task["phase"] == "sol-final":
         routed_luna_task_ids = {
             task_id
@@ -4155,14 +4422,26 @@ def _holistic_sol_input(
                     )
                 )
             )
-        audit_execution = state["execution"]["sol.direct-evidence"]
-        audit_record = audit_execution["result"]
-        if audit_execution["status"] not in {"skipped", "omitted"}:
-            if not isinstance(audit_record, Mapping):
-                raise CreditAnalysisError("final Sol requires the audit result")
-            audit_result = _read_json(
-                pathlib.Path(str(audit_record["path"])), "Sol audit result"
+        focused_execution = state["execution"]["sol.direct-evidence"]
+        focused_record = focused_execution["result"]
+        if focused_execution["status"] not in {"skipped", "omitted"}:
+            if not isinstance(focused_record, Mapping):
+                raise CreditAnalysisError("final Sol requires the focused result")
+            focused_result = _read_json(
+                pathlib.Path(str(focused_record["path"])),
+                "focused Sol result",
             )
+            if focused_result.get("schema") == HOLISTIC_LUNA_RESULT_SCHEMA:
+                audit_result = focused_result
+            elif focused_result.get("schema") == HOLISTIC_SOL_RESULT_SCHEMA:
+                recovery_result = _compact_final_adjudication_result(
+                    _namespaced_adjudication_result(
+                        focused_result,
+                        "sol.unassessed-recovery",
+                    )
+                )
+            else:
+                raise CreditAnalysisError("focused Sol result schema is invalid")
         if audit_result is not None and audit_result.get("candidates"):
             reserved = {
                 candidate["id"]
@@ -4182,6 +4461,8 @@ def _holistic_sol_input(
             for result in adjudication_results
             for finding in result["confirmed_findings"]
         ]
+        if recovery_result is not None:
+            findings.extend(recovery_result["confirmed_findings"])
         call_to_record = {str(record["call_id"]): record for record in compact["records"]}
         for finding in _deep_review_findings(findings, compact):
             deep_review_evidence.append(
@@ -4268,6 +4549,8 @@ def _holistic_sol_input(
         "maximum_unassessed_fraction": contract["coverage"]["maximum_unassessed_fraction"],
         "prior_adjudication_results": adjudication_results,
         "audit_result": audit_result,
+        "recovery_result": recovery_result,
+        "recovery_run_parts": recovery_run_parts,
         "deep_review_evidence": [],
         "final_contract": {
             "preserve_prior_candidate_decisions": task["phase"] == "sol-final",
@@ -4279,7 +4562,7 @@ def _holistic_sol_input(
         state=state,
         task=task,
         candidates=candidates,
-        compact=compact,
+        compact=alias_compact,
     )
     canonical_to_alias, _ = _holistic_alias_lookups(aliases)
     budget_bytes = int(state["model_specs"]["sol"]["evidence_byte_budget"])
@@ -4542,6 +4825,21 @@ run part, without using Luna reports. Emit only material candidates Luna may hav
 using the same candidate schema and exact evidence rules as Luna discovery.
 Do not classify calls, calculate savings, or synthesize the final report.
 """
+    elif (
+        task["phase"] == "sol-adjudication"
+        and task.get("review_kind") == "unassessed-recovery"
+    ):
+        instructions = f"""
+Act as the focused unresolved-call reviewer. Review only the
+{len(task['call_ids'])} target calls in `call_inventory`; the supplied Luna
+reports and complete ordered run parts are context, not additional classification
+targets. Adjudicate every supplied Luna candidate exactly once so findings remain
+traceable, but do not reconsider calls already classified by the preliminary
+reviewers. Replace each target call's preliminary `unassessed` classification
+with the strongest evidence-supported classification. Preserve `unassessed` only
+for a remaining decision-blocking gap. Return the ordinary adjudication fields
+without an analysis summary or surface summaries.
+"""
     elif task["phase"] == "sol-adjudication":
         instructions = f"""
 Act as one independent Luna-report reviewer. Review every routed Luna candidate
@@ -4585,7 +4883,9 @@ classification.
         instructions = f"""
 Act as the final synthesis tier. Preserve every prior shard candidate decision,
 confirmed finding, risk, temporary-control review, helper-category review, and
-call classification. Adjudicate only the separate direct-evidence candidates. Merge true
+call classification. When `recovery_result` is present, use its validated
+findings and risks and replace the matching preliminary `unassessed` call
+classifications. Adjudicate only separate direct-evidence candidates. Merge true
 duplicates by likely owning producer and durable control without dropping a
 material variant. Deep-verify only the supplied owner-deduplicated top-three
 findings against their raw evidence; do not re-adjudicate all Luna candidates.
@@ -4992,19 +5292,16 @@ def _validate_holistic_sol_result(
     classifications, classification_by_call, unassessed = (
         _holistic_reconcile_orphaned_avoidable_calls(classifications, findings)
     )
-    coverage_call_count = (
-        len(_routed_call_ids(state))
-        if task["phase"] == "sol-adjudication"
-        else len(call_order)
-    )
-    maximum_unassessed = math.floor(
-        coverage_call_count
-        * float(contract["coverage"]["maximum_unassessed_fraction"])
-    )
-    if unassessed > maximum_unassessed:
-        raise CreditAnalysisError(
-            f"unassessed calls exceed the contract limit: {unassessed} > {maximum_unassessed}"
+    if task["phase"] == "sol-final":
+        maximum_unassessed = math.floor(
+            len(call_order)
+            * float(contract["coverage"]["maximum_unassessed_fraction"])
         )
+        if unassessed > maximum_unassessed:
+            raise CreditAnalysisError(
+                "unassessed calls exceed the aggregate contract limit: "
+                f"{unassessed} > {maximum_unassessed}"
+            )
     findings = _holistic_reconcile_findings(findings, classification_by_call)
     finding_by_id = {finding["id"]: finding for finding in findings}
     if len(finding_by_id) != len(findings):
@@ -5357,6 +5654,19 @@ def _validate_holistic_sol_result(
                             "Sol shard result",
                         ),
                         str(shard_task["task_id"]),
+                    )
+                )
+        focused_record = state["execution"]["sol.direct-evidence"]["result"]
+        if isinstance(focused_record, Mapping):
+            focused_result = _read_json(
+                pathlib.Path(str(focused_record["path"])),
+                "focused Sol result",
+            )
+            if focused_result.get("schema") == HOLISTIC_SOL_RESULT_SCHEMA:
+                prior_results.append(
+                    _namespaced_adjudication_result(
+                        focused_result,
+                        "sol.unassessed-recovery",
                     )
                 )
         prior_findings = [
@@ -5794,7 +6104,7 @@ def _validate_holistic_task_result(
     luna_candidate_ids: Sequence[str],
 ) -> dict[str, Any]:
     if task["phase"] in {"luna-discovery", "sol-direct-evidence"}:
-        return _validate_holistic_luna_result(
+        validated_luna = _validate_holistic_luna_result(
             raw,
             state=state,
             task=task,
@@ -5802,6 +6112,16 @@ def _validate_holistic_task_result(
             contract=contract,
             compact=compact,
         )
+        if (
+            task["phase"] == "luna-discovery"
+            and _json_bytes(validated_luna)
+            > int(task["output_byte_limit"])
+            + int(task.get("normalization_reserve_bytes") or 0)
+        ):
+            raise CreditAnalysisError(
+                "Luna normalized result exceeds its output byte target"
+            )
+        return validated_luna
     canonical = (
         dict(raw)
         if raw.get("schema") == HOLISTIC_SOL_RESULT_SCHEMA
@@ -5980,10 +6300,20 @@ def _holistic_recoverable_raw(
             continue
         artifact = attempt.get("artifacts", {}).get("raw_output")
         if isinstance(artifact, Mapping):
-            return _read_json(
+            value = _read_json(
                 pathlib.Path(str(artifact["path"])),
                 "recoverable holistic output",
             )
+            if (
+                task["phase"] == "luna-discovery"
+                and _json_bytes(value)
+                > int(
+                    attempt.get("output_byte_limit")
+                    or task["output_byte_limit"]
+                )
+            ):
+                continue
+            return value
     return None
 
 
@@ -6803,7 +7133,7 @@ def _holistic_model_attempt(
     runtime_task = {**task, "reasoning_effort": effort}
     if task["phase"] == "luna-discovery" and attempt_number > 1:
         runtime_task["output_byte_limit"] = max(
-            1_000, int(task["output_byte_limit"]) // 2
+            1_000, int(task["output_byte_limit"]) * 9 // 10
         )
         retry_prompt_path = prompt_path.with_name(
             f"{prompt_path.stem}.retry-{attempt_number:03d}{prompt_path.suffix}"
@@ -7096,6 +7426,9 @@ def command_execute_orchestration(
                 sol_omission_changed = True
         if sol_omission_changed:
             _holistic_save_state(state)
+
+        if state.get("routing") is not None:
+            _freeze_focused_review(state, compact, contract)
 
         ready: list[dict[str, Any]] = []
         for task_id in state["task_order"]:

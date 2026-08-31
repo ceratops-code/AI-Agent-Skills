@@ -822,36 +822,6 @@ def test_credit_analysis_workflow_rejects_invalid_and_conflicting_passes(
             luna_candidate_ids=candidate_ids,
         )
 
-    class ExcessiveUnassessedRunner(FakeCreditModelRunner):
-        def _sol(
-            self,
-            task: Mapping[str, Any],
-            packet: Mapping[str, Any],
-            digest: str,
-        ) -> dict[str, Any]:
-            result = super()._sol(task, packet, digest)
-            for group in result["call_classifications"]:
-                group["classification"] = "unassessed"
-                group["reason_code"] = None
-                group["rationale"] = "A synthetic decision-blocking gap remains."
-            return result
-
-    bad_sol = ExcessiveUnassessedRunner()
-    excessive_raw = bad_sol._sol(sol_task, payload, digest)
-    with pytest.raises(
-        workflow.CreditAnalysisError,
-        match="unassessed calls exceed",
-    ):
-        workflow._validate_holistic_task_result(
-            excessive_raw,
-            state=active_state,
-            task=sol_task,
-            input_sha256=digest,
-            contract=contract,
-            compact=compact,
-            luna_candidate_ids=candidate_ids,
-        )
-
     completed = workflow.command_execute_orchestration(
         state_path,
         runner=good,

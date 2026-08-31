@@ -6,8 +6,9 @@ on success and written in full only for the first failed check. A successful
 run removes stale evidence at that exact path and prunes only the dedicated
 default evidence directory when empty. Commands use argv lists, and managed
 runtime installation remains outside this aggregate. Tests delegate to
-``scripts/run-tests.py --all``; CI may use ``--without-tests`` only when a
-separate explicit invocation of that same runner owns the job's test phase.
+``scripts/run-tests.py --all`` with a complete failure-diagnostic destination;
+CI may use ``--without-tests`` only when a separate explicit invocation of that
+same runner owns the job's test phase.
 """
 
 from __future__ import annotations
@@ -70,12 +71,16 @@ def build_checks(
     *,
     python_executable: str | None = None,
     npm_executable: str | None = None,
+    test_diagnostic_file: pathlib.Path | None = None,
     include_tests: bool = True,
 ) -> tuple[Check, ...]:
     """Build the single canonical repository-validation sequence."""
 
     python = python_executable or sys.executable
     npm = npm_executable or ("npm.cmd" if sys.platform == "win32" else "npm")
+    pytest_diagnostic = test_diagnostic_file or (
+        repo_root / "build" / "test-diagnostics" / "pytest-failure.json"
+    )
     checks: tuple[Check, ...] = (
         Check("markdown-lint", (npm, "run", "lint:markdown"), repo_root),
         Check(
@@ -113,7 +118,13 @@ def build_checks(
         checks += (
             Check(
                 "pytest",
-                (python, "scripts/run-tests.py", "--all"),
+                (
+                    python,
+                    "scripts/run-tests.py",
+                    "--all",
+                    "--diagnostic-output",
+                    str(pytest_diagnostic),
+                ),
                 repo_root,
             ),
         )
