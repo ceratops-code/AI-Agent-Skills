@@ -14,7 +14,11 @@ from tests.credit_analysis.models import (
     holistic_model_catalog,
     load_credit_analysis_workflow_module,
 )
-from tests.credit_analysis.sessions import credit_analysis_request
+from tests.credit_analysis.sessions import (
+    credit_analysis_request,
+    credit_analysis_session,
+)
+from tests.support.repositories import run_git
 
 
 def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
@@ -239,6 +243,94 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
     assert recovery_final["classification_totals"]["unassessed"] <= (
         recovery_final["manifest"]["candidate_count"] // 5
     )
+
+    shipped_scope = tmp_path / "shipped-worktree-recovery"
+    shipped_scope.mkdir()
+    repository_parent = shipped_scope / "projects"
+    repository_parent.mkdir()
+    primary_checkout = repository_parent / "source-repo"
+    primary_checkout.mkdir()
+    repository_url = "https://example.test/example/source-repo.git"
+    initialized = run_git(primary_checkout, "init")
+    assert initialized.returncode == 0, initialized.stderr
+    remote_added = run_git(
+        primary_checkout,
+        "remote",
+        "add",
+        "origin",
+        repository_url,
+    )
+    assert remote_added.returncode == 0, remote_added.stderr
+    (primary_checkout / "AGENTS.md").write_text(
+        "# Recovered source controls\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    missing_worktree = (
+        repository_parent
+        / "worktrees"
+        / primary_checkout.name
+        / "shipped-task"
+    )
+    recovered_request, recovered_session, _ = credit_analysis_request(
+        shipped_scope
+    )
+    credit_analysis_session(
+        recovered_session,
+        cwd=missing_worktree,
+        repository_url=repository_url,
+    )
+    recovered_runner = FakeCreditModelRunner(temporary_controls=False)
+    recovered_plan = workflow.command_plan_orchestration(
+        recovered_request,
+        available_models=recovered_runner.available_models,
+    )
+    recovered_state_path = pathlib.Path(recovered_plan["state_path"])
+    recovered_state = json.loads(
+        recovered_state_path.read_text(encoding="utf-8")
+    )
+    resolved_primary = str(primary_checkout.resolve())
+    assert recovered_state["execution_context"]["primary_cwd"] == resolved_primary
+    assert recovered_state["execution_context"]["cwd_substitutions"] == [
+        {
+            "recorded_cwd": str(missing_worktree.resolve(strict=False)),
+            "resolved_cwd": resolved_primary,
+            "repository_url": repository_url,
+            "reason": "missing-canonical-worktree",
+        }
+    ]
+    assert all(
+        task["execution_cwd"] == resolved_primary
+        for task in [
+            *recovered_state["manifest"]["luna_tasks"],
+            *recovered_state["manifest"]["sol_tasks"],
+        ]
+    )
+    recovered_completed = workflow.command_execute_orchestration(
+        recovered_state_path,
+        runner=recovered_runner,
+        available_models=recovered_runner.available_models,
+    )
+    assert recovered_completed["complete"] is True
+
+    mismatch_scope = tmp_path / "shipped-worktree-mismatch"
+    mismatch_scope.mkdir()
+    mismatch_request, mismatch_session, _ = credit_analysis_request(
+        mismatch_scope
+    )
+    credit_analysis_session(
+        mismatch_session,
+        cwd=missing_worktree,
+        repository_url="https://example.test/other/source-repo.git",
+    )
+    with pytest.raises(
+        workflow.CreditAnalysisError,
+        match="repository identity does not match",
+    ):
+        workflow.command_plan_orchestration(
+            mismatch_request,
+            available_models=holistic_model_catalog(),
+        )
 
 
 def test_removed_bounded_action_is_rejected(tmp_path: pathlib.Path) -> None:

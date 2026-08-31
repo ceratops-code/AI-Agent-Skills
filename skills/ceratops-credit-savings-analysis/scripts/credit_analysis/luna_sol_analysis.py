@@ -10,6 +10,7 @@ from .model_capacity_planning import *
 from .multi_thread_analysis import *
 from .persistent_subthread_analysis import *
 from .single_thread_analysis import *
+from .source_execution_context import *
 
 def _exclusive_text(path: pathlib.Path, value: str, label: str) -> None:
     """Create one immutable UTF-8 controller artifact."""
@@ -1602,203 +1603,6 @@ def _json_bytes(value: Any) -> int:
     )
 
 
-def _instruction_file(directory: pathlib.Path) -> pathlib.Path | None:
-    """Resolve the standard Codex instruction file for one directory."""
-
-    for name in ("AGENTS.override.md", "AGENTS.md"):
-        candidate = directory / name
-        if candidate.is_file() and not candidate.is_symlink():
-            return candidate
-    return None
-
-
-def _instruction_chain(cwd: pathlib.Path) -> dict[str, Any]:
-    """Freeze the global and root-to-cwd project AGENTS chain used by Codex."""
-
-    resolved = cwd.expanduser().resolve(strict=True)
-    if not resolved.is_dir() or resolved.is_symlink():
-        raise CreditAnalysisError(f"source cwd is not a regular directory: {resolved}")
-    configured_home = os.environ.get("CODEX_HOME")
-    codex_home = (
-        pathlib.Path(configured_home).expanduser()
-        if configured_home
-        else pathlib.Path.home() / ".codex"
-    )
-    files: list[pathlib.Path] = []
-    global_file = _instruction_file(codex_home)
-    if global_file is not None:
-        files.append(global_file.resolve(strict=True))
-    project_root = resolved
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(resolved), "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=20,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        completed = None
-    if completed is not None and completed.returncode == 0 and completed.stdout.strip():
-        candidate_root = pathlib.Path(completed.stdout.strip()).resolve(strict=True)
-        try:
-            resolved.relative_to(candidate_root)
-        except ValueError:
-            pass
-        else:
-            project_root = candidate_root
-    directories = [project_root]
-    if resolved != project_root:
-        relative = resolved.relative_to(project_root)
-        current = project_root
-        for part in relative.parts:
-            current = current / part
-            directories.append(current)
-    for directory in directories:
-        local_file = _instruction_file(directory)
-        if local_file is not None:
-            resolved_file = local_file.resolve(strict=True)
-            if resolved_file not in files:
-                files.append(resolved_file)
-    records: list[dict[str, Any]] = [
-        {
-            "path": str(path),
-            "sha256": _file_hash(path),
-            "bytes": path.stat().st_size,
-        }
-        for path in files
-    ]
-    return {
-        "cwd": str(resolved),
-        "project_root": str(project_root),
-        "codex_home": str(codex_home.resolve()),
-        "files": records,
-        "chain_sha256": _content_hash(records),
-        "total_bytes": sum(int(record["bytes"]) for record in records),
-    }
-
-
-def _source_execution_context(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """Resolve the effective cwd for every run without rereading the session."""
-
-    session_cwd: str | None = None
-    current_cwd: str | None = None
-    run_cwds: dict[str, str] = {}
-    for row in rows:
-        payload = row.get("payload")
-        if not isinstance(payload, Mapping):
-            continue
-        if row.get("type") == "session_meta":
-            value = payload.get("cwd")
-            if isinstance(value, str) and value.strip():
-                session_cwd = value.strip()
-                current_cwd = session_cwd
-        elif row.get("type") == "turn_context":
-            value = payload.get("cwd")
-            if isinstance(value, str) and value.strip():
-                current_cwd = value.strip()
-            turn_id = payload.get("turn_id")
-            if isinstance(turn_id, str) and turn_id and current_cwd:
-                run_cwds[turn_id] = current_cwd
-    if session_cwd is None:
-        raise CreditAnalysisError("source session does not declare a cwd")
-    primary = _instruction_chain(pathlib.Path(session_cwd))
-    chains: dict[str, dict[str, Any]] = {primary["cwd"]: primary}
-    normalized_run_cwds: dict[str, str] = {}
-    for turn_id, raw_cwd in run_cwds.items():
-        resolved_cwd = str(pathlib.Path(raw_cwd).expanduser().resolve(strict=True))
-        normalized_run_cwds[turn_id] = resolved_cwd
-        if resolved_cwd not in chains:
-            chains[resolved_cwd] = _instruction_chain(pathlib.Path(resolved_cwd))
-    return {
-        "primary_cwd": primary["cwd"],
-        "run_cwds": normalized_run_cwds,
-        "instruction_chains": [chains[key] for key in sorted(chains)],
-    }
-
-
-def _validate_execution_context(value: Mapping[str, Any]) -> None:
-    """Reject cwd or AGENTS drift between planning and child launch."""
-
-    chains = value.get("instruction_chains")
-    if not isinstance(chains, list) or not chains:
-        raise CreditAnalysisError("frozen instruction context is missing")
-    for frozen in chains:
-        if not isinstance(frozen, Mapping):
-            raise CreditAnalysisError("frozen instruction chain is invalid")
-        current = _instruction_chain(pathlib.Path(str(frozen.get("cwd"))))
-        if current != frozen:
-            raise CreditAnalysisError(
-                f"source instruction chain changed after planning: {frozen.get('cwd')}"
-            )
-
-
-def _instruction_chain_for_cwd(
-    execution_context: Mapping[str, Any], cwd: str
-) -> Mapping[str, Any]:
-    """Return the frozen effective instruction chain for one child cwd."""
-
-    for chain in execution_context.get("instruction_chains", []):
-        if isinstance(chain, Mapping) and str(chain.get("cwd")) == cwd:
-            return chain
-    raise CreditAnalysisError(f"source instruction chain is missing for cwd: {cwd}")
-
-
-def _execution_rule_handoff(
-    state: Mapping[str, Any], task: Mapping[str, Any]
-) -> dict[str, Any]:
-    """Retain rule hashes and text needed when Sol spans differing source cwds."""
-
-    context = state["execution_context"]
-    primary_cwd = str(context["primary_cwd"])
-    task_cwd = str(task.get("execution_cwd") or primary_cwd)
-    task_chain = _instruction_chain_for_cwd(context, task_cwd)
-    primary_chain = _instruction_chain_for_cwd(context, primary_cwd)
-    primary_files = {
-        (str(item["path"]), str(item["sha256"]))
-        for item in primary_chain["files"]
-    }
-    chains: list[dict[str, Any]] = []
-    for chain in context["instruction_chains"]:
-        differing_files: list[dict[str, Any]] = []
-        for item in chain["files"]:
-            identity = (str(item["path"]), str(item["sha256"]))
-            if identity in primary_files:
-                continue
-            path = pathlib.Path(identity[0])
-            differing_files.append(
-                {
-                    "path": str(path),
-                    "sha256": identity[1],
-                    "bytes": int(item["bytes"]),
-                    "text": path.read_text(encoding="utf-8"),
-                }
-            )
-        chains.append(
-            {
-                "cwd": str(chain["cwd"]),
-                "chain_sha256": str(chain["chain_sha256"]),
-                "files": [
-                    {
-                        "path": str(item["path"]),
-                        "sha256": str(item["sha256"]),
-                        "bytes": int(item["bytes"]),
-                    }
-                    for item in chain["files"]
-                ],
-                "differing_from_primary": differing_files,
-            }
-        )
-    return {
-        "task_execution_cwd": task_cwd,
-        "task_chain_sha256": str(task_chain["chain_sha256"]),
-        "primary_cwd": primary_cwd,
-        "primary_chain_sha256": str(primary_chain["chain_sha256"]),
-        "source_chains": chains,
-    }
-
-
 def _collect_holistic_evidence(
     *,
     request: Mapping[str, Any],
@@ -1835,6 +1639,10 @@ def _collect_holistic_evidence(
     instruction_chains = {
         str(chain["cwd"]): chain
         for chain in execution_context["instruction_chains"]
+    }
+    cwd_substitutions = {
+        str(item["recorded_cwd"]): item
+        for item in execution_context["cwd_substitutions"]
     }
     root_session = pathlib.Path(request["session"]).resolve()
     root_session_id = _session_identity(rows, fallback=str(root_session))
@@ -1944,6 +1752,17 @@ def _collect_holistic_evidence(
                     f"descendant instruction chain conflicts for cwd: {cwd}"
                 )
             instruction_chains[cwd] = chain
+        for substitution in child_context["cwd_substitutions"]:
+            recorded_cwd = str(substitution["recorded_cwd"])
+            if (
+                recorded_cwd in cwd_substitutions
+                and cwd_substitutions[recorded_cwd] != substitution
+            ):
+                raise CreditAnalysisError(
+                    "descendant cwd substitution conflicts for recorded path: "
+                    f"{recorded_cwd}"
+                )
+            cwd_substitutions[recorded_cwd] = substitution
         for original_turn_id, namespaced_turn_id in turn_ids.items():
             execution_context["run_cwds"][namespaced_turn_id] = child_context[
                 "run_cwds"
@@ -1958,6 +1777,9 @@ def _collect_holistic_evidence(
         )
     execution_context["instruction_chains"] = [
         instruction_chains[key] for key in sorted(instruction_chains)
+    ]
+    execution_context["cwd_substitutions"] = [
+        cwd_substitutions[key] for key in sorted(cwd_substitutions)
     ]
     collected = _merge_thread_evidence(collected, descendants)
     evidence: dict[str, Any] = {
