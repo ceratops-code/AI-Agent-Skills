@@ -209,6 +209,45 @@ def _compact_final_call_inventory(
     ]
 
 
+def _prepare_final_review_transport(
+    *,
+    compact: Mapping[str, Any],
+    routed_call_ids: Sequence[str],
+    direct_evidence_candidate_ids: Sequence[str],
+    audit_result: Mapping[str, Any] | None,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Exclude failed-review inventory from every final-model input surface."""
+
+    records = compact.get("records")
+    if not isinstance(records, list) or any(
+        not isinstance(record, Mapping) for record in records
+    ):
+        raise CreditAnalysisError("final review records are invalid")
+    routed_call_set = set(routed_call_ids)
+    routed_records = [
+        dict(record) for record in records if record.get("call_id") in routed_call_set
+    ]
+    if {str(record["call_id"]) for record in routed_records} != routed_call_set:
+        raise CreditAnalysisError("final routed-call inventory is incomplete")
+    routed_candidate_ids = {
+        str(record["candidate_id"]) for record in routed_records
+    }
+    retained_audit = dict(audit_result) if audit_result is not None else None
+    if retained_audit is not None and not set(direct_evidence_candidate_ids).issubset(
+        routed_candidate_ids
+    ):
+        retained_audit = None
+    return (
+        {
+            **compact,
+            "records": routed_records,
+            "candidate_ids": [record["candidate_id"] for record in routed_records],
+            "call_ids": list(routed_call_ids),
+        },
+        retained_audit,
+    )
+
+
 def _encoded_bytes(value: Any) -> int:
     return len(
         json.dumps(
@@ -421,6 +460,7 @@ __all__ = (
     "_compact_final_adjudication_result",
     "_compact_final_call_inventory",
     "_fit_final_supplemental_evidence",
+    "_prepare_final_review_transport",
     "_prepare_bounded_evidence",
     "_relevant_segments",
     "_review_record_index",

@@ -4214,18 +4214,6 @@ def _holistic_sol_input(
             if result["task_id"] in routed_luna_task_ids
         ]
         routed_call_ids = _routed_call_ids(state)
-        routed_call_set = set(routed_call_ids)
-        routed_records = [
-            record
-            for record in compact["records"]
-            if record["call_id"] in routed_call_set
-        ]
-        compact = {
-            **compact,
-            "records": routed_records,
-            "candidate_ids": [record["candidate_id"] for record in routed_records],
-            "call_ids": routed_call_ids,
-        }
         for shard_task in state["manifest"]["sol_tasks"][:6]:
             execution = state["execution"][shard_task["task_id"]]
             if execution["status"] in {"skipped", "omitted"}:
@@ -4264,6 +4252,15 @@ def _holistic_sol_input(
                 )
             else:
                 raise CreditAnalysisError("focused Sol result schema is invalid")
+        compact, audit_result = _prepare_final_review_transport(
+            compact=compact,
+            routed_call_ids=routed_call_ids,
+            direct_evidence_candidate_ids=state["focused_review"].get(
+                "candidate_ids", []
+            ),
+            audit_result=audit_result,
+        )
+        alias_compact = compact
         if audit_result is not None and audit_result.get("candidates"):
             reserved = {
                 candidate["id"]

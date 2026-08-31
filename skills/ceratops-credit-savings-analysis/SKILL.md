@@ -100,7 +100,8 @@ applies them.
   findings against exact evidence. Each rejected Sol task receives one automatic
   corrective retry when the eight-attempt ceiling permits. After a non-final
   task fails validation twice, retain its exact unreviewed candidate, call, and
-  byte inventory and continue to the final merger. Use no more than eight Sol
+  byte inventory, exclude that inventory from final transport, and continue to
+  the final merger. Use no more than eight Sol
   calls total, counting every attempt. The final Sol does not re-adjudicate
   every
   candidate or receive the complete source tree.
