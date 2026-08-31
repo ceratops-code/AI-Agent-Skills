@@ -4,8 +4,8 @@
 When release has advanced, the helper may rebase a clean, unpublished,
 linear-history source in its existing worktree. Failed attempts restore and
 verify the exact source snapshot before blocking. Repository-specific
-validation or installation runs only through a named operation from
-``deploy/deploy.yml`` when explicitly selected. Composed shipping suppresses
+validation or installation runs only through a named deploy operation from
+``sdlc/sdlc.yml`` when explicitly selected. Composed shipping suppresses
 that promotion-time operation and delegates the exact promoted head to the
 sibling ship helper, which owns post-merge release publication, local
 deployment, and cleanup.
@@ -33,6 +33,7 @@ PENDING_MANAGER = SCRIPT_ROOT / "manage-pending-work.py"
 DEPLOY_RUNNER = SCRIPT_ROOT / "run-deploy-operation.py"
 SHIP_REPOSITORY = SCRIPT_ROOT / "ship-repository.py"
 RELEASE_BRANCH = "release/local"
+DEFAULT_SDLC_CONTRACT = pathlib.Path("sdlc/sdlc.yml")
 MANAGED_SKILLS_MANIFEST = pathlib.Path("skills/skill-sections.json")
 
 
@@ -696,7 +697,10 @@ def promote(args: argparse.Namespace) -> dict[str, object]:
             SCRIPT_ROOT,
         )
         if operation_code:
-            raise PromotionError(str(operation.get("message", "Deployment failed.")))
+            raise PromotionError(
+                str(operation.get("message", "Deployment failed.")),
+                operation,
+            )
         declared_handoff = operation.get("handoff")
         if managed_skills and isinstance(declared_handoff, str):
             handoff = declared_handoff
@@ -766,14 +770,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--release-contract",
         type=pathlib.Path,
-        default=pathlib.Path("release/release.yml"),
+        default=DEFAULT_SDLC_CONTRACT,
     )
     parser.add_argument("--release-preflight-operation", default="preflight")
     parser.add_argument("--release-operation", default="publish")
     parser.add_argument(
         "--deploy-contract",
         type=pathlib.Path,
-        default=pathlib.Path("deploy/deploy.yml"),
+        default=DEFAULT_SDLC_CONTRACT,
     )
     return parser
 

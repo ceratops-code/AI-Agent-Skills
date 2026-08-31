@@ -10,8 +10,8 @@ description: Route Ceratops repository lifecycle work to action references for r
 Route repository compatibility, local Git, GitHub, release publication, and
 deployment lifecycle work to the narrowest action reference. Keep repository
 state transitions in one skill while each repository owns declared remote
-release publication and artifact identity in `release/release.yml`, and local
-deployment in `deploy/deploy.yml`.
+release publication, artifact identity, and local deployment in
+`sdlc/sdlc.yml`.
 
 ## Context
 
@@ -51,9 +51,9 @@ deployment in `deploy/deploy.yml`.
 - Keep local promotion, GitHub publication, guarded merge, synchronization,
   deployment routing, repository compatibility, and selected-source cleanup in
   this skill.
-- Execute only named structured release operations from `release/release.yml`
-  and deployment operations from `deploy/deploy.yml` through the operation
-  runner. Do not interpret prose as executable commands.
+- Execute only named structured operations from the `release` and `deploy`
+  sections of `sdlc/sdlc.yml` through the operation runner. Do not interpret
+  prose as executable commands.
 - Use `references/merge-pr.md` for standalone PR finalization. Integrated ship
   must preserve every readiness, CI, Codex-review, and exact-head gate before
   its final admin merge.

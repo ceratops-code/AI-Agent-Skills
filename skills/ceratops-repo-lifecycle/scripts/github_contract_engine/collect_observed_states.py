@@ -48,7 +48,7 @@ PRODUCER_REGISTRY = {
     "local_repository": (
         "/local/available",
         "/local/compatibility/*",
-        "/local/deploy_contract/*",
+        "/local/sdlc_contract/*",
         "/local/git/*",
         "/local/manifests/*",
         "/local/repository_validation/*",
@@ -111,7 +111,7 @@ CONDITION_STATE_PATTERNS = (
     "immutable_release_detected",
     "linked_artifacts_claimed",
     "local.compatibility.applicable",
-    "local.deploy_contract.present",
+    "local.sdlc_contract.present",
     "local.workflows.unpinned_external_refs",
     "local_repo_path",
     "merged_change_requires_release",

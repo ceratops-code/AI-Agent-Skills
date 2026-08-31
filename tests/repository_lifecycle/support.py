@@ -11,13 +11,13 @@ from typing import Any
 
 import pytest
 
-from tests.support.repositories import ROOT, run_git, write_deploy_contract
+from tests.support.repositories import ROOT, run_git, write_sdlc_contract
 
 REPOSITORY_LIFECYCLE_SOURCE = ROOT / "skills" / "ceratops-repo-lifecycle"
 REPOSITORY_LIFECYCLE_SCRIPTS = REPOSITORY_LIFECYCLE_SOURCE / "scripts"
 if str(REPOSITORY_LIFECYCLE_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_LIFECYCLE_SCRIPTS))
-DEPLOY_CONTRACT_TEMPLATE = REPOSITORY_LIFECYCLE_SOURCE / "references" / "templates" / "deploy-template.yml"
+SDLC_CONTRACT_TEMPLATE = REPOSITORY_LIFECYCLE_SOURCE / "references" / "templates" / "sdlc-template.yml"
 SECTION_MANIFEST_TEMPLATE = REPOSITORY_LIFECYCLE_SOURCE / "references" / "templates" / "skill-sections-template.json"
 DEPLOY_OPERATION = REPOSITORY_LIFECYCLE_SOURCE / "scripts" / "run-deploy-operation.py"
 RELEASE_OPERATION = REPOSITORY_LIFECYCLE_SOURCE / "scripts" / "run-release-operation.py"
@@ -170,9 +170,9 @@ def prepare_repository_lifecycle_repo(
         operation["parameters"] = ["base_revision"]
     if handoff is not None:
         operation["handoff"] = handoff
-    write_deploy_contract(
+    write_sdlc_contract(
         repo,
-        {"deploy": operation},
+        deploy_operations={"deploy": operation},
     )
     if managed_skills:
         (repo / "skills").mkdir()

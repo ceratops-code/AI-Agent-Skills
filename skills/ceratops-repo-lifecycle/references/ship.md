@@ -93,12 +93,11 @@ selected merged source branches and worktrees.
 6. After merge, the helper synchronizes local main and restores a reusable
    integration branch when selected.
 7. Before remote mutation, the wrapper classifies release publication and
-   deployment. An absent default `release/release.yml` makes release preflight
-   and publication successful no-ops, and an absent default
-   `deploy/deploy.yml` makes `deploy` a successful no-op; each result carries
-   `configured: false` and `reason: contract_not_configured`, and shipping
-   continues. A missing explicitly selected custom contract blocks. Run a
-   declared release preflight before the first remote mutation. After
+   deployment. An absent default `sdlc/sdlc.yml` makes both successful no-ops;
+   an absent `release` or `deploy` section makes only that section a successful
+   no-op. Shipping continues after either case. A missing explicitly selected
+   custom contract blocks. Run a declared release preflight before the first
+   remote mutation. After
    synchronization, recheck the selected scope, run declared release
    publication or record its no-op, then run declared local deployment or
    record its no-op, and recheck. Before removing a selected worktree or branch

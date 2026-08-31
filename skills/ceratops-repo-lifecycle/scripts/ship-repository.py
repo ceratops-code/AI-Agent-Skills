@@ -2,8 +2,8 @@
 """Ship ``release/local``, publish its release, deploy locally, and clean.
 
 The GitHub helper retains ownership of publication, gates, exact-head merge,
-and synchronization. This wrapper adds separately owned, checkpointed remote
-release publication and local deployment phases plus the required late
+and synchronization. This wrapper adds checkpointed remote release-publication
+and local-deployment sections from the repository SDLC contract, plus the late
 selected-work recheck and cleanup.
 """
 
@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 from typing import Any
@@ -23,9 +24,9 @@ SCRIPT_ROOT = pathlib.Path(__file__).resolve().parent
 DEPLOY_RUNNER = SCRIPT_ROOT / "run-deploy-operation.py"
 RELEASE_RUNNER = SCRIPT_ROOT / "run-release-operation.py"
 PENDING_MANAGER = SCRIPT_ROOT / "manage-pending-work.py"
-DEFAULT_DEPLOY_CONTRACT = pathlib.Path("deploy/deploy.yml")
-DEFAULT_RELEASE_CONTRACT = pathlib.Path("release/release.yml")
+DEFAULT_SDLC_CONTRACT = pathlib.Path("sdlc/sdlc.yml")
 RELEASE_BRANCH = "release/local"
+OPERATION_ID_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
 class RepositoryShipError(RuntimeError):
@@ -144,22 +145,30 @@ def _operation_checkpoint_directory(repo_root: pathlib.Path) -> pathlib.Path:
 
 
 def _operation_checkpoint_path(
-    repo_root: pathlib.Path, target_commit: str, phase: str
+    repo_root: pathlib.Path,
+    target_commit: str,
+    phase: str,
+    operation: str,
 ) -> pathlib.Path:
-    """Return one exact-target record independent of optional cleanup scope."""
+    """Return one exact-target, phase, and operation checkpoint path."""
 
-    suffixes = {
-        "release_publication": ".release-publication.json",
-        "deployment": ".deployment.json",
+    phase_names = {
+        "release_publication": "release-publication",
+        "deployment": "deployment",
     }
     try:
-        suffix = suffixes[phase]
+        phase_name = phase_names[phase]
     except KeyError as exc:
         raise RepositoryShipError(f"Unknown checkpoint phase: {phase}") from exc
+    if OPERATION_ID_RE.fullmatch(operation) is None:
+        raise RepositoryShipError("Operation checkpoint requires a valid operation ID.")
     normalized_commit = target_commit.lower()
     if github_ship.FULL_SHA_RE.fullmatch(normalized_commit) is None:
         raise RepositoryShipError("Operation checkpoint requires a full commit SHA.")
-    return _operation_checkpoint_directory(repo_root) / f"{normalized_commit}{suffix}"
+    return (
+        _operation_checkpoint_directory(repo_root)
+        / f"{normalized_commit}.{phase_name}.{operation}.json"
+    )
 
 
 def _operation_checkpoint_temporary_path(path: pathlib.Path) -> pathlib.Path:
@@ -280,6 +289,7 @@ def _operation_identity(
     repo_root: pathlib.Path,
     *,
     phase: str,
+    section: str,
     target_branch: str,
     target_commit: str,
     synchronized_commit: str,
@@ -294,6 +304,7 @@ def _operation_identity(
     return {
         "version": 1,
         "phase": phase,
+        "section": section,
         "target_branch": target_branch,
         "target_commit": target_commit,
         "synchronized_commit": synchronized_commit,
@@ -324,6 +335,7 @@ def _read_operation_checkpoint(
             not isinstance(value.get(key), str)
             for key in (
                 "phase",
+                "section",
                 "target_branch",
                 "target_commit",
                 "synchronized_commit",
@@ -626,7 +638,7 @@ def _phase_recovery(
     release_publication: dict[str, Any] | None = None,
     deployment: dict[str, Any] | None = None,
 ) -> dict[str, object]:
-    """Describe proven completed phases and one exact safe ``resume_action``."""
+    """Describe proven phases, operation IDs, and one exact resume action."""
 
     completed: dict[str, object] = {
         "merge": {
@@ -643,9 +655,24 @@ def _phase_recovery(
         completed["release_publication"] = release_publication
     if deployment is not None:
         completed["deployment"] = deployment
+    completed_operations: list[dict[str, str]] = []
+    pending_operations: list[dict[str, str]] = []
+    for section, operation, result in (
+        ("release", args.release_operation, release_publication),
+        ("deploy", args.deploy_operation, deployment),
+    ):
+        reference = {"section": section, "operation": operation}
+        if result is None:
+            pending_operations.append(reference)
+        else:
+            completed_operations.append(reference)
     return {
         "completed": completed,
         "remaining": remaining,
+        "operation_ledger": {
+            "completed": completed_operations,
+            "pending": pending_operations,
+        },
         "resume_action": {
             "cwd": str(repo_root),
             "argv": _resume_ship_command(args, repo_root, target_commit),
@@ -662,7 +689,7 @@ def ship_repository(args: argparse.Namespace) -> dict[str, object]:
     release_publication: dict[str, Any] | None = _contract_preflight(
         repo_root,
         args.release_contract,
-        DEFAULT_RELEASE_CONTRACT,
+        DEFAULT_SDLC_CONTRACT,
         args.release_operation,
         label="Release",
         default_selection=(
@@ -673,7 +700,7 @@ def ship_repository(args: argparse.Namespace) -> dict[str, object]:
     deployment: dict[str, Any] | None = _contract_preflight(
         repo_root,
         args.deploy_contract,
-        DEFAULT_DEPLOY_CONTRACT,
+        DEFAULT_SDLC_CONTRACT,
         args.deploy_operation,
         label="Deployment",
         default_selection=args.deploy_operation == "deploy",
@@ -781,6 +808,8 @@ def ship_repository(args: argparse.Namespace) -> dict[str, object]:
                     target_commit=target_commit,
                     synchronized_head=synchronized_head,
                     remaining="selected_work_recheck",
+                    release_publication=release_publication,
+                    deployment=deployment,
                 ),
             }, preserved_worktrees)
         if check_code:
@@ -794,11 +823,15 @@ def ship_repository(args: argparse.Namespace) -> dict[str, object]:
     release_identity: dict[str, object] | None = None
     if release_publication is None:
         release_checkpoint = _operation_checkpoint_path(
-            repo_root, target_commit, "release_publication"
+            repo_root,
+            target_commit,
+            "release_publication",
+            args.release_operation,
         )
         release_identity = _operation_identity(
             repo_root,
             phase="release_publication",
+            section="release",
             target_branch=args.head_branch,
             target_commit=target_commit,
             synchronized_commit=synchronized_head,
@@ -840,6 +873,7 @@ def ship_repository(args: argparse.Namespace) -> dict[str, object]:
                         target_commit=target_commit,
                         synchronized_head=synchronized_head,
                         remaining="release_publication",
+                        deployment=deployment,
                     ),
                 },
             )
@@ -854,11 +888,15 @@ def ship_repository(args: argparse.Namespace) -> dict[str, object]:
     deployment_identity: dict[str, object] | None = None
     if deployment is None:
         deployment_checkpoint = _operation_checkpoint_path(
-            repo_root, target_commit, "deployment"
+            repo_root,
+            target_commit,
+            "deployment",
+            args.deploy_operation,
         )
         deployment_identity = _operation_identity(
             repo_root,
             phase="deployment",
+            section="deploy",
             target_branch=args.head_branch,
             target_commit=target_commit,
             synchronized_commit=synchronized_head,
@@ -1018,10 +1056,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--release-contract",
         type=pathlib.Path,
-        default=DEFAULT_RELEASE_CONTRACT,
+        default=DEFAULT_SDLC_CONTRACT,
         help=(
-            "Repository release-publication contract. An absent default "
-            "release/release.yml makes publication an explicit no-op."
+            "Repository SDLC contract. An absent default sdlc/sdlc.yml or "
+            "release section makes publication an explicit no-op."
         ),
     )
     parser.add_argument("--release-preflight-operation", default="preflight")
@@ -1029,10 +1067,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--deploy-contract",
         type=pathlib.Path,
-        default=DEFAULT_DEPLOY_CONTRACT,
+        default=DEFAULT_SDLC_CONTRACT,
         help=(
-            "Repository deployment contract. An absent default deploy/deploy.yml "
-            "makes deploy an explicit no-op."
+            "Repository SDLC contract. An absent default sdlc/sdlc.yml or "
+            "deploy section makes deployment an explicit no-op."
         ),
     )
     parser.add_argument("--deploy-operation", default="deploy")

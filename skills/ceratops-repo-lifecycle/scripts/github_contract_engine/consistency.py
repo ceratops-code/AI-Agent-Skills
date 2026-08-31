@@ -52,8 +52,7 @@ CONTRACTS = REFERENCES / "contracts"
 SCRIPTS = SKILL_DIR / "scripts"
 SOURCE_DOCS = CONTRACTS / "github-contract-source-docs.json"
 SCHEMAS = REFERENCES / "schemas"
-DEPLOY_SCHEMA = SCHEMAS / "deploy.yml.schema.json"
-RELEASE_SCHEMA = SCHEMAS / "release.yml.schema.json"
+SDLC_SCHEMA = SCHEMAS / "sdlc.yml.schema.json"
 STATE_SCHEMA = SCHEMAS / "github-lifecycle-deterministic-contract.schema.json"
 PR_SCHEMA = SCHEMAS / "github-pr-readiness-deterministic-contract.schema.json"
 STATE_CONTRACT_PATHS = {
@@ -99,8 +98,7 @@ REQUIRED_FILES = [
     SCHEMAS / "github-pr-readiness-deterministic-contract.schema.json",
     SCHEMAS / "nondeterministic-contract.schema.json",
     SCHEMAS / "github-contract-source-docs.schema.json",
-    DEPLOY_SCHEMA,
-    RELEASE_SCHEMA,
+    SDLC_SCHEMA,
 ]
 
 STATE_ANNOTATION_FIELDS = frozenset(
@@ -439,11 +437,11 @@ def _dynamic_state_path_errors(
 
 
 def _validate_artifact_contract_schema(
-    contract: dict[str, Any], release_schema: dict[str, Any]
+    contract: dict[str, Any], sdlc_schema: dict[str, Any]
 ) -> list[str]:
-    """Keep executable artifact identity fields aligned with release input."""
+    """Keep executable artifact identity fields aligned with SDLC release input."""
 
-    schema_fields = pointer_get(release_schema, "/$defs/artifact/required", None)
+    schema_fields = pointer_get(sdlc_schema, "/$defs/artifact/required", None)
     identity_checks = [
         check
         for check in contract.get("checks", [])
@@ -458,7 +456,7 @@ def _validate_artifact_contract_schema(
         identity_checks[0], "/desired/required_per_artifact_fields", None
     )
     for label, fields in (
-        ("release.yml artifact required fields", schema_fields),
+        ("sdlc.yml artifact required fields", schema_fields),
         ("common.identity_contract required fields", contract_fields),
     ):
         if (
@@ -473,10 +471,10 @@ def _validate_artifact_contract_schema(
             ]
     assert isinstance(schema_fields, list)
     assert isinstance(contract_fields, list)
-    properties = pointer_get(release_schema, "/$defs/artifact/properties", None)
+    properties = pointer_get(sdlc_schema, "/$defs/artifact/properties", None)
     if not isinstance(properties, dict):
         return [
-            f"{rel(RELEASE_SCHEMA)}: artifact properties must be an object"
+            f"{rel(SDLC_SCHEMA)}: artifact properties must be an object"
         ]
     undocumented: list[str] = []
     for field in schema_fields:
@@ -490,7 +488,7 @@ def _validate_artifact_contract_schema(
             undocumented.append(field)
     if undocumented:
         return [
-            f"{rel(RELEASE_SCHEMA)}: required artifact fields need descriptions: "
+            f"{rel(SDLC_SCHEMA)}: required artifact fields need descriptions: "
             + ", ".join(sorted(undocumented))
         ]
     schema_set = set(schema_fields)
@@ -506,7 +504,7 @@ def _validate_artifact_contract_schema(
         details.append("extra " + ", ".join(extra))
     return [
         f"{rel(STATE_CONTRACT_PATHS['artifact'])}: common.identity_contract "
-        "required fields must match release.yml schema artifact requirements: "
+        "required fields must match sdlc.yml schema artifact requirements: "
         + "; ".join(details)
     ]
 
@@ -1091,15 +1089,15 @@ def main(argv: list[str] | None = None) -> int:
             errors.append(
                 f"{rel(path)}: non_deterministic_review_file must be {expected_review}"
             )
-    if "artifact" in contracts and RELEASE_SCHEMA.is_file():
+    if "artifact" in contracts and SDLC_SCHEMA.is_file():
         try:
-            release_schema = load_json(RELEASE_SCHEMA)
+            sdlc_schema = load_json(SDLC_SCHEMA)
         except json.JSONDecodeError as exc:
-            errors.append(f"{rel(RELEASE_SCHEMA)}: invalid JSON: {exc}")
+            errors.append(f"{rel(SDLC_SCHEMA)}: invalid JSON: {exc}")
         else:
             errors.extend(
                 _validate_artifact_contract_schema(
-                    contracts["artifact"], release_schema
+                    contracts["artifact"], sdlc_schema
                 )
             )
     if all(surface in contracts for surface in STATE_CONTRACT_PATHS):

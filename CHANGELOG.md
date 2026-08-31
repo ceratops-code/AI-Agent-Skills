@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Unified deployment operations, release publication, and artifact identity in
+  repository-owned `sdlc/sdlc.yml`; added whole-sequence operation preparation,
+  structured bounded failures, and per-operation shipping checkpoints.
 - Made update execution collect every declared pytest node during prepare so
   missing classes or functions fail before source edits without running tests.
 - Made artifact classification treat Python project manifests as buildable but

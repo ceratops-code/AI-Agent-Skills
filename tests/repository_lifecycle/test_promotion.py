@@ -122,7 +122,13 @@ def test_promote_repository_requires_an_explicit_deployment_choice(
     assert result["merged_branches"] == ["approved"]
     assert result["head"] == approved_head
     assert result["release_start"] == release_start
-    assert result["operation"] == expected_operation
+    if expected_operation is None:
+        assert result["operation"] is None
+    else:
+        assert result["operation"] == {
+            **expected_operation,
+            "commit": approved_head,
+        }
     if expected_managed_skills is None:
         assert "managed_skills" not in result
         assert "handoff" not in result
@@ -261,11 +267,14 @@ def test_promote_repository_ship_after_promotion_composes_terminal_workflow(
     assert ship_command[ship_command.index("--commit") + 1] == approved_head
     assert pathlib.Path(
         ship_command[ship_command.index("--release-contract") + 1]
-    ) == pathlib.Path("release/release.yml")
+    ) == pathlib.Path("sdlc/sdlc.yml")
     assert ship_command[
         ship_command.index("--release-preflight-operation") + 1
     ] == "preflight"
     assert ship_command[ship_command.index("--release-operation") + 1] == "publish"
+    assert pathlib.Path(
+        ship_command[ship_command.index("--deploy-contract") + 1]
+    ) == pathlib.Path("sdlc/sdlc.yml")
     assert ship_command[ship_command.index("--deploy-operation") + 1] == "deploy"
     assert "--reusable-head" in ship_command
     assert str(PROMOTE_REPOSITORY.parent / "run-deploy-operation.py") not in (
@@ -712,6 +721,52 @@ def test_promote_repository_rejects_noncanonical_release_branch_before_mutation(
         nonlinear_source_head
     )
     assert run_git(nonlinear_worktree, "status", "--porcelain").stdout == ""
+
+
+def test_promote_preserves_structured_operation_failure_evidence(
+    tmp_path: pathlib.Path,
+) -> None:
+    repo, _, _, environment = prepare_repository_lifecycle_repo(tmp_path)
+    (repo / "deploy-probe.py").write_text(
+        "import sys\n"
+        "for index in range(12):\n"
+        "    print(f'failure-{index}', file=sys.stderr)\n"
+        "raise SystemExit(6)\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    assert run_git(repo, "add", "deploy-probe.py").returncode == 0
+    assert run_git(repo, "commit", "-m", "make deployment fail").returncode == 0
+    target_commit = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    promoted = subprocess.run(
+        [
+            sys.executable,
+            str(PROMOTE_REPOSITORY),
+            "--repo-root",
+            str(repo),
+            "--source-branch",
+            "approved",
+            "--run-operation",
+            "deploy",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=environment,
+    )
+
+    assert promoted.returncode == 1
+    result = json.loads(promoted.stderr)
+    assert result["status"] == "operation_failed"
+    assert result["operation"] == "deploy"
+    assert result["commit"] == target_commit
+    assert result["failed_step"] == "record"
+    assert result["diagnostic"] == {
+        "exit_code": 6,
+        "stdout_tail": [],
+        "stderr_tail": [f"failure-{index}" for index in range(4, 12)],
+    }
 
 
 def test_promote_and_deploy_rejects_operation_created_repository_work(

@@ -16,8 +16,7 @@ from tests.repository_lifecycle.support import (
 )
 from tests.support.repositories import (
     run_git,
-    write_deploy_contract,
-    write_release_contract,
+    write_sdlc_contract,
 )
 
 
@@ -114,10 +113,10 @@ def test_repository_ship_absent_default_contract_is_no_op_and_finalizes(
             merge_method="merge",
             delete_branch=False,
             reusable_head=True,
-            release_contract=pathlib.Path("release/release.yml"),
+            release_contract=pathlib.Path("sdlc/sdlc.yml"),
             release_preflight_operation="preflight",
             release_operation="publish",
-            deploy_contract=pathlib.Path("deploy/deploy.yml"),
+            deploy_contract=pathlib.Path("sdlc/sdlc.yml"),
             deploy_operation="deploy",
             ci_wait_seconds=1,
             review_wait_seconds=1,
@@ -206,10 +205,10 @@ def test_repository_ship_absent_default_contract_is_no_op_and_finalizes(
                 merge_method="merge",
                 delete_branch=False,
                 reusable_head=True,
-                release_contract=pathlib.Path("release/release.yml"),
+                release_contract=pathlib.Path("sdlc/sdlc.yml"),
                 release_preflight_operation="preflight",
                 release_operation="publish",
-                deploy_contract=pathlib.Path("deploy/deploy.yml"),
+                deploy_contract=pathlib.Path("sdlc/sdlc.yml"),
                 deploy_operation="deploy",
                 ci_wait_seconds=1,
                 review_wait_seconds=1,
@@ -254,16 +253,16 @@ def test_repository_ship_missing_custom_contract_blocks_before_remote_mutation(
                 delete_branch=False,
                 reusable_head=False,
                 release_contract=pathlib.Path(
-                    "release/custom.yml"
+                    "sdlc/custom-release.yml"
                     if contract_kind == "release"
-                    else "release/release.yml"
+                    else "sdlc/sdlc.yml"
                 ),
                 release_preflight_operation="preflight",
                 release_operation="publish",
                 deploy_contract=pathlib.Path(
-                    "deploy/custom.yml"
+                    "sdlc/custom-deploy.yml"
                     if contract_kind == "deploy"
-                    else "deploy/deploy.yml"
+                    else "sdlc/sdlc.yml"
                 ),
                 deploy_operation="deploy",
                 ci_wait_seconds=1,
@@ -281,9 +280,9 @@ def test_repository_ship_release_failure_blocks_deployment_and_cleanup(
     repo = tmp_path / "repo"
     repo.mkdir()
     assert run_git(repo, "init").returncode == 0
-    write_release_contract(
+    write_sdlc_contract(
         repo,
-        {
+        release_operations={
             "preflight": {
                 "steps": [{"id": "check", "run": ["python", "check.py"]}]
             },
@@ -292,9 +291,9 @@ def test_repository_ship_release_failure_blocks_deployment_and_cleanup(
             },
         },
     )
-    write_deploy_contract(
+    write_sdlc_contract(
         repo,
-        {
+        deploy_operations={
             "deploy": {
                 "steps": [
                     {"id": "deploy", "run": ["python", "deploy.py"]}
@@ -316,7 +315,19 @@ def test_repository_ship_release_failure_blocks_deployment_and_cleanup(
         "merge_commit": "c" * 40,
         "synchronized_head": "b" * 40,
     }
-    release_error = {"status": "error", "message": "workflow failed"}
+    release_error = {
+        "status": "operation_failed",
+        "message": "Release step failed: publish",
+        "operation": "publish",
+        "commit": "a" * 40,
+        "steps": [],
+        "failed_step": "publish",
+        "diagnostic": {
+            "exit_code": 7,
+            "stdout_tail": [],
+            "stderr_tail": ["workflow failed"],
+        },
+    }
     responses: list[tuple[int, dict[str, Any]]] = [
         (
             0,
@@ -351,10 +362,10 @@ def test_repository_ship_release_failure_blocks_deployment_and_cleanup(
         merge_method="merge",
         delete_branch=False,
         reusable_head=True,
-        release_contract=pathlib.Path("release/release.yml"),
+        release_contract=pathlib.Path("sdlc/sdlc.yml"),
         release_preflight_operation="preflight",
         release_operation="publish",
-        deploy_contract=pathlib.Path("deploy/deploy.yml"),
+        deploy_contract=pathlib.Path("sdlc/sdlc.yml"),
         deploy_operation="deploy",
         ci_wait_seconds=1,
         review_wait_seconds=1,
@@ -365,12 +376,21 @@ def test_repository_ship_release_failure_blocks_deployment_and_cleanup(
         ship_repository(args)
 
     assert captured.value.payload["phase"] == "release_publication"
+    assert captured.value.payload["status"] == "operation_failed"
+    assert captured.value.payload["diagnostic"] == release_error["diagnostic"]
     assert captured.value.payload["remote_mutation"] is True
     assert captured.value.payload["remaining"] == "release_publication"
     assert list(captured.value.payload["completed"]) == [
         "merge",
         "synchronization",
     ]
+    assert captured.value.payload["operation_ledger"] == {
+        "completed": [],
+        "pending": [
+            {"section": "release", "operation": "publish"},
+            {"section": "deploy", "operation": "deploy"},
+        ],
+    }
     release_resume = captured.value.payload["resume_action"]
     assert pathlib.Path(release_resume["cwd"]) == repo.resolve()
     assert release_resume["argv"][:2] == [
@@ -387,7 +407,19 @@ def test_repository_ship_release_failure_blocks_deployment_and_cleanup(
     assert all(str(DEPLOY_OPERATION) not in command for command in commands)
 
     published = {"status": "published", "operation": "publish", "steps": []}
-    deploy_error = {"status": "error", "message": "deployment failed"}
+    deploy_error = {
+        "status": "operation_failed",
+        "message": "Deployment step failed: deploy",
+        "operation": "deploy",
+        "commit": "a" * 40,
+        "steps": [],
+        "failed_step": "deploy",
+        "diagnostic": {
+            "exit_code": 8,
+            "stdout_tail": [],
+            "stderr_tail": ["deployment failed"],
+        },
+    }
     preflight = {"status": "checked", "operation": "preflight", "steps": []}
     responses = [
         (0, preflight),
@@ -401,14 +433,20 @@ def test_repository_ship_release_failure_blocks_deployment_and_cleanup(
         ship_repository(args)
 
     assert captured.value.payload["phase"] == "deployment"
+    assert captured.value.payload["status"] == "operation_failed"
+    assert captured.value.payload["diagnostic"] == deploy_error["diagnostic"]
     assert captured.value.payload["remaining"] == "deployment"
     assert list(captured.value.payload["completed"]) == [
         "merge",
         "synchronization",
         "release_publication",
     ]
+    assert captured.value.payload["operation_ledger"] == {
+        "completed": [{"section": "release", "operation": "publish"}],
+        "pending": [{"section": "deploy", "operation": "deploy"}],
+    }
     release_checkpoint = loaded["_operation_checkpoint_path"](
-        repo, "a" * 40, "release_publication"
+        repo, "a" * 40, "release_publication", "publish"
     )
     assert release_checkpoint.is_file()
 
@@ -438,15 +476,10 @@ def test_repository_ship_late_pending_work_reports_remote_mutation(
     repo = tmp_path / "repo"
     repo.mkdir()
     assert run_git(repo, "init").returncode == 0
-    (repo / "deploy").mkdir()
-    (repo / "deploy" / "deploy.yml").write_text(
-        "version: 1\noperations: {}\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    write_release_contract(
+    write_sdlc_contract(repo, deploy_operations={})
+    write_sdlc_contract(
         repo,
-        {
+        release_operations={
             "preflight": {
                 "steps": [{"id": "check", "run": ["python", "check.py"]}]
             },
@@ -553,10 +586,10 @@ def test_repository_ship_late_pending_work_reports_remote_mutation(
         merge_method="merge",
         delete_branch=False,
         reusable_head=True,
-        release_contract=pathlib.Path("release/release.yml"),
+        release_contract=pathlib.Path("sdlc/sdlc.yml"),
         release_preflight_operation="preflight",
         release_operation="publish",
-        deploy_contract=pathlib.Path("deploy/deploy.yml"),
+        deploy_contract=pathlib.Path("sdlc/sdlc.yml"),
         deploy_operation="deploy",
         ci_wait_seconds=1,
         review_wait_seconds=1,
@@ -566,6 +599,7 @@ def test_repository_ship_late_pending_work_reports_remote_mutation(
         stale_identity = loaded["_operation_identity"](
             repo,
             phase="deployment",
+            section="deploy",
             target_branch="release/local",
             target_commit="d" * 40,
             synchronized_commit="b" * 40,
@@ -574,7 +608,7 @@ def test_repository_ship_late_pending_work_reports_remote_mutation(
         )
         loaded["_write_operation_checkpoint"](
             loaded["_operation_checkpoint_path"](
-                repo, "a" * 40, "deployment"
+                repo, "a" * 40, "deployment", "deploy"
             ),
             stale_identity,
             {"status": "deployed", "operation": "deploy", "steps": ["old"]},
@@ -601,6 +635,23 @@ def test_repository_ship_late_pending_work_reports_remote_mutation(
             "deployment",
         ]
     )
+    assert result["operation_ledger"] == (
+        {
+            "completed": [],
+            "pending": [
+                {"section": "release", "operation": "publish"},
+                {"section": "deploy", "operation": "deploy"},
+            ],
+        }
+        if late_phase == "post_sync"
+        else {
+            "completed": [
+                {"section": "release", "operation": "publish"},
+                {"section": "deploy", "operation": "deploy"},
+            ],
+            "pending": [],
+        }
+    )
     assert result["resume_action"]["argv"][
         result["resume_action"]["argv"].index("--commit") + 1
     ] == "a" * 40
@@ -622,10 +673,10 @@ def test_repository_ship_late_pending_work_reports_remote_mutation(
         assert result["release_publication"] == published
         assert result["deployment"] == deployed
         release_checkpoint = loaded["_operation_checkpoint_path"](
-            repo, "a" * 40, "release_publication"
+            repo, "a" * 40, "release_publication", "publish"
         )
         deployment_checkpoint = loaded["_operation_checkpoint_path"](
-            repo, "a" * 40, "deployment"
+            repo, "a" * 40, "deployment", "deploy"
         )
         assert release_checkpoint.is_file()
         assert deployment_checkpoint.is_file()
@@ -703,10 +754,11 @@ def test_repository_ship_rejects_malformed_deployment_checkpoint(
     identity = {
         "version": 1,
         "phase": "deployment",
+        "section": "deploy",
         "target_branch": "release/local",
         "target_commit": "a" * 40,
         "synchronized_commit": "b" * 40,
-        "contract": str(tmp_path / "deploy.yml"),
+        "contract": str(tmp_path / "sdlc.yml"),
         "operation": "deploy",
     }
 
@@ -715,6 +767,26 @@ def test_repository_ship_rejects_malformed_deployment_checkpoint(
         match="invalid structure",
     ):
         loaded["_read_operation_checkpoint"](checkpoint, identity)
+
+
+def test_repository_ship_checkpoints_each_operation_separately(
+    tmp_path: pathlib.Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    assert run_git(repo, "init").returncode == 0
+    loaded = runpy.run_path(str(SHIP_REPOSITORY))
+
+    first = loaded["_operation_checkpoint_path"](
+        repo, "a" * 40, "deployment", "skills-deploy"
+    )
+    second = loaded["_operation_checkpoint_path"](
+        repo, "a" * 40, "deployment", "imaging-tool-deploy"
+    )
+
+    assert first != second
+    assert first.name.endswith(".deployment.skills-deploy.json")
+    assert second.name.endswith(".deployment.imaging-tool-deploy.json")
 
 
 def test_repository_ship_rejects_noncanonical_release_branch_before_remote_process(
@@ -845,10 +917,10 @@ def test_repository_ship_blocks_selected_worktree_caller_before_remote_process(
                 merge_method="merge",
                 delete_branch=False,
                 reusable_head=True,
-                release_contract=pathlib.Path("release/release.yml"),
+                release_contract=pathlib.Path("sdlc/sdlc.yml"),
                 release_preflight_operation="preflight",
                 release_operation="publish",
-                deploy_contract=pathlib.Path("deploy/deploy.yml"),
+                deploy_contract=pathlib.Path("sdlc/sdlc.yml"),
                 deploy_operation="deploy",
                 ci_wait_seconds=1,
                 review_wait_seconds=1,

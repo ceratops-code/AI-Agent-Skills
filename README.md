@@ -33,10 +33,10 @@ skills/
     scripts/
     references/
       <action-or-contract-reference>
-deploy/
-  deploy.yml
+sdlc/
+  sdlc.yml
 skills/ceratops-repo-lifecycle/references/templates/
-  deploy-template.yml
+  sdlc-template.yml
   install-skills-bootstrap-template.py
   skill-sections-template.json
 skills/ceratops-skill-lifecycle/references/templates/
@@ -63,9 +63,8 @@ assigned to skills whose primary output is evidence-backed findings, while
 `bounded-model-analysis` is assigned to skills that invoke bounded
 analysis-only child models.
 The `skills/` tree is authoritative skill source for this repository.
-`deploy/deploy.yml` is its authoritative structured local deployment
-definition. Target repositories declare remote release publication separately
-in `release/release.yml`.
+`sdlc/sdlc.yml` is its authoritative structured deployment and release
+publication definition.
 The repository-compatibility templates under
 `skills/ceratops-repo-lifecycle/references/templates/` are reusable skeletons
 to copy into other repositories, not live configuration.
@@ -109,7 +108,7 @@ without repository deduplication.
 | `skills/ceratops-repo-lifecycle/references/templates/install-skills-bootstrap-template.py` | Authoritative standard-library-only bootstrap copied into compatible skill repositories as `scripts/install-skills-bootstrap.py`. |
 | `skills/ceratops-repo-lifecycle/references/repository-validation-catalog.json` | Closed catalog of repository checks that compatibility materialization may select without additional approval. |
 | `skills/ceratops-repo-lifecycle/references/templates/validate-repository.py.tmpl` and `validate.yml.tmpl` | Repository-neutral validator and CI templates materialized only when their target files are absent. |
-| `skills/ceratops-repo-lifecycle/scripts/ceratops_repo_compatibility_engine/` | Skill-owned package for read-only compatibility checks, deployment-contract validation, rollback-protected repository materialization, and version-only bootstrap synchronization; it operates on explicit target repositories and is never copied into them. |
+| `skills/ceratops-repo-lifecycle/scripts/ceratops_repo_compatibility_engine/` | Skill-owned package for read-only compatibility checks, SDLC-contract validation, rollback-protected repository materialization, and version-only bootstrap synchronization; it operates on explicit target repositories and is never copied into them. |
 | `skills/ceratops-repo-lifecycle/references/templates/skill-sections-template.json` | Repository-neutral template for materializing a target repository's live `skills/skill-sections.json`; never a live manifest. |
 | `skills/ceratops-skill-lifecycle/scripts/runtime/install-managed-skills.py` | Classifies explicit, promotion-relative, or all-managed affected sets; owns direct-manifest inventory; and invokes one runtime transaction without source validation. |
 | `skills/ceratops-skill-lifecycle/scripts/runtime/managed_runtime_builder.py` | Stages, activates, rolls back, recovers, and cleans one locked selected-skill runtime transaction. |
@@ -126,9 +125,9 @@ without repository deduplication.
 | `skills/ceratops-repo-lifecycle/scripts/github_pr_workflow/` | Package CLI for individual PR operations, one-call retry-safe review replies and resolutions, decision-complete gate blockers, single-snapshot terminal Actions outage detection, exact-commit checkpointed shipping, four-proof obsolete-prepared-checkpoint cleanup before automatic resume, scoped pending-work checks, concurrent gates, integrated admin merge, reusable-branch restoration, and terminal cleanup. |
 | `skills/ceratops-repo-lifecycle/scripts/promote-repository.py` | Prepares `release/local`; promotes selected branches with no deployment or one named operation; or composes promotion into exact-head shipping, remote release publication, local deployment, finalization, and cleanup. |
 | `skills/ceratops-repo-lifecycle/scripts/manage-pending-work.py` | Records, checks, automatically resumes the retained target commit, and progressively finalizes the exact selected scope; preflight preserves and reports non-cleanup-eligible worktrees, while eligible residual-worktree and identity-matched task-temp cleanup stays within validated named directory boundaries and preserves active skill-update state for post-deployment finalization. |
-| `skills/ceratops-repo-lifecycle/scripts/repository_operation.py` | Shares schema-selected argv execution, strict parameters, repository path boundaries, compact results, and bounded failures without conflating release publication and deployment. |
-| `skills/ceratops-repo-lifecycle/scripts/run-deploy-operation.py` | Validates and executes one named local operation from `deploy/deploy.yml`, returning any optional declarative agent handoff. |
-| `skills/ceratops-repo-lifecycle/scripts/run-release-operation.py` | Validates and executes one named remote publication operation from `release/release.yml`. |
+| `skills/ceratops-repo-lifecycle/scripts/repository_operation.py` | Prepares complete ordered operation sequences before execution and shares exact argv handling, strict parameters, repository path boundaries, compact results, and bounded structured failures. |
+| `skills/ceratops-repo-lifecycle/scripts/run-deploy-operation.py` | Validates and executes one named local operation from the `deploy` section of `sdlc/sdlc.yml`, returning any optional declarative agent handoff. |
+| `skills/ceratops-repo-lifecycle/scripts/run-release-operation.py` | Validates and executes one named remote publication operation from the `release` section of `sdlc/sdlc.yml`. |
 | `skills/ceratops-repo-lifecycle/scripts/ship-repository.py` | Orchestrates scoped pre-push checking, guarded GitHub shipping, main synchronization, separately checkpointed release publication and local deployment, and resumable selected-source cleanup. |
 | `skills/ceratops-skill-lifecycle/scripts/skills-consistency-source-validator.py` | Skill-lifecycle-owned source, metadata, runtime-input, contract, and portability validator used only by explicit skill workflows. |
 | `skills/ceratops-skill-lifecycle/scripts/fast-change.py` | Classifies exact structured replacements, generates their diff, and owns the eligible direct-release change through declared Markdown lint, exact helper tests, targeted installation, commit, and failure compensation. |
@@ -167,14 +166,12 @@ behavior remains unchanged.
 
 ## Contracts
 
-The contract structure is split by the owning lifecycle skill:
+Each repository owns one lifecycle contract:
 
-- `release/release.yml` declares a target repository's executable remote
-  release-publication operations and is validated against
-  `skills/ceratops-repo-lifecycle/references/schemas/release.yml.schema.json`.
-- `deploy/deploy.yml` declares this repository's executable deployment
-  operations and is validated against
-  `skills/ceratops-repo-lifecycle/references/schemas/deploy.yml.schema.json`.
+- `sdlc/sdlc.yml` keeps the former contract structures unchanged under
+  `release` and `deploy`; it declares remote publication operations, artifact
+  identity, and local deployment operations and is validated against
+  `skills/ceratops-repo-lifecycle/references/schemas/sdlc.yml.schema.json`.
 - `skills/ceratops-repo-lifecycle/references/contracts/github-contract-source-docs.json`
   records official source documents and reference repositories used by GitHub,
   repo, PR readiness, code, and artifact contracts.
@@ -253,12 +250,12 @@ classify before closure. Repo-health summary JSON includes compact stale-state
 inventory counts and samples for PRs, branches, tags, releases, and local path
 references when present. It also reports the observed community-profile health
 percentage and its 100% contract target; inventory alone is not a finding.
-Local health collection validates every present `deploy/deploy.yml` with the
+Local health collection validates every present `sdlc/sdlc.yml` with the
 repository-lifecycle schema and runs the generic compatibility postcondition
-checker whenever a manifest, source skill, deploy definition, or repository
-validation surface is present. Ship separately validates a selected
-`release/release.yml` before remote mutation. Local health does not run
-skill-source validation.
+checker whenever a manifest, source skill, SDLC definition, or repository
+validation surface is present. Ship validates the selected contract's
+`release` section before remote mutation. Local health does not run skill-source
+validation.
 
 Collect review evidence for non-deterministic checks with:
 
@@ -438,8 +435,8 @@ base and head commit SHAs. Local uncommitted selection is explicit through
 `python scripts/run-tests.py --worktree`, and manifest validation is available
 through `python scripts/run-tests.py --validate-manifest`. The validator does
 not invoke skill-local validators. Generic compatibility and
-health validate deployment definitions through the repository-lifecycle
-`ceratops_repo_compatibility_engine.deploy_contract_validation` module. Runtime
+health validate lifecycle definitions through the repository-lifecycle
+`ceratops_repo_compatibility_engine.sdlc_contract_validation` module. Runtime
 rendering is owned only by bootstrap and managed deployment under the selected
 install root.
 

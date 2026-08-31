@@ -1,9 +1,9 @@
-"""Load and validate repository deployment contracts against the owned schema.
+"""Load and validate repository SDLC contracts against the owned schema.
 
-This module is the single schema-validation owner for deployment execution,
-repository compatibility, and health collection. It reads data only; callers
-retain repository-boundary checks and decide whether a missing contract is
-allowed.
+This module is the single schema-validation owner for operation execution,
+repository compatibility, artifact identity, and health collection. It reads
+data only; callers retain repository-boundary checks and decide whether a
+missing contract or contract section is allowed.
 """
 
 from __future__ import annotations
@@ -17,17 +17,17 @@ import jsonschema
 import yaml
 
 SKILL_ROOT = pathlib.Path(__file__).resolve().parents[2]
-SCHEMA = SKILL_ROOT / "references" / "schemas" / "deploy.yml.schema.json"
+SCHEMA = SKILL_ROOT / "references" / "schemas" / "sdlc.yml.schema.json"
 
 
-class DeployContractError(RuntimeError):
-    """Raised when a deployment contract or its schema is invalid."""
+class SdlcContractError(RuntimeError):
+    """Raised when an SDLC contract or its schema is invalid."""
 
 
 def _schema_validator(
     schema_path: pathlib.Path = SCHEMA,
 ) -> jsonschema.Draft202012Validator:
-    """Load and validate the lifecycle-owned deployment schema."""
+    """Load and validate the lifecycle-owned SDLC schema."""
 
     try:
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
@@ -38,7 +38,7 @@ def _schema_validator(
         json.JSONDecodeError,
         jsonschema.SchemaError,
     ) as exc:
-        raise DeployContractError(f"invalid deployment schema: {exc}") from exc
+        raise SdlcContractError(f"invalid SDLC schema: {exc}") from exc
     return jsonschema.Draft202012Validator(schema)
 
 
@@ -74,7 +74,7 @@ def read_contract(
         return None, [f"invalid YAML: {exc}"]
     try:
         errors = validation_errors(value, schema_path=schema_path)
-    except DeployContractError as exc:
+    except SdlcContractError as exc:
         return None, [str(exc)]
     if errors:
         return None, errors
@@ -92,5 +92,5 @@ def load_contract(
 
     value, errors = read_contract(path, schema_path=schema_path)
     if errors or value is None:
-        raise DeployContractError("; ".join(errors) or "invalid deployment contract")
+        raise SdlcContractError("; ".join(errors) or "invalid SDLC contract")
     return value

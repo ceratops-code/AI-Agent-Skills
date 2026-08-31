@@ -5,7 +5,7 @@
 Make an existing repository satisfy the `ceratops-compatible` repository and
 validation contract without changing any skill's intended behavior. Repositories
 with no skills remain valid and omit the skill manifest, canonical shared
-sections, bootstrap, and empty deployment contracts.
+sections, bootstrap, and empty SDLC contracts.
 
 ## Context
 
@@ -16,7 +16,7 @@ sections, bootstrap, and empty deployment contracts.
 - Existing shared skill rules, metadata, README skill inventory, runtime
   resources, installer, deployment definition, and validation surfaces.
 - Whether compatibility is standalone work or a prerequisite for `create` or
-  `update`, and whether `deploy/deploy.yml` should be omitted.
+  `update`, and whether `sdlc/sdlc.yml` should be omitted.
 
 Infer the source identity from stable repository evidence before asking.
 
@@ -33,15 +33,15 @@ Infer the source identity from stable repository evidence before asking.
   ceratops_repo_compatibility_engine materialize --target-repo-root
   <task-worktree> [--runtime-source-id <stable-id>]`; it performs the
   compatibility transaction and emits one compact result.
-  Add `--no-deploy-contract` when the caller chooses to leave an existing
-  deployment contract unchanged. A repository with no skills and no existing
-  deployment operations leaves `deploy/deploy.yml` absent by default.
+  Add `--no-sdlc-contract` when the caller chooses to leave an existing SDLC
+  contract unchanged. A repository with no skills and no existing deployment
+  operations leaves `sdlc/sdlc.yml` absent by default.
 - (D) Bootstrap-only repair: `python -m ceratops_repo_compatibility_engine
   synchronize-bootstrap --target-repo-root <task-worktree>`; it only compares
   parsed installer versions and copies a missing or lower version.
-- (D) `ceratops_repo_compatibility_engine.deploy_contract_validation` reads and
-  validates deployment contracts for materialization, execution, and health;
-  it never creates or modifies them.
+- (D) `ceratops_repo_compatibility_engine.sdlc_contract_validation` reads and
+  validates SDLC contracts for materialization, execution, and health; it never
+  creates or modifies them.
 - (D) Missing repository-validation surfaces come from
   `references/repository-validation-catalog.json` and the templates under
   `references/templates/`.
@@ -108,12 +108,11 @@ Infer the source identity from stable repository evidence before asking.
   source skills exist, write `skills/skill-sections.json`, copy canonical shared
   sections to `skills/sections/`, and remove generated section blocks from
   source skills.
-- When skills exist or a deployment contract already exists, materialize or
-  align `deploy/deploy.yml` from
-  `references/templates/deploy-template.yml`, preserve target-owned operations,
-  and declare the canonical `bootstrap` operation and default
-  `ceratops-skill-lifecycle/deploy` handoff only when skills exist. Do not create
-  an empty deployment contract.
+- When skills exist or an SDLC contract already exists, materialize or align
+  `sdlc/sdlc.yml` from `references/templates/sdlc-template.yml`, preserve every
+  target-owned section and operation, and declare the canonical `bootstrap`
+  operation and default `ceratops-skill-lifecycle/deploy` handoff only when
+  skills exist. Do not create an empty SDLC contract.
 - When skills exist, make every source `SKILL.md` delta-only, add or align
   `skills/<name>/agents/openai.yaml`, and align the README Skills table without
   changing skill behavior.
