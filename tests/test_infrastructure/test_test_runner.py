@@ -165,8 +165,17 @@ def test_pytest_failure_writes_full_diagnostic_and_emits_bounded_summary(
 ) -> None:
     runner = test_runner_module
     stdout = (
-        "FAILED tests/test_example.py::test_contract - AssertionError: mismatch\n"
+        "___________________________ test_contract ____________________________\n"
+        ">       assert 1 == 2\n"
         "E       assert 1 == 2\n"
+        "tests/test_example.py:41: AssertionError\n"
+        "________________________ test_configuration _________________________\n"
+        ">       raise RuntimeError('bad configuration')\n"
+        "E       RuntimeError: bad configuration\n"
+        "tests/test_other.py:23: RuntimeError\n"
+        "========================= short test summary info =========================\n"
+        "FAILED tests/test_example.py::test_contract - AssertionError: mismatch\n"
+        "ERROR tests/test_other.py::test_configuration - RuntimeError: bad configuration\n"
         + "\n".join(f"noise-{index}-" + "x" * 200 for index in range(80))
         + "\nfinal context\n"
     )
@@ -199,9 +208,29 @@ def test_pytest_failure_writes_full_diagnostic_and_emits_bounded_summary(
     assert exit_code == 1
     assert result["status"] == "pytest-failed"
     assert result["pytest"]["failed_tests"] == [
-        "tests/test_example.py::test_contract"
+        "tests/test_example.py::test_contract",
+        "tests/test_other.py::test_configuration",
     ]
-    assert result["pytest"]["decisive_excerpt"] == "E       assert 1 == 2"
+    assert result["pytest"]["failure_count"] == 2
+    assert result["pytest"]["omitted_failure_count"] == 0
+    assert result["pytest"]["failures"] == [
+        {
+            "test": "tests/test_example.py::test_contract",
+            "source_location": "tests/test_example.py:41",
+            "excerpt": ">       assert 1 == 2\nE       assert 1 == 2",
+        },
+        {
+            "test": "tests/test_other.py::test_configuration",
+            "source_location": "tests/test_other.py:23",
+            "excerpt": (
+                ">       raise RuntimeError('bad configuration')\n"
+                "E       RuntimeError: bad configuration"
+            ),
+        },
+    ]
+    assert result["pytest"]["decisive_excerpt"] == (
+        "E       assert 1 == 2\nE       RuntimeError: bad configuration"
+    )
     assert "final context" in result["pytest"]["context_excerpt"]
     assert stdout not in captured
     assert stderr not in captured
@@ -214,6 +243,17 @@ def test_pytest_failure_writes_full_diagnostic_and_emits_bounded_summary(
         "path": str(diagnostic.resolve()),
         "sha256": hashlib.sha256(content).hexdigest(),
     }
+
+    overflow = runner.pytest_failure_summary(
+        "\n".join(
+            f"FAILED tests/test_many.py::test_{index} - failure {index}"
+            for index in range(12)
+        ),
+        "",
+    )
+    assert overflow["failure_count"] == 12
+    assert overflow["omitted_failure_count"] == 2
+    assert len(overflow["failures"]) == 10
 
     passing = DeterministicExecution(
         runner,

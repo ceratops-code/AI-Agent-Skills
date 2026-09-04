@@ -18,10 +18,14 @@ import json
 import pathlib
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 COMMAND_NOT_FOUND_EXIT_CODE = 127
+MAX_FORWARDED_PYTEST_FAILURES = 10
+PYTEST_IDENTITY_BYTES = 400
+PYTEST_LOCATION_BYTES = 500
+PYTEST_FAILURE_EXCERPT_BYTES = 800
 
 
 @dataclass(frozen=True)
@@ -36,13 +40,14 @@ class Check:
 
 @dataclass(frozen=True)
 class Failure:
-    """Describe one failed check without retaining its diagnostic output."""
+    """Describe one failed check without retaining its full diagnostic streams."""
 
     check: str
     platform: str | None
     exit_code: int
     evidence_file: pathlib.Path
     evidence_error: str | None = None
+    details: dict[str, object] | None = None
 
 
 ProcessRunner = Callable[
@@ -164,6 +169,91 @@ def write_evidence(
     temporary.replace(evidence_file)
 
 
+def _utf8_prefix(value: str, limit: int) -> str:
+    """Return a valid UTF-8 prefix whose encoded representation fits ``limit``."""
+
+    encoded = value.encode("utf-8")
+    if len(encoded) <= limit:
+        return value
+    if limit <= 3:
+        return "." * limit
+    prefix = encoded[: limit - 3].decode("utf-8", errors="ignore").rstrip()
+    return prefix + "..."
+
+
+def _nonnegative_int(value: object) -> int | None:
+    """Accept JSON integers suitable for bounded count fields."""
+
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
+
+
+def pytest_failure_details(stdout: str) -> dict[str, object] | None:
+    """Allowlist bounded actionable details from the repository test runner."""
+
+    try:
+        child_payload = json.loads(stdout)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(child_payload, Mapping):
+        return None
+    if child_payload.get("status") != "pytest-failed":
+        return None
+    pytest_payload = child_payload.get("pytest")
+    if not isinstance(pytest_payload, Mapping):
+        return None
+
+    failures: list[dict[str, object]] = []
+    raw_failures = pytest_payload.get("failures")
+    if isinstance(raw_failures, list):
+        for raw_failure in raw_failures[:MAX_FORWARDED_PYTEST_FAILURES]:
+            if not isinstance(raw_failure, Mapping):
+                continue
+            identity = raw_failure.get("test")
+            if not isinstance(identity, str) or not identity:
+                continue
+            location = raw_failure.get("source_location")
+            excerpt = raw_failure.get("excerpt")
+            failures.append(
+                {
+                    "test": _utf8_prefix(identity, PYTEST_IDENTITY_BYTES),
+                    "source_location": (
+                        _utf8_prefix(location, PYTEST_LOCATION_BYTES)
+                        if isinstance(location, str)
+                        else None
+                    ),
+                    "excerpt": (
+                        _utf8_prefix(excerpt, PYTEST_FAILURE_EXCERPT_BYTES)
+                        if isinstance(excerpt, str)
+                        else ""
+                    ),
+                }
+            )
+
+    reported_count = _nonnegative_int(pytest_payload.get("failure_count"))
+    failure_count = max(len(failures), reported_count or 0)
+    details: dict[str, object] = {
+        "failure_count": failure_count,
+        "omitted_failure_count": max(0, failure_count - len(failures)),
+        "failures": failures,
+    }
+
+    raw_diagnostic = pytest_payload.get("diagnostic")
+    if isinstance(raw_diagnostic, Mapping):
+        diagnostic: dict[str, object] = {}
+        byte_count = _nonnegative_int(raw_diagnostic.get("bytes"))
+        if byte_count is not None:
+            diagnostic["bytes"] = byte_count
+        for key, limit in (("path", 2_000), ("sha256", 128), ("error", 1_000)):
+            value = raw_diagnostic.get(key)
+            if isinstance(value, str):
+                diagnostic[key] = _utf8_prefix(value, limit)
+        if diagnostic:
+            details["diagnostic"] = diagnostic
+    return details
+
+
 def run_checks(
     checks: Sequence[Check],
     evidence_file: pathlib.Path,
@@ -196,6 +286,11 @@ def run_checks(
             exit_code=result.returncode,
             evidence_file=evidence_file,
             evidence_error=evidence_error,
+            details=(
+                pytest_failure_details(result.stdout)
+                if check.name == "pytest"
+                else None
+            ),
         )
     return None
 
@@ -210,6 +305,8 @@ def failure_payload(failure: Failure) -> dict[str, object]:
     payload["evidence_file"] = str(failure.evidence_file)
     if failure.evidence_error is not None:
         payload["evidence_error"] = failure.evidence_error
+    if failure.details is not None:
+        payload.update(failure.details)
     return payload
 
 
