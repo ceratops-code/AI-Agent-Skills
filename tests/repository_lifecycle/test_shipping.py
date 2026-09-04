@@ -95,7 +95,18 @@ def test_repository_ship_absent_default_contract_is_no_op_and_finalizes(
     )
     assert not hasattr(parsed, "pending_work_scope")
     assert not hasattr(parsed, "no_pending_work_check")
+    assert parsed.repo is None
     assert parsed.review_replies_request == review_request
+    inferred_repository_command = loaded["_ship_command"](
+        parsed,
+        repo,
+        None,
+        None,
+    )
+    assert "--repo" not in inferred_repository_command
+    assert inferred_repository_command[
+        inferred_repository_command.index("--repo-root") + 1
+    ] == str(repo)
     ship_repository = loaded["ship_repository"]
     ship_repository.__globals__["_run_json"] = run_json
     ship_repository.__globals__["_branch_worktree"] = (

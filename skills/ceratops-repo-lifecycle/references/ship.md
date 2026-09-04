@@ -12,14 +12,16 @@ selected merged source branches and worktrees.
 
 ### Script Bundle
 
-- (D) From the installed `ceratops-repo-lifecycle` skill root, run complete
-  repository ship before manual readiness or implementation inspection:
-  `python scripts/ship-repository.py --repo-root PATH --repo OWNER/REPO
-  --head-branch release/local --base-branch main --remote-name origin
-  --reusable-head`.
-  `--repo-root` identifies the target repository; never search that target for
-  this helper. The helper owns preflight; after a terminal blocker, inspect
-  only the exact blocker-named surface.
+- (D) From the installed `ceratops-repo-lifecycle` skill root, run:
+  `python scripts/ship-repository.py --repo-root PATH --head-branch
+  release/local --base-branch main --remote-name origin --reusable-head`.
+- Run the helper before manual readiness or implementation inspection, without
+  separate helper-existence or repository-identity checks. `--repo-root`
+  identifies the target repository, and the helper infers `OWNER/REPO` from
+  that checkout. Use optional `--repo OWNER/REPO` only when already supplied
+  as an input or requested by a repository-discovery blocker. Never search the
+  target for this helper; after a terminal blocker, inspect only the exact
+  blocker-named surface.
 - The helper derives the canonical pending-work scope from `--head-branch`.
   When a retained scope exists, the wrapper reuses its recorded exact target
   commit; a caller-supplied `--commit` must match it. An absent scope is a
