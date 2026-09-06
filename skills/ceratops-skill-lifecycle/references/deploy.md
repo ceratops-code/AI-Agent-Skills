@@ -38,7 +38,7 @@ deployment operations or the first-install bootstrap.
 
 - Enter through `$ceratops-repo-lifecycle` for promotion or shipping; run its
   repository `deploy` operation first when declared.
-- Never invoke `deploy/deploy.yml` or `scripts/install-skills-bootstrap.py` from
+- Never invoke `sdlc/sdlc.yml` or `scripts/install-skills-bootstrap.py` from
   this action.
 - Do not pass bootstrap version metadata into the runtime transaction. Runtime
   ownership compatibility is governed by `RUNTIME_MANIFEST_SCHEMA`.

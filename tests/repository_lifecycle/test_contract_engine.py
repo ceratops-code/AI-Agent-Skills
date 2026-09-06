@@ -225,18 +225,20 @@ class GHContractStateEngineTests(unittest.TestCase):
     def test_local_health_validates_present_deploy_contract_schema(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = pathlib.Path(temporary_directory)
-            contract = root / "deploy" / "deploy.yml"
+            contract = root / "sdlc" / "sdlc.yml"
             contract.parent.mkdir()
             contract.write_text(
                 json.dumps(
                     {
                         "version": 1,
-                        "kind": "ceratops-deploy",
-                        "operations": {
-                            "invalid": {
-                                "steps": [
-                                    {"id": "invalid", "run": "python -V"}
-                                ]
+                        "kind": "ceratops-sdlc",
+                        "deploy": {
+                            "operations": {
+                                "invalid": {
+                                    "steps": [
+                                        {"id": "invalid", "run": "python -V"}
+                                    ]
+                                }
                             }
                         },
                     }
@@ -245,12 +247,12 @@ class GHContractStateEngineTests(unittest.TestCase):
             )
 
             invalid = collect_local_repository(temporary_directory, [])
-            self.assertTrue(invalid["deploy_contract"]["present"])
-            self.assertFalse(invalid["deploy_contract"]["valid"])
+            self.assertTrue(invalid["sdlc_contract"]["present"])
+            self.assertFalse(invalid["sdlc_contract"]["valid"])
             self.assertTrue(
                 any(
                     "schema validation failed" in error
-                    for error in invalid["deploy_contract"]["errors"]
+                    for error in invalid["sdlc_contract"]["errors"]
                 )
             )
 
@@ -258,15 +260,15 @@ class GHContractStateEngineTests(unittest.TestCase):
                 json.dumps(
                     {
                         "version": 1,
-                        "kind": "ceratops-deploy",
-                        "operations": {},
+                        "kind": "ceratops-sdlc",
+                        "deploy": {"operations": {}},
                     }
                 ),
                 encoding="utf-8",
             )
             valid = collect_local_repository(temporary_directory, [])
-            self.assertTrue(valid["deploy_contract"]["valid"])
-            self.assertEqual(valid["deploy_contract"]["errors"], [])
+            self.assertTrue(valid["sdlc_contract"]["valid"])
+            self.assertEqual(valid["sdlc_contract"]["errors"], [])
 
     def test_local_health_reuses_compatibility_postcondition_validator(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -468,15 +470,17 @@ class GHContractStateEngineTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo_root = pathlib.Path(temporary_directory)
-            release_root = repo_root / "release"
-            release_root.mkdir()
-            (release_root / "release.yml").write_text(
+            sdlc_root = repo_root / "sdlc"
+            sdlc_root.mkdir()
+            (sdlc_root / "sdlc.yml").write_text(
                 json.dumps(
                     {
                         "version": 1,
-                        "kind": "ceratops-release",
-                        "artifacts": [record],
-                        "operations": {},
+                        "kind": "ceratops-sdlc",
+                        "release": {
+                            "artifacts": [record],
+                            "operations": {},
+                        },
                     }
                 )
                 + "\n",
@@ -2597,25 +2601,25 @@ class GHContractStateEngineTests(unittest.TestCase):
         self.assertTrue(
             any("item_shape" in error for error in unused_metadata_errors)
         )
-        release_schema = load_json(
+        sdlc_schema = load_json(
             SCRIPTS.parent
             / "references"
             / "schemas"
-            / "release.yml.schema.json"
+            / "sdlc.yml.schema.json"
         )
         self.assertIn(
             "ND.artifact.identity-contract-fit",
-            release_schema["$defs"]["artifact"]["description"],
+            sdlc_schema["$defs"]["artifact"]["description"],
         )
-        undocumented_release_schema = json.loads(json.dumps(release_schema))
-        del undocumented_release_schema["$defs"]["artifact"]["properties"][
+        undocumented_sdlc_schema = json.loads(json.dumps(sdlc_schema))
+        del undocumented_sdlc_schema["$defs"]["artifact"]["properties"][
             "artifact_type"
         ]["description"]
         self.assertTrue(
             any(
                 "need descriptions: artifact_type" in error
                 for error in consistency._validate_artifact_contract_schema(
-                    self.contracts["artifact"], undocumented_release_schema
+                    self.contracts["artifact"], undocumented_sdlc_schema
                 )
             )
         )
@@ -2630,9 +2634,9 @@ class GHContractStateEngineTests(unittest.TestCase):
         identity_check["desired"]["required_per_artifact_fields"].pop()
         self.assertTrue(
             any(
-                "must match release.yml schema" in error
+                "must match sdlc.yml schema" in error
                 for error in consistency._validate_artifact_contract_schema(
-                    drifted_artifact_contract, release_schema
+                    drifted_artifact_contract, sdlc_schema
                 )
             )
         )
