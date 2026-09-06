@@ -1,6 +1,6 @@
 {
   "schema": "ceratops-credit-analysis-contract.v1",
-  "surface_contract_version": 7,
+  "surface_contract_version": 8,
   "source_selection_contract_version": 1,
   "request_schema": "ceratops-credit-analysis-request.v1",
   "batch_request_schema": "ceratops-credit-analysis-batch-request.v1",
