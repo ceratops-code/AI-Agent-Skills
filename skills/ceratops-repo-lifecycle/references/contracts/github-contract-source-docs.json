@@ -1,7 +1,7 @@
 {
   "source_docs_version": 1,
   "name": "ceratops_github_contract_source_docs",
-  "captured_on": "2026-07-28",
+  "captured_on": "2026-09-07",
   "policy": {
     "use_order": [
       "official_docs",
@@ -315,6 +315,20 @@
       "url": "https://docs.github.com/en/rest/orgs/artifact-metadata?apiVersion=2026-03-10"
     },
     {
+      "id": "github.pages.publishing_source",
+      "scope": [
+        "artifact"
+      ],
+      "url": "https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site"
+    },
+    {
+      "id": "github.rest.pages",
+      "scope": [
+        "artifact"
+      ],
+      "url": "https://docs.github.com/en/rest/pages/pages"
+    },
+    {
       "id": "github.rest.orgs.issue_types",
       "scope": [
         "org"
@@ -572,6 +586,20 @@
         "artifact"
       ],
       "url": "https://guides.rubygems.org/trusted-publishing/adding-a-publisher/"
+    },
+    {
+      "id": "terraform.module_publishing",
+      "scope": [
+        "artifact"
+      ],
+      "url": "https://developer.hashicorp.com/terraform/registry/modules/publish"
+    },
+    {
+      "id": "helm.oci_registries",
+      "scope": [
+        "artifact"
+      ],
+      "url": "https://helm.sh/docs/topics/registries/"
     },
     {
       "id": "powershell_gallery.publishing_guidelines",

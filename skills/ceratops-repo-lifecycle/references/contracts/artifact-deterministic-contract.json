@@ -129,6 +129,7 @@
     {
       "permission": "id-token: write",
       "enables": [
+        "common.attestation_permissions",
         "common.short_lived_identity_policy",
         "pypi.trusted_publishing_and_attestations",
         "npm.trusted_publishing_and_provenance",
@@ -140,9 +141,7 @@
     {
       "permission": "attestations: write",
       "enables": [
-        "common.attestation_permissions",
-        "github_release_assets.attestation_verification",
-        "docker_oci.provenance_and_sbom"
+        "common.attestation_permissions"
       ],
       "reason": "Workflow job permission needed only for GitHub artifact attestation generation."
     },
@@ -526,7 +525,8 @@
         "artifact_type": "rubygems_package",
         "confidence": "high",
         "when_workflow_contains_any": [
-          "gem push"
+          "gem push",
+          "rubygems/release-gem@"
         ]
       },
       {
@@ -719,6 +719,19 @@
         "common.live_registry_verification",
         "github_release_assets.assets_and_tags"
       ]
+    },
+    "github_pages_bundle": {
+      "description": "GitHub Pages publishing-source metadata, collected only when the repository has Pages enabled.",
+      "endpoints": [
+        {
+          "method": "GET",
+          "endpoint": "/repos/${owner}/${repo}/pages",
+          "applies_when": "repo.has_pages == true"
+        }
+      ],
+      "feeds_checks": [
+        "docs_site.publish_and_live_check"
+      ]
     }
   },
   "checks": [
@@ -869,7 +882,7 @@
       "id": "common.attestation_permissions",
       "category": "common",
       "kind": "workflow_scan",
-      "applies_when": "workflow_emits_attestation_or_provenance == true",
+      "applies_when": "workflow_emits_github_artifact_attestation == true",
       "assertions": [
         {
           "path": "/local/workflows/top_level_write/attestations",
@@ -883,6 +896,14 @@
         {
           "path": "/local/workflows/top_level_write/artifact-metadata",
           "operator": "empty"
+        },
+        {
+          "path": "/local/workflows/any_write/id-token",
+          "operator": "not_empty"
+        },
+        {
+          "path": "/local/workflows/any_write/attestations",
+          "operator": "not_empty"
         },
         {
           "path": "/local/workflows/contents_read_present",
@@ -901,6 +922,10 @@
         {
           "path": "/local/workflows/top_level_write/artifact-metadata",
           "operator": "empty"
+        },
+        {
+          "path": "/local/workflows/any_write/artifact-metadata",
+          "operator": "not_empty"
         }
       ]
     },
@@ -1298,6 +1323,23 @@
       ]
     },
     {
+      "id": "nuget.trusted_publishing",
+      "category": "nuget_package",
+      "kind": "workflow_and_registry_scan",
+      "applies_when": "artifact_type has nuget_package && publish_workflow_detected == true",
+      "assertions": [
+        {
+          "path": "/local/workflows/any_write/id-token",
+          "operator": "not_empty"
+        },
+        {
+          "path": "/local/workflows/text",
+          "operator": "matches",
+          "expected": "(?i)nuget/login@"
+        }
+      ]
+    },
+    {
       "id": "crates.metadata_package_publish_and_verify",
       "category": "crates_package",
       "kind": "manifest_build_registry",
@@ -1386,6 +1428,23 @@
           "path": "/registries/rubygems/all_resolved",
           "operator": "equal",
           "expected": true
+        }
+      ]
+    },
+    {
+      "id": "rubygems.trusted_publishing",
+      "category": "rubygems_package",
+      "kind": "workflow_and_registry_scan",
+      "applies_when": "artifact_type has rubygems_package && publish_workflow_detected == true",
+      "assertions": [
+        {
+          "path": "/local/workflows/any_write/id-token",
+          "operator": "not_empty"
+        },
+        {
+          "path": "/local/workflows/text",
+          "operator": "matches",
+          "expected": "(?i)rubygems/(?:release-gem|configure-rubygems-credentials)@"
         }
       ]
     },
@@ -1506,9 +1565,19 @@
       "applies_when": "artifact_type intersects github_pages_site,static_docs_site",
       "assertions": [
         {
+          "path": "/repository/pages/build_type",
+          "operator": "in",
+          "expected": [
+            "legacy",
+            "workflow"
+          ],
+          "when": "artifact_type contains github_pages_site"
+        },
+        {
           "path": "/local/workflows/text",
           "operator": "matches",
-          "expected": "deploy-pages|upload-pages-artifact|gh-pages"
+          "expected": "deploy-pages|upload-pages-artifact|gh-pages",
+          "when": "artifact_type contains static_docs_site || repository.pages.build_type == workflow"
         },
         {
           "path": "/artifact/recorded_checks/consumer_smoke",

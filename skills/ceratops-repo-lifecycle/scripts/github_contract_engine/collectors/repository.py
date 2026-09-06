@@ -10,7 +10,6 @@ from typing import Any
 from ..github_api import ApiResult, run_gh_api, run_json_command, substitute
 from .local_repository import classify_repository
 
-
 COLLECTION_KEYS = {
     "report_open_prs_older_than_days",
     "ignored_branch_names",
@@ -348,6 +347,15 @@ def collect_repository(
         parameters.get("default_branch") or repo.get("default_branch") or ""
     )
     parameters["default_branch"] = default_branch
+    # The request plan fetches this endpoint only for an enabled Pages site, so
+    # repositories without Pages retain inert state and produce no Pages findings.
+    pages_response = _result(fetched, "/repos/${owner}/${repo}/pages", parameters)
+    pages_data = (
+        pages_response.data
+        if pages_response.ok and isinstance(pages_response.data, dict)
+        else {}
+    )
+    pages_source = pages_data.get("source")
     owner_response = _result(fetched, "/orgs/${owner}", parameters)
     owner = (
         owner_response.data
@@ -541,6 +549,11 @@ def collect_repository(
     return {
         "repo": repo,
         "owner": owner,
+        "pages": {
+            "available": pages_response.ok,
+            "build_type": pages_data.get("build_type"),
+            "source": pages_source if isinstance(pages_source, dict) else {},
+        },
         "topics": topics,
         "paths": paths,
         "types": types,
