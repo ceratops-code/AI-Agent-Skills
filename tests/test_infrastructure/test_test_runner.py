@@ -591,3 +591,52 @@ def test_collection_node_map_resolves_ambiguous_identity(
         "node map changes pytest identity: "
         f"{old} -> tests/beta/test_flow.py::test_case[changed]"
     ]
+
+
+def test_committed_diff_maps_retired_and_current_lifecycle_configuration(
+    test_runner_module: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Deleting a retired configuration runs all suites without a stale mapping."""
+    runner = test_runner_module
+    execution = DeterministicExecution(
+        runner, b"D\0deploy/deploy.yml\0A\0sdlc/sdlc.yml\0"
+    )
+    exit_code = runner.execute(
+        ["--base", BASE, "--head", HEAD],
+        repo_root=ROOT,
+        text_runner=execution.text,
+        bytes_runner=execution.bytes,
+    )
+    result = payload(capsys)
+
+    assert exit_code == 0
+    assert result["mapping_gaps"] == []
+    assert result["full_suite"] is True
+    assert result["full_suite_fallback"] is False
+    assert result["selected_suites"] == sorted(
+        runner.load_manifest(ROOT / "tests" / "test-impact.json").suites
+    )
+    assert {item["path"] for item in result["selections"]} == {
+        "deploy/deploy.yml", "sdlc/sdlc.yml"
+    }
+
+
+def test_release_documentation_changes_need_no_executable_suite(
+    test_runner_module: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    runner = test_runner_module
+    execution = DeterministicExecution(
+        runner, b"M\0CHANGELOG.md\0M\0CONTRIBUTING.md\0"
+    )
+    exit_code = runner.execute(
+        ["--base", BASE, "--head", HEAD],
+        repo_root=ROOT,
+        text_runner=execution.text,
+        bytes_runner=execution.bytes,
+    )
+    result = payload(capsys)
+
+    assert exit_code == 0
+    assert result["mapping_gaps"] == []
+    assert result["selected_suites"] == []
+    assert execution.final_pytest == []

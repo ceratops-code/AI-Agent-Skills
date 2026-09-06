@@ -130,7 +130,7 @@ class SelectionReason:
                 f"{self.suite} selected because {self.path} is the source of a "
                 f"test rename owned by {self.suite}."
             )
-        if self.rule == "deleted-test":
+        if self.rule == "deleted-path":
             return (
                 f"{self.suite} selected because deleting {self.path} requires "
                 "full-suite validation."
@@ -1174,7 +1174,7 @@ def expand_dependencies(
 def selection_from_changes(
     manifest: Manifest, changes: Iterable[ChangedFile]
 ) -> Selection:
-    """Map every evaluated path, accounting for removed test sources."""
+    """Map current paths and fully validate deletions without retaining stale globs."""
 
     reasons: set[SelectionReason] = set()
     gaps: list[dict[str, str]] = []
@@ -1183,13 +1183,13 @@ def selection_from_changes(
     fallback = False
     for changed in sorted(changes, key=lambda item: (item.paths, item.status)):
         for path_index, path in enumerate(changed.paths):
-            if path.startswith("tests/") and changed.status.startswith("D"):
+            if changed.status.startswith("D"):
                 full_suite = True
                 add_all_reasons(
                     reasons,
                     manifest,
                     path=path,
-                    rule="deleted-test",
+                    rule="deleted-path",
                 )
                 continue
             renamed_test_source = (

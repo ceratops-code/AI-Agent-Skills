@@ -140,6 +140,8 @@
         ".github/CODEOWNERS",
         ".github/ISSUE_TEMPLATE/**",
         ".github/pull_request_template.md",
+        "CHANGELOG.md",
+        "CONTRIBUTING.md",
         "LICENSE",
         "README.md",
         "hooks/README.md"
