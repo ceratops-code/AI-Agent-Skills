@@ -1300,9 +1300,9 @@ def _run_codex_child(
     }
     if launch_error is not None:
         return None, attempt
-    if exit_code != 0:
-        detail = ""
-        if stderr_path.exists():
+    if timed_out or exit_code != 0:
+        detail = f"timed out after {timeout_seconds}s" if timed_out else ""
+        if not timed_out and stderr_path.exists():
             detail = " ".join(stderr_path.read_text(encoding="utf-8").split())[:800]
         attempt["error"] = (
             f"Codex child failed for {task['task_id']} with exit {exit_code}"
