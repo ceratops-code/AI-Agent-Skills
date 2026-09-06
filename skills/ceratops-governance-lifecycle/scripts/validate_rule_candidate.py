@@ -7,6 +7,8 @@ candidate replacement text, never governed sources. The skill-owned Markdown
 policy and command run without a shell against isolated temporary copies; their
 output is accepted only when every change stays inside a replacement and
 preserves protected Markdown, structure, and all non-whitespace characters.
+TOML targets use the standard-library parser without Markdown tooling or text
+reflow, so serialized settings and embedded prompt strings remain exact.
 
 Detailed evidence is written atomically to the caller-selected path. Candidate
 repairs are committed with one atomic replacement only after every target,
@@ -18,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import difflib
-import hashlib
 import json
 import os
 import re
@@ -26,11 +27,24 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass
+import tomllib
 from pathlib import Path
 from typing import Any, Mapping, Never, Sequence, cast
 
 import yaml
+from rule_candidate_source import (
+    ReplacementSpan,
+    RuleCandidateValidationError,
+    TextSource,
+    ValidationResult,
+    _absolute_path,
+    _closed_fields,
+    _sha256_bytes,
+    _valid_sha256,
+    file_hash,
+    newline_styles,
+    read_source,
+)
 from rule_graph import (
     ParsedRuleSource,
     instruction_scope_map,
@@ -42,7 +56,6 @@ from rule_graph import (
 CANDIDATE_SCHEMA = "ceratops-rule-candidate.v1"
 CONTEXT_SCHEMA = "ceratops-rule-candidate-context.v1"
 EVIDENCE_SCHEMA = "ceratops-rule-candidate-validation.v1"
-UTF8_BOM = b"\xef\xbb\xbf"
 CANDIDATE_FIELDS = {"schema", "rule_stack", "targets"}
 CONTEXT_FIELDS = {"schema", "rule_stack", "targets"}
 TARGET_FIELDS = {
@@ -92,143 +105,11 @@ PROTECTED_INLINE = re.compile(
 )
 
 
-class RuleCandidateValidationError(ValueError):
-    """One compact mechanical candidate failure with actionable location."""
-
-
 class CompactParser(argparse.ArgumentParser):
     """Keep invalid CLI invocations to one actionable line."""
 
     def error(self, message: str) -> Never:
         raise RuleCandidateValidationError(message)
-
-
-@dataclass(frozen=True)
-class TextSource:
-    """Exact UTF-8 source bytes and formatting conventions to preserve."""
-
-    path: Path
-    raw: bytes
-    text: str
-    has_bom: bool
-    newline: str
-    trailing_newline: bool
-
-    def encode(self, text: str) -> bytes:
-        encoded = text.encode("utf-8")
-        return UTF8_BOM + encoded if self.has_bom else encoded
-
-
-@dataclass(frozen=True)
-class ReplacementSpan:
-    """One replacement's bounds in a complete prospective target."""
-
-    index: int
-    start: int
-    end: int
-
-
-@dataclass
-class ValidationResult:
-    """Validated candidate plus exact prospective target documents."""
-
-    candidate: dict[str, Any]
-    sources: dict[Path, TextSource]
-    prospective_texts: dict[Path, str]
-    candidate_sha256: str
-    changed: bool
-
-
-def _closed_fields(
-    value: object,
-    fields: set[str],
-    label: str,
-) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise RuleCandidateValidationError(f"{label} must be an object")
-    missing = sorted(fields - set(value))
-    extra = sorted(set(value) - fields)
-    if missing or extra:
-        raise RuleCandidateValidationError(
-            f"{label} fields invalid; missing={missing} extra={extra}"
-        )
-    return cast(dict[str, Any], value)
-
-
-def _absolute_path(value: object, label: str) -> Path:
-    if not isinstance(value, str) or not value:
-        raise RuleCandidateValidationError(f"{label} must be a non-empty path")
-    path = Path(value)
-    if not path.is_absolute():
-        raise RuleCandidateValidationError(f"{label} must be absolute")
-    return Path(os.path.abspath(path.expanduser()))
-
-
-def _sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
-
-
-def file_hash(path: Path) -> str:
-    """Return a SHA-256 hash without loading an arbitrary file twice."""
-
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(65536), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _valid_sha256(value: object) -> bool:
-    return bool(
-        isinstance(value, str)
-        and re.fullmatch(r"[0-9a-f]{64}", value)
-    )
-
-
-def newline_styles(text: str) -> set[str]:
-    """Return every concrete line-ending form present in text."""
-
-    without_crlf = text.replace("\r\n", "")
-    styles: set[str] = set()
-    if "\r\n" in text:
-        styles.add("\r\n")
-    if "\n" in without_crlf:
-        styles.add("\n")
-    if "\r" in without_crlf:
-        styles.add("\r")
-    return styles
-
-
-def read_source(path: Path, label: str) -> TextSource:
-    """Read one non-empty UTF-8 source without normalizing bytes."""
-
-    if not path.is_file():
-        raise RuleCandidateValidationError(f"{label} does not exist: {path}")
-    raw = path.read_bytes()
-    has_bom = raw.startswith(UTF8_BOM)
-    payload = raw[len(UTF8_BOM) :] if has_bom else raw
-    try:
-        text = payload.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise RuleCandidateValidationError(
-            f"{label} is not UTF-8: {path}"
-        ) from exc
-    if not text.strip():
-        raise RuleCandidateValidationError(f"{label} is empty: {path}")
-    styles = newline_styles(text)
-    if len(styles) > 1:
-        raise RuleCandidateValidationError(
-            f"{label} has mixed line endings: {path}"
-        )
-    newline = next(iter(styles), "\n")
-    return TextSource(
-        path=path,
-        raw=raw,
-        text=text,
-        has_bom=has_bom,
-        newline=newline,
-        trailing_newline=text.endswith(newline),
-    )
 
 
 def _markdownlint_executable() -> str:
@@ -293,6 +174,23 @@ def resolve_markdown_policy(
     return policy
 
 
+def resolve_target_policy(
+    value: object,
+    *,
+    target: Path,
+    label: str = "markdown_policy",
+) -> dict[str, Any] | None:
+    """Select the target format without loading Markdown tooling for TOML."""
+
+    if target.suffix.lower() == ".toml":
+        if value is not None:
+            raise RuleCandidateValidationError(
+                f"{label} must be null for a TOML target"
+            )
+        return None
+    return resolve_markdown_policy(value, label=label)
+
+
 def build_candidate_template(context: Mapping[str, object]) -> dict[str, Any]:
     """Create the exact structured draft surface for one pending iteration."""
 
@@ -338,8 +236,9 @@ def build_candidate_template(context: Mapping[str, object]) -> dict[str, Any]:
                 "rules": target["rules"],
                 "history": target["history"],
                 "source_sha256": target["source_sha256"],
-                "markdown_policy": resolve_markdown_policy(
+                "markdown_policy": resolve_target_policy(
                     target["markdown_policy"],
+                    target=_absolute_path(target["rules"], "validation context target"),
                     label=f"validation context target {index} markdown_policy",
                 ),
                 "replacements": [
@@ -1090,7 +989,7 @@ def _validate_target(
             f"target={rules} replacement=source rule=source-hash could not be "
             "fixed safely: source is stale"
         )
-    policy = resolve_markdown_policy(target["markdown_policy"])
+    policy = resolve_target_policy(target["markdown_policy"], target=rules)
     target["markdown_policy"] = policy
     replacements = target["replacements"]
     assert isinstance(replacements, list)
@@ -1108,11 +1007,26 @@ def _validate_target(
     evidence: dict[str, object] = {
         "target": str(rules),
         "source_sha256": target["source_sha256"],
-        "configuration_sha256": policy["configuration_sha256"],
+        "configuration_sha256": policy["configuration_sha256"] if policy else None,
         "fix": None,
         "validation": None,
         "changed_replacements": [],
     }
+    if policy is None:
+        try:
+            tomllib.loads(prospective)
+        except tomllib.TOMLDecodeError as exc:
+            raise RuleCandidateValidationError(
+                f"target={rules} rule=toml-syntax invalid TOML: {exc}"
+            ) from exc
+        target["replacements"] = fixed_replacements
+        evidence["validation"] = {"format": "toml", "parser": "tomllib", "returncode": 0}
+        evidence["changed_replacements"] = [
+            index for index, (before, after) in enumerate(
+                zip(replacements, fixed_replacements, strict=True)
+            ) if before != after
+        ]
+        return source, prospective, evidence, fixed_replacements != replacements
     if fix and policy["fix_command"] is not None:
         fixed_document, fix_detail = _run_policy_command(
             cast(list[str], policy["fix_command"]),
@@ -1259,8 +1173,9 @@ def _validate_candidate_shape(
             raise RuleCandidateValidationError(
                 f"candidate target {target_index} source_sha256 is invalid"
             )
-        target["markdown_policy"] = resolve_markdown_policy(
+        target["markdown_policy"] = resolve_target_policy(
             target["markdown_policy"],
+            target=rules,
             label=f"candidate target {target_index} markdown_policy",
         )
         raw_replacements = target["replacements"]

@@ -23,8 +23,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from validate_rule_candidate import (
+from rule_candidate_source import (
     RuleCandidateValidationError,
+)
+from validate_rule_candidate import (
     build_candidate_template,
     validate_rule_candidate,
 )

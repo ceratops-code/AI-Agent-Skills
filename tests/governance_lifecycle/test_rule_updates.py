@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import pathlib
+import subprocess
+import sys
+import tomllib
 
 from tests.governance_lifecycle.support import (
+    RULE_CANDIDATE_VALIDATOR,
     run_rule_candidate_validator,
     target_repository_markdown_policy,
     write_rule_candidate,
@@ -140,6 +145,54 @@ def test_rule_candidate_repairs_multiple_targets_and_is_idempotent(
     assert hashlib.sha256(candidate.read_bytes()).hexdigest() == first_hash
     assert json.loads(second_evidence.read_text(encoding="utf-8"))["changed"] is False
 
+    for name, newline, bom in (
+        ("automation.toml", "\n", b""),
+        ("automation.TOML", "\r\n", b"\xef\xbb\xbf"),
+    ):
+        target = first_repo / name
+        prompt = 'Run "helper.py" with C:\\old-evidence\\snapshot.json.\n' + "word " * 60
+        document = 'name = "Audit"\nprompt = ' + json.dumps(prompt) + '\nstatus = "ACTIVE"\n'
+        original = bom + document.replace("\n", newline).encode("utf-8")
+        target.write_bytes(original)
+        toml_candidate = tmp_path / (name + "-candidate.json")
+        toml_evidence = tmp_path / (name + "-evidence.json")
+        write_rule_candidate(
+            toml_candidate,
+            rule_stack=[target],
+            targets=[{
+                "rules": str(target.resolve()),
+                "history": None,
+                "source_sha256": hashlib.sha256(original).hexdigest(),
+                "markdown_policy": None,
+                "replacements": [{
+                    "expected_old": "old-evidence",
+                    "replacement": "task-evidence",
+                }],
+            }],
+        )
+        # TOML-only validation must work with no Markdown executable on PATH.
+        arguments = [sys.executable, str(RULE_CANDIDATE_VALIDATOR),
+                     "--candidate", str(toml_candidate), "--evidence", str(toml_evidence)]
+        environment = {**os.environ, "PATH": str(tmp_path / "no-tools")}
+        validated = subprocess.run(arguments, env=environment, capture_output=True, text=True)
+        assert validated.returncode == 0, validated.stderr
+        result = json.loads(toml_candidate.read_text(encoding="utf-8"))
+        assert result["targets"][0]["markdown_policy"] is None
+        assert result["targets"][0]["replacements"] == [
+            {"expected_old": "old-evidence", "replacement": "task-evidence"}
+        ]
+        detail = json.loads(toml_evidence.read_text(encoding="utf-8"))
+        assert detail["targets"][0]["validation"]["format"] == "toml"
+        assert detail["targets"][0]["fix"] is None
+        assert target.read_bytes() == original
+        prospective = document.replace("old-evidence", "task-evidence")
+        parsed = tomllib.loads(prospective)
+        assert parsed == {"name": "Audit", "prompt": prompt.replace("old-evidence", "task-evidence"), "status": "ACTIVE"}
+        candidate_bytes = toml_candidate.read_bytes()
+        checked = subprocess.run(arguments + ["--check-only"], env=environment, capture_output=True, text=True)
+        assert checked.returncode == 0, checked.stderr
+        assert toml_candidate.read_bytes() == candidate_bytes
+
 
 def test_rule_candidate_failures_are_atomic_and_actionable(
     tmp_path: pathlib.Path,
@@ -216,6 +269,36 @@ def test_rule_candidate_failures_are_atomic_and_actionable(
     assert mutated.returncode == 1
     assert "skill-owned policy" in mutated.stderr
     assert candidate.read_bytes() == before_mutation
+
+    toml = blocked_repo / "automation.toml"
+    toml.write_text('prompt = "Original"\n', encoding="utf-8")
+    for replacement in ('Broken"quote', "bad\\q"):
+        write_rule_candidate(
+            candidate,
+            rule_stack=[safe, toml],
+            targets=[
+                {
+                    "rules": str(safe.resolve()), "history": None,
+                    "source_sha256": hashlib.sha256(safe.read_bytes()).hexdigest(),
+                    "markdown_policy": None,
+                    "replacements": [{"expected_old": "Old safe.", "replacement": "Safe prose " * 20}],
+                },
+                {
+                    "rules": str(toml.resolve()), "history": None,
+                    "source_sha256": hashlib.sha256(toml.read_bytes()).hexdigest(),
+                    "markdown_policy": None,
+                    "replacements": [{"expected_old": "Original", "replacement": replacement}],
+                },
+            ],
+        )
+        original_candidate = candidate.read_bytes()
+        original_sources = (safe.read_bytes(), toml.read_bytes())
+        failed = run_rule_candidate_validator(candidate, tmp_path / "toml-failure.json")
+        assert failed.returncode == 1
+        assert "toml-syntax invalid TOML" in failed.stderr
+        assert str(toml.resolve()) in failed.stderr
+        assert candidate.read_bytes() == original_candidate
+        assert (safe.read_bytes(), toml.read_bytes()) == original_sources
 
 
 def test_rule_candidate_rejects_stale_and_duplicate_expected_old(

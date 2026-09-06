@@ -230,6 +230,78 @@ def test_failure_is_fail_fast_compact_and_writes_complete_evidence(
     assert "complete stderr diagnostics" not in captured.out
 
 
+def test_pytest_failure_surfaces_bounded_actions_and_retains_complete_evidence(
+    tmp_path: pathlib.Path, capsys: Any
+) -> None:
+    calls: list[tuple[str, ...]] = []
+    child_payload: dict[str, Any] = {
+        "status": "pytest-failed",
+        "pytest": {
+            "failure_count": 6,
+            "omitted_failure_count": 4,
+            "failures": [
+                {
+                    "test": "tests/test_alpha.py::test_contract",
+                    "source_location": "tests/test_alpha.py:18",
+                    "excerpt": "E       assert actual == expected",
+                },
+                {
+                    "test": "tests/test_beta.py::test_configuration",
+                    "source_location": "tests/test_beta.py:27",
+                    "excerpt": "E       RuntimeError: invalid configuration",
+                },
+            ],
+            "diagnostic": {
+                "bytes": 4321,
+                "path": "build/test-diagnostics/pytest-failure.json",
+                "sha256": "a" * 64,
+            },
+            "context_excerpt": "full child context that is not forwarded",
+        },
+        "unrelated": "not part of the aggregate failure contract",
+    }
+    child_stdout = json.dumps(child_payload, separators=(",", ":"))
+
+    def fake_runner(
+        command: tuple[str, ...], cwd: pathlib.Path
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd
+        calls.append(command)
+        if len(calls) == 6:
+            return completed(
+                command,
+                returncode=1,
+                stdout=child_stdout,
+                stderr="complete pytest runner stderr",
+            )
+        return completed(command)
+
+    evidence_file = tmp_path / "validator" / "failure.log"
+    result = VALIDATOR.main(
+        ["--evidence-file", str(evidence_file)],
+        process_runner=fake_runner,
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert result == 1
+    assert len(calls) == 6
+    assert payload == {
+        "check": "pytest",
+        "exit_code": 1,
+        "evidence_file": str(evidence_file.resolve()),
+        "failure_count": 6,
+        "omitted_failure_count": 4,
+        "failures": child_payload["pytest"]["failures"],
+        "diagnostic": child_payload["pytest"]["diagnostic"],
+    }
+    assert "context_excerpt" not in captured.out
+    assert "unrelated" not in captured.out
+    evidence = evidence_file.read_text(encoding="utf-8")
+    assert child_stdout in evidence
+    assert "complete pytest runner stderr" in evidence
+
+
 def test_omitted_evidence_flag_keeps_repository_default(
     tmp_path: pathlib.Path, monkeypatch: Any, capsys: Any
 ) -> None:

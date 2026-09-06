@@ -27,7 +27,7 @@ import tempfile
 from collections.abc import Mapping, Sequence
 
 from validate_rule_candidate import CONTEXT_SCHEMA as CANDIDATE_CONTEXT_SCHEMA
-from validate_rule_candidate import resolve_markdown_policy
+from validate_rule_candidate import resolve_target_policy
 
 REQUEST_SCHEMA = "ceratops-governance-proposal-request.v3"
 CONTEXT_SCHEMA = "ceratops-governance-proposal-context.v3"
@@ -501,8 +501,9 @@ def _validated_request(path: pathlib.Path) -> dict[str, object]:
         policy_value = raw["markdown_policy"]
         if candidate_target:
             try:
-                markdown_policy = resolve_markdown_policy(
+                markdown_policy = resolve_target_policy(
                     policy_value,
+                    target=rules,
                     label=f"source {index} markdown_policy",
                 )
             except ValueError as exc:

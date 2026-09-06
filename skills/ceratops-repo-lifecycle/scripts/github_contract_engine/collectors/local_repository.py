@@ -15,7 +15,7 @@ from ceratops_repo_compatibility_engine.compatibility_check import (
     CompatibilityResult,
     check_repository,
 )
-from ceratops_repo_compatibility_engine.deploy_contract_validation import (
+from ceratops_repo_compatibility_engine.sdlc_contract_validation import (
     read_contract,
 )
 
@@ -815,12 +815,12 @@ def _manifest_facts(local: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _deploy_contract_facts(local: dict[str, Any]) -> dict[str, Any]:
-    """Validate a present deployment definition with the lifecycle schema."""
+def _sdlc_contract_facts(local: dict[str, Any]) -> dict[str, Any]:
+    """Validate a present repository SDLC definition with its owned schema."""
 
     if not local["available"] or not local["root"]:
         return {"present": False, "valid": None, "errors": []}
-    path = pathlib.Path(local["root"]) / "deploy" / "deploy.yml"
+    path = pathlib.Path(local["root"]) / "sdlc" / "sdlc.yml"
     present = path.exists() or path.is_symlink()
     if not present:
         return {"present": False, "valid": None, "errors": []}
@@ -828,7 +828,7 @@ def _deploy_contract_facts(local: dict[str, Any]) -> dict[str, Any]:
         return {
             "present": True,
             "valid": False,
-            "errors": ["deploy/deploy.yml must be a regular file"],
+            "errors": ["sdlc/sdlc.yml must be a regular file"],
         }
     contract, errors = read_contract(path)
     return {
@@ -995,7 +995,7 @@ def collect_local_repository(
             "ecosystems": _dependabot_ecosystems(local["files"]),
         },
         "manifests": _manifest_facts(local),
-        "deploy_contract": _deploy_contract_facts(local),
+        "sdlc_contract": _sdlc_contract_facts(local),
         "compatibility": _compatibility_facts(local),
         "repository_validation": _repository_validation_facts(
             local, rules, repository_validation_evidence_file

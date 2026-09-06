@@ -15,7 +15,7 @@ from typing import TypedDict
 
 import yaml
 
-from .deploy_contract_validation import read_contract
+from .sdlc_contract_validation import read_contract
 
 
 class CompatibilityResult(TypedDict):
@@ -205,7 +205,7 @@ def check_repository(repo_root: pathlib.Path) -> CompatibilityResult:
 
     root = repo_root.resolve()
     manifest = root / "skills" / "skill-sections.json"
-    deploy = root / "deploy" / "deploy.yml"
+    sdlc = root / "sdlc" / "sdlc.yml"
     validator = pathlib.Path("scripts/validate-repository.py")
     workflow = pathlib.Path(".github/workflows/validate.yml")
     source_skills = {
@@ -216,7 +216,7 @@ def check_repository(repo_root: pathlib.Path) -> CompatibilityResult:
     applicable = any(
         (
             manifest.exists() or manifest.is_symlink(),
-            deploy.exists() or deploy.is_symlink(),
+            sdlc.exists() or sdlc.is_symlink(),
             (root / validator).exists() or (root / validator).is_symlink(),
             (root / workflow).exists() or (root / workflow).is_symlink(),
             bool(source_skills),
@@ -237,12 +237,12 @@ def check_repository(repo_root: pathlib.Path) -> CompatibilityResult:
     elif source_skills:
         errors.append("missing skills/skill-sections.json")
 
-    if deploy.exists() or deploy.is_symlink():
-        if deploy.is_symlink() or not deploy.is_file():
-            errors.append("deploy/deploy.yml must be a regular file")
+    if sdlc.exists() or sdlc.is_symlink():
+        if sdlc.is_symlink() or not sdlc.is_file():
+            errors.append("sdlc/sdlc.yml must be a regular file")
         else:
-            _, deploy_errors = read_contract(deploy)
-            errors.extend(deploy_errors)
+            _, sdlc_errors = read_contract(sdlc)
+            errors.extend(sdlc_errors)
 
     unique_errors = list(dict.fromkeys(error for error in errors if error))
     return {

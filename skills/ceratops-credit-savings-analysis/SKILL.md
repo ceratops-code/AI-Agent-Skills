@@ -60,12 +60,13 @@ applies them.
   authoritative. Execution never recollects the session. Never skip, repeat,
   reorder, or add a semantic task outside the manifest.
 - Before freezing child tasks, resolve and hash the effective global and
-  run-local `AGENTS.md` chain. Launch each Luna task from its run's verified
-  source cwd. Launch Sol from the source's primary cwd and include the effective
-  rule hashes and the text of any differing run-local rules in its retained
-  handoff. Bind the applicable chain hash to every task and attempt. Stop or
-  report the exact rule-evidence omission rather than silently running from the
-  task temporary root without the applicable project rules.
+  run-local `AGENTS.md` chain. If a recorded canonical worktree cwd is gone, use
+  its primary checkout only after exact repository-identity verification and
+  record the substitution. Launch Luna from each verified run cwd and Sol from
+  the verified primary cwd; retain the effective chain hash on every task and
+  attempt and give Sol the hash and any differing run-local rule text. Stop on
+  an unresolved source or rule-evidence omission; never fall back to task
+  temporary root.
 - The controller validates `gpt-5.6-luna` and `gpt-5.6-sol` at maximum effort
   from the local Codex catalog. Luna and Sol children retain native rollout
   state. Every child is approval-free and read-only. The
@@ -99,7 +100,8 @@ applies them.
   findings against exact evidence. Each rejected Sol task receives one automatic
   corrective retry when the eight-attempt ceiling permits. After a non-final
   task fails validation twice, retain its exact unreviewed candidate, call, and
-  byte inventory and continue to the final merger. Use no more than eight Sol
+  byte inventory, exclude that inventory from final transport, and continue to
+  the final merger. Use no more than eight Sol
   calls total, counting every attempt. The final Sol does not re-adjudicate
   every
   candidate or receive the complete source tree.

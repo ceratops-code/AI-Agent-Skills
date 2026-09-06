@@ -8,9 +8,8 @@ mode is inferred from ambient state. Collection modes preserve every pytest
 node identity, including parameter IDs, across structural moves without a
 model. The runner uses Git, the checked-in impact manifest, and pytest through
 argv arrays; it never invokes a shell, network client, model, prompt, agent, or
-semantic classifier. A mapping gap deliberately runs every suite and returns
-exit code 3 when pytest passes so CI cannot silently accept incomplete
-ownership data.
+semantic classifier. A mapping gap returns exit code 3 before pytest collection
+or execution so CI cannot silently accept incomplete ownership data.
 """
 
 from __future__ import annotations
@@ -43,6 +42,14 @@ COLLECTION_MISMATCH_EXIT_CODE = 4
 CONFIGURATION_EXIT_CODE = 2
 FULL_SHA = re.compile(r"[0-9a-fA-F]{40}")
 STABLE_ID = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+PYTEST_SECTION_HEADER = re.compile(r"^_{3,}\s*(?P<title>.+?)\s*_{3,}$")
+PYTHON_SOURCE_LOCATION = re.compile(
+    r"^(?P<path>.+?\.py):(?P<line>[1-9][0-9]*)(?::.*)?$"
+)
+MAX_PYTEST_FAILURES = 10
+PYTEST_IDENTITY_BYTES = 400
+PYTEST_LOCATION_BYTES = 500
+PYTEST_FAILURE_EXCERPT_BYTES = 800
 
 
 class ImpactError(RuntimeError):
@@ -122,15 +129,10 @@ class SelectionReason:
                 f"{self.suite} selected because {self.path} is the source of a "
                 f"test rename owned by {self.suite}."
             )
-        if self.rule == "deleted-test":
+        if self.rule == "deleted-path":
             return (
                 f"{self.suite} selected because deleting {self.path} requires "
                 "full-suite validation."
-            )
-        if self.rule.startswith("mapping-gap:"):
-            return (
-                f"{self.suite} selected because {self.path} triggered full-suite "
-                "fallback for a mapping gap."
             )
         return f"{self.suite} selected because {self.path} matched {self.rule}."
 
@@ -346,8 +348,8 @@ def load_manifest(path: pathlib.Path) -> Manifest:
             raise ImpactError(f"ignore {ignore_id}.paths must not be empty")
         ignored.append(Ignore(ignore_id, paths, reason))
     unmapped = data.get("unmapped_production")
-    if unmapped != "full-and-error":
-        raise ImpactError("unmapped_production must be 'full-and-error'")
+    if unmapped != "error":
+        raise ImpactError("unmapped_production must be 'error'")
     return Manifest(
         suites=suites,
         rules=tuple(rules),
@@ -766,26 +768,128 @@ def _stable_unique(values: Iterable[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
 
 
-def pytest_failure_summary(stdout: str, stderr: str) -> dict[str, object]:
-    """Extract bounded failing identities, decisive assertions, and tail context."""
+def _pytest_failure_sections(lines: Sequence[str]) -> list[tuple[str, list[str]]]:
+    """Return ordered pytest failure/error sections without summary output."""
 
-    lines = [
-        line.strip()
-        for stream in (stdout, stderr)
-        for line in stream.splitlines()
-        if line.strip()
+    sections: list[tuple[str, list[str]]] = []
+    title: str | None = None
+    content: list[str] = []
+    for raw_line in lines:
+        line = raw_line.strip()
+        header = PYTEST_SECTION_HEADER.fullmatch(line)
+        if header is not None:
+            if title is not None:
+                sections.append((title, content))
+            title = header.group("title").strip()
+            content = []
+            continue
+        if title is None:
+            continue
+        if line.startswith("==="):
+            sections.append((title, content))
+            title = None
+            content = []
+            continue
+        if line:
+            content.append(line)
+    if title is not None:
+        sections.append((title, content))
+    return sections
+
+
+def _pytest_section_for_identity(
+    identity: str,
+    sections: Sequence[tuple[str, list[str]]],
+    used_sections: set[int],
+) -> list[str]:
+    """Match one pytest node to its ordered failure section when available."""
+
+    leaf = identity.rsplit("::", 1)[-1].split("[", 1)[0]
+    for index, (title, content) in enumerate(sections):
+        if index not in used_sections and leaf and leaf in title:
+            used_sections.add(index)
+            return content
+    for index, (_, content) in enumerate(sections):
+        if index not in used_sections:
+            used_sections.add(index)
+            return content
+    return []
+
+
+def _pytest_source_location(identity: str, section: Sequence[str]) -> str | None:
+    """Return the most relevant bounded Python location in one failure section."""
+
+    expected_path = identity.split("::", 1)[0].replace("\\", "/").lstrip("./")
+    locations: list[tuple[str, str]] = []
+    for line in section:
+        match = PYTHON_SOURCE_LOCATION.fullmatch(line)
+        if match is None:
+            continue
+        path = match.group("path")
+        rendered = f"{path}:{match.group('line')}"
+        locations.append((path.replace("\\", "/").lstrip("./"), rendered))
+    preferred = [
+        rendered for path, rendered in locations if path.endswith(expected_path)
     ]
-    failing_tests: list[str] = []
+    if preferred:
+        return _utf8_prefix(preferred[-1], PYTEST_LOCATION_BYTES)
+    if locations:
+        return _utf8_prefix(locations[-1][1], PYTEST_LOCATION_BYTES)
+    return None
+
+
+def _pytest_failure_excerpt(section: Sequence[str], fallback: str) -> str:
+    """Return bounded decisive lines for one failure, or its summary reason."""
+
+    decisive = _stable_unique(
+        line
+        for line in section
+        if line.startswith(("E ", "AssertionError", "assert ", "> "))
+    )
+    return _utf8_prefix(
+        "\n".join(decisive[:6]) if decisive else fallback,
+        PYTEST_FAILURE_EXCERPT_BYTES,
+    )
+
+
+def pytest_failure_summary(stdout: str, stderr: str) -> dict[str, object]:
+    """Extract bounded per-failure actions plus compact global context."""
+
+    raw_lines = [
+        line for stream in (stdout, stderr) for line in stream.splitlines()
+    ]
+    lines = [line.strip() for line in raw_lines if line.strip()]
+    summaries: list[tuple[str, str]] = []
+    seen_identities: set[str] = set()
     decisive: list[str] = []
     for line in lines:
         if line.startswith(("FAILED ", "ERROR ")):
-            identity = line.split(" - ", 1)[0].split(maxsplit=1)
-            if len(identity) == 2:
-                failing_tests.append(_utf8_prefix(identity[1], 400))
+            summary = line.split(maxsplit=1)
+            if len(summary) == 2:
+                identity, separator, reason = summary[1].partition(" - ")
+                if identity and identity not in seen_identities:
+                    summaries.append((identity, reason if separator else ""))
+                    seen_identities.add(identity)
         if line.startswith(("E ", "AssertionError", "assert ")):
             decisive.append(_utf8_prefix(line, 500))
+
+    sections = _pytest_failure_sections(raw_lines)
+    used_sections: set[int] = set()
+    failures: list[dict[str, object]] = []
+    for identity, reason in summaries[:MAX_PYTEST_FAILURES]:
+        section = _pytest_section_for_identity(identity, sections, used_sections)
+        failures.append(
+            {
+                "test": _utf8_prefix(identity, PYTEST_IDENTITY_BYTES),
+                "source_location": _pytest_source_location(identity, section),
+                "excerpt": _pytest_failure_excerpt(section, reason),
+            }
+        )
     return {
-        "failed_tests": _stable_unique(failing_tests)[:10],
+        "failure_count": len(summaries),
+        "omitted_failure_count": max(0, len(summaries) - len(failures)),
+        "failures": failures,
+        "failed_tests": [failure["test"] for failure in failures],
         "decisive_excerpt": _utf8_prefix(
             "\n".join(_stable_unique(decisive)[:8]), 2_000
         ),
@@ -1064,13 +1168,12 @@ def expand_dependencies(
 def selection_from_changes(
     manifest: Manifest, changes: Iterable[ChangedFile]
 ) -> Selection:
-    """Map every evaluated path, accounting for removed test sources."""
+    """Map current paths and fully validate deletions without retaining stale globs."""
 
     reasons: set[SelectionReason] = set()
     gaps: list[dict[str, str]] = []
     ignored_paths: list[dict[str, str]] = []
     full_suite = False
-    fallback = False
     for changed in sorted(changes, key=lambda item: (item.paths, item.status)):
         for path_index, path in enumerate(changed.paths):
             if path.startswith("tests/") and changed.status.startswith("D"):
@@ -1079,7 +1182,7 @@ def selection_from_changes(
                     reasons,
                     manifest,
                     path=path,
-                    rule="deleted-test",
+                    rule="deleted-path",
                 )
                 continue
             renamed_test_source = (
@@ -1125,10 +1228,6 @@ def selection_from_changes(
                     else f"ambiguous test ownership: {', '.join(owners)}"
                 )
                 gaps.append({"path": path, "reason": detail})
-                fallback = full_suite = True
-                add_all_reasons(
-                    reasons, manifest, path=path, rule=f"mapping-gap:{detail}"
-                )
                 continue
             matched_rules = sorted(
                 (
@@ -1171,13 +1270,15 @@ def selection_from_changes(
                 detail = "ambiguous ignore mapping: " + ", ".join(
                     item.ignore_id for item in matched_ignores
                 )
+            elif changed.status.startswith("D"):
+                full_suite = True
+                add_all_reasons(
+                    reasons, manifest, path=path, rule="deleted-path"
+                )
+                continue
             else:
                 detail = "unmapped repository path"
             gaps.append({"path": path, "reason": detail})
-            fallback = full_suite = True
-            add_all_reasons(
-                reasons, manifest, path=path, rule=f"mapping-gap:{detail}"
-            )
     reasons = expand_dependencies(manifest, reasons)
     suites = tuple(sorted({reason.suite for reason in reasons}))
     targets = tuple(
@@ -1198,7 +1299,7 @@ def selection_from_changes(
             sorted(ignored_paths, key=lambda item: (item["path"], item["id"]))
         ),
         full_suite=full_suite,
-        full_suite_fallback=fallback,
+        full_suite_fallback=False,
     )
 
 
@@ -1431,6 +1532,10 @@ def execute(
             "selections": [reason.payload() for reason in selection.reasons],
         }
     )
+    if selection.mapping_gaps:
+        payload["status"] = "mapping-gap"
+        emit(payload)
+        return MAPPING_GAP_EXIT_CODE
     if not selection.pytest_targets:
         payload["status"] = "no-tests-selected"
         emit(payload)
@@ -1485,10 +1590,6 @@ def execute(
         payload["status"] = "diagnostic-cleanup-failed"
         emit(payload)
         return CONFIGURATION_EXIT_CODE
-    if selection.mapping_gaps:
-        payload["status"] = "mapping-gap"
-        emit(payload)
-        return MAPPING_GAP_EXIT_CODE
     payload["status"] = "passed"
     emit(payload)
     return 0

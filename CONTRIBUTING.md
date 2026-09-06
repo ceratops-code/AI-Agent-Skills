@@ -21,8 +21,8 @@ Contributions should keep skills practical, current, and safe.
   `skills/ceratops-skill-lifecycle/references/skills-consistency-review.md`, and
   keep skill-design standards refresh in
   `skills/ceratops-skill-lifecycle/references/skills-contract-review.md`.
-- Keep live deployment operations in `deploy/deploy.yml` as structured argv
-  steps. Keep reusable section and deployment templates under
+- Keep live deployment and release operations in `sdlc/sdlc.yml` as structured
+  argv steps. Keep reusable section and SDLC templates under
   `skills/ceratops-repo-lifecycle/references/templates/`; neither is live
   repository configuration.
 - Do not add secrets, private endpoints, local machine paths, or org-internal

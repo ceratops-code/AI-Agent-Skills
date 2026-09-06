@@ -165,8 +165,17 @@ def test_pytest_failure_writes_full_diagnostic_and_emits_bounded_summary(
 ) -> None:
     runner = test_runner_module
     stdout = (
-        "FAILED tests/test_example.py::test_contract - AssertionError: mismatch\n"
+        "___________________________ test_contract ____________________________\n"
+        ">       assert 1 == 2\n"
         "E       assert 1 == 2\n"
+        "tests/test_example.py:41: AssertionError\n"
+        "________________________ test_configuration _________________________\n"
+        ">       raise RuntimeError('bad configuration')\n"
+        "E       RuntimeError: bad configuration\n"
+        "tests/test_other.py:23: RuntimeError\n"
+        "========================= short test summary info =========================\n"
+        "FAILED tests/test_example.py::test_contract - AssertionError: mismatch\n"
+        "ERROR tests/test_other.py::test_configuration - RuntimeError: bad configuration\n"
         + "\n".join(f"noise-{index}-" + "x" * 200 for index in range(80))
         + "\nfinal context\n"
     )
@@ -199,9 +208,29 @@ def test_pytest_failure_writes_full_diagnostic_and_emits_bounded_summary(
     assert exit_code == 1
     assert result["status"] == "pytest-failed"
     assert result["pytest"]["failed_tests"] == [
-        "tests/test_example.py::test_contract"
+        "tests/test_example.py::test_contract",
+        "tests/test_other.py::test_configuration",
     ]
-    assert result["pytest"]["decisive_excerpt"] == "E       assert 1 == 2"
+    assert result["pytest"]["failure_count"] == 2
+    assert result["pytest"]["omitted_failure_count"] == 0
+    assert result["pytest"]["failures"] == [
+        {
+            "test": "tests/test_example.py::test_contract",
+            "source_location": "tests/test_example.py:41",
+            "excerpt": ">       assert 1 == 2\nE       assert 1 == 2",
+        },
+        {
+            "test": "tests/test_other.py::test_configuration",
+            "source_location": "tests/test_other.py:23",
+            "excerpt": (
+                ">       raise RuntimeError('bad configuration')\n"
+                "E       RuntimeError: bad configuration"
+            ),
+        },
+    ]
+    assert result["pytest"]["decisive_excerpt"] == (
+        "E       assert 1 == 2\nE       RuntimeError: bad configuration"
+    )
     assert "final context" in result["pytest"]["context_excerpt"]
     assert stdout not in captured
     assert stderr not in captured
@@ -214,6 +243,17 @@ def test_pytest_failure_writes_full_diagnostic_and_emits_bounded_summary(
         "path": str(diagnostic.resolve()),
         "sha256": hashlib.sha256(content).hexdigest(),
     }
+
+    overflow = runner.pytest_failure_summary(
+        "\n".join(
+            f"FAILED tests/test_many.py::test_{index} - failure {index}"
+            for index in range(12)
+        ),
+        "",
+    )
+    assert overflow["failure_count"] == 12
+    assert overflow["omitted_failure_count"] == 2
+    assert len(overflow["failures"]) == 10
 
     passing = DeterministicExecution(
         runner,
@@ -294,14 +334,31 @@ def test_committed_diff_treats_deleted_test_as_intentional_full_suite(
     )
 
 
-def test_mapping_gap_runs_full_suite_and_returns_distinct_status(
-    test_runner_module: Any, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize("mode", ["diff", "worktree"])
+@pytest.mark.parametrize(
+    "mapped_path",
+    [
+        None,
+        "skills/ceratops-credit-savings-analysis/scripts/credit_analysis/luna_sol_analysis.py",
+        "pyproject.toml",
+    ],
+)
+@pytest.mark.parametrize("unmapped_path", ["src/unmapped.py", "tests/unmapped/test_new.py"])
+def test_mapping_gap_returns_before_pytest_collection_or_execution(
+    test_runner_module: Any,
+    capsys: pytest.CaptureFixture[str],
+    mode: str,
+    mapped_path: str | None,
+    unmapped_path: str,
 ) -> None:
     runner = test_runner_module
-    execution = DeterministicExecution(runner, b"A\0src/unmapped.py\0")
+    diff = f"A\0{unmapped_path}\0"
+    if mapped_path is not None:
+        diff += f"M\0{mapped_path}\0"
+    execution = DeterministicExecution(runner, diff.encode())
 
     exit_code = runner.execute(
-        ["--base", BASE, "--head", HEAD],
+        ["--worktree"] if mode == "worktree" else ["--base", BASE, "--head", HEAD],
         repo_root=ROOT,
         text_runner=execution.text,
         bytes_runner=execution.bytes,
@@ -310,15 +367,23 @@ def test_mapping_gap_runs_full_suite_and_returns_distinct_status(
 
     assert exit_code == runner.MAPPING_GAP_EXIT_CODE
     assert result["status"] == "mapping-gap"
-    assert result["pytest"]["outcome"] == "passed"
-    assert result["full_suite_fallback"] is True
+    assert result["pytest"] == {"exit_code": None, "outcome": "not-run"}
+    assert result["full_suite_fallback"] is False
     assert result["mapping_gaps"] == [
-        {"path": "src/unmapped.py", "reason": "unmapped repository path"}
+        {
+            "path": unmapped_path,
+            "reason": (
+                "unmapped test path"
+                if unmapped_path.startswith("tests/")
+                else "unmapped repository path"
+            ),
+        }
     ]
-    assert result["selected_suites"] == sorted(
-        runner.load_manifest(ROOT / "tests" / "test-impact.json").suites
+    assert not any(
+        command[:3] == (sys.executable, "-m", "pytest")
+        for command in execution.commands
     )
-    assert len(execution.final_pytest) == 1
+    assert execution.final_pytest == []
 
 
 def test_full_mode_uses_sorted_manifest_targets_without_ambient_inference(
@@ -551,3 +616,52 @@ def test_collection_node_map_resolves_ambiguous_identity(
         "node map changes pytest identity: "
         f"{old} -> tests/beta/test_flow.py::test_case[changed]"
     ]
+
+
+def test_committed_diff_maps_retired_and_current_lifecycle_configuration(
+    test_runner_module: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Deleting a retired configuration runs all suites without a stale mapping."""
+    runner = test_runner_module
+    execution = DeterministicExecution(
+        runner, b"D\0deploy/deploy.yml\0A\0sdlc/sdlc.yml\0"
+    )
+    exit_code = runner.execute(
+        ["--base", BASE, "--head", HEAD],
+        repo_root=ROOT,
+        text_runner=execution.text,
+        bytes_runner=execution.bytes,
+    )
+    result = payload(capsys)
+
+    assert exit_code == 0
+    assert result["mapping_gaps"] == []
+    assert result["full_suite"] is True
+    assert result["full_suite_fallback"] is False
+    assert result["selected_suites"] == sorted(
+        runner.load_manifest(ROOT / "tests" / "test-impact.json").suites
+    )
+    assert {item["path"] for item in result["selections"]} == {
+        "deploy/deploy.yml", "sdlc/sdlc.yml"
+    }
+
+
+def test_release_documentation_changes_need_no_executable_suite(
+    test_runner_module: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    runner = test_runner_module
+    execution = DeterministicExecution(
+        runner, b"M\0CHANGELOG.md\0M\0CONTRIBUTING.md\0"
+    )
+    exit_code = runner.execute(
+        ["--base", BASE, "--head", HEAD],
+        repo_root=ROOT,
+        text_runner=execution.text,
+        bytes_runner=execution.bytes,
+    )
+    result = payload(capsys)
+
+    assert exit_code == 0
+    assert result["mapping_gaps"] == []
+    assert result["selected_suites"] == []
+    assert execution.final_pytest == []

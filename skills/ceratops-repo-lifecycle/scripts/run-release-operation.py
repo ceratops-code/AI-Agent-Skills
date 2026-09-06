@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and execute one named remote release-publication operation."""
+"""Execute ordered remote publications from the repository SDLC contract."""
 
 from __future__ import annotations
 
@@ -10,11 +10,12 @@ from repository_operation import OperationProfile, operation_main
 from repository_operation import run_operation as _run_operation
 
 SCRIPT_ROOT = pathlib.Path(__file__).resolve().parent
-DEFAULT_CONTRACT = pathlib.Path("release/release.yml")
+DEFAULT_CONTRACT = pathlib.Path("sdlc/sdlc.yml")
 PROFILE = OperationProfile(
     label="Release",
+    section="release",
     default_contract=DEFAULT_CONTRACT,
-    schema=SCRIPT_ROOT.parent / "references" / "schemas" / "release.yml.schema.json",
+    schema=SCRIPT_ROOT.parent / "references" / "schemas" / "sdlc.yml.schema.json",
     default_success_status="completed",
     operation_statuses={"preflight": "checked", "publish": "published"},
 )
@@ -29,7 +30,7 @@ def run_operation(
     *,
     if_declared: bool = False,
 ) -> dict[str, object]:
-    """Run one release operation through the release-specific schema."""
+    """Run one publication from the unified contract's release section."""
 
     return _run_operation(
         repo_root,
@@ -43,7 +44,7 @@ def run_operation(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Execute one release operation and emit one compact result."""
+    """Execute an ordered release selection and emit one compact result."""
 
     return operation_main(PROFILE, argv)
 

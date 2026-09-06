@@ -14,7 +14,11 @@ from tests.credit_analysis.models import (
     holistic_model_catalog,
     load_credit_analysis_workflow_module,
 )
-from tests.credit_analysis.sessions import credit_analysis_request
+from tests.credit_analysis.sessions import (
+    credit_analysis_request,
+    credit_analysis_session,
+)
+from tests.support.repositories import run_git
 
 
 def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
@@ -239,6 +243,94 @@ def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
     assert recovery_final["classification_totals"]["unassessed"] <= (
         recovery_final["manifest"]["candidate_count"] // 5
     )
+
+    shipped_scope = tmp_path / "shipped-worktree-recovery"
+    shipped_scope.mkdir()
+    repository_parent = shipped_scope / "projects"
+    repository_parent.mkdir()
+    primary_checkout = repository_parent / "source-repo"
+    primary_checkout.mkdir()
+    repository_url = "https://example.test/example/source-repo.git"
+    initialized = run_git(primary_checkout, "init")
+    assert initialized.returncode == 0, initialized.stderr
+    remote_added = run_git(
+        primary_checkout,
+        "remote",
+        "add",
+        "origin",
+        repository_url,
+    )
+    assert remote_added.returncode == 0, remote_added.stderr
+    (primary_checkout / "AGENTS.md").write_text(
+        "# Recovered source controls\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    missing_worktree = (
+        repository_parent
+        / "worktrees"
+        / primary_checkout.name
+        / "shipped-task"
+    )
+    recovered_request, recovered_session, _ = credit_analysis_request(
+        shipped_scope
+    )
+    credit_analysis_session(
+        recovered_session,
+        cwd=missing_worktree,
+        repository_url=repository_url,
+    )
+    recovered_runner = FakeCreditModelRunner(temporary_controls=False)
+    recovered_plan = workflow.command_plan_orchestration(
+        recovered_request,
+        available_models=recovered_runner.available_models,
+    )
+    recovered_state_path = pathlib.Path(recovered_plan["state_path"])
+    recovered_state = json.loads(
+        recovered_state_path.read_text(encoding="utf-8")
+    )
+    resolved_primary = str(primary_checkout.resolve())
+    assert recovered_state["execution_context"]["primary_cwd"] == resolved_primary
+    assert recovered_state["execution_context"]["cwd_substitutions"] == [
+        {
+            "recorded_cwd": str(missing_worktree.resolve(strict=False)),
+            "resolved_cwd": resolved_primary,
+            "repository_url": repository_url,
+            "reason": "missing-canonical-worktree",
+        }
+    ]
+    assert all(
+        task["execution_cwd"] == resolved_primary
+        for task in [
+            *recovered_state["manifest"]["luna_tasks"],
+            *recovered_state["manifest"]["sol_tasks"],
+        ]
+    )
+    recovered_completed = workflow.command_execute_orchestration(
+        recovered_state_path,
+        runner=recovered_runner,
+        available_models=recovered_runner.available_models,
+    )
+    assert recovered_completed["complete"] is True
+
+    mismatch_scope = tmp_path / "shipped-worktree-mismatch"
+    mismatch_scope.mkdir()
+    mismatch_request, mismatch_session, _ = credit_analysis_request(
+        mismatch_scope
+    )
+    credit_analysis_session(
+        mismatch_session,
+        cwd=missing_worktree,
+        repository_url="https://example.test/other/source-repo.git",
+    )
+    with pytest.raises(
+        workflow.CreditAnalysisError,
+        match="repository identity does not match",
+    ):
+        workflow.command_plan_orchestration(
+            mismatch_request,
+            available_models=holistic_model_catalog(),
+        )
 
 
 def test_removed_bounded_action_is_rejected(tmp_path: pathlib.Path) -> None:
@@ -1070,7 +1162,7 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     persistent_root.mkdir()
     persistent_request, _, _ = credit_analysis_request(
         persistent_root,
-        extra_completed_turns=3,
+        extra_completed_turns=1,
         extra_calls_per_turn=4,
     )
     persistent_plan = workflow.command_plan_orchestration(
@@ -1079,6 +1171,10 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     )
 
     class PersistentInvalidSolRunner(FakeCreditModelRunner):
+        def __init__(self) -> None:
+            super().__init__()
+            self.invalid_task_id: str | None = None
+
         def _sol(
             self,
             task: Mapping[str, Any],
@@ -1086,12 +1182,36 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
             digest: str,
         ) -> dict[str, Any]:
             result = super()._sol(task, packet, digest)
-            if task["task_id"] == "sol.adjudication.0001":
+            if task["task_id"] == self.invalid_task_id:
                 result["candidate_decisions"][0]["reason"] = "x" * 321
             return result
 
     persistent_runner = PersistentInvalidSolRunner()
     persistent_state_path = pathlib.Path(persistent_plan["state_path"])
+    persistent_planned_state = json.loads(
+        persistent_state_path.read_text(encoding="utf-8")
+    )
+    workflow.command_execute_orchestration(
+        persistent_state_path,
+        runner=persistent_runner,
+        available_models=persistent_runner.available_models,
+        task_limit=len(persistent_planned_state["manifest"]["luna_tasks"]),
+    )
+    persistent_routed_state = json.loads(
+        persistent_state_path.read_text(encoding="utf-8")
+    )
+    persistent_routing = json.loads(
+        pathlib.Path(persistent_routed_state["routing"]["path"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    audit_luna_task_id = persistent_routing["audit_windows"][0]["luna_task_id"]
+    persistent_runner.invalid_task_id = next(
+        shard["task_id"]
+        for shard in persistent_routing["shards"]
+        if audit_luna_task_id in shard["luna_task_ids"]
+    )
+    assert persistent_runner.invalid_task_id is not None
     persistent_status = workflow.command_execute_orchestration(
         persistent_state_path,
         runner=persistent_runner,
@@ -1101,7 +1221,9 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     persistent_state = json.loads(
         persistent_state_path.read_text(encoding="utf-8")
     )
-    rejected_execution = persistent_state["execution"]["sol.adjudication.0001"]
+    rejected_execution = persistent_state["execution"][
+        persistent_runner.invalid_task_id
+    ]
     assert rejected_execution["status"] == "omitted"
     assert [attempt["outcome"] for attempt in rejected_execution["attempts"]] == [
         "validation-error",
@@ -1110,15 +1232,31 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     invalid_omission = next(
         omission
         for omission in persistent_state["omissions"]
-        if omission.get("task_id") == "sol.adjudication.0001"
+        if omission.get("task_id") == persistent_runner.invalid_task_id
     )
     assert invalid_omission["reason"] == "sol-invalid-output"
     assert invalid_omission["candidate_ids"]
     assert invalid_omission["call_ids"]
     assert invalid_omission["input_bytes"] > 0
     assert invalid_omission["output_bytes"] > 0
+    assert persistent_state["execution"]["sol.direct-evidence"]["status"] == "complete"
     assert persistent_state["execution"]["sol.final"]["status"] == "complete"
-    assert persistent_state["model_attempts"]["sol"] == 8
+    assert persistent_state["model_attempts"]["sol"] == 7
+    persistent_final_call = next(
+        call for call in persistent_runner.calls if call["phase"] == "sol-final"
+    )
+    assert persistent_final_call["input_payload"]["audit_result"] is None
+    final_task = next(
+        task
+        for task in persistent_state["manifest"]["sol_tasks"]
+        if task["phase"] == "sol-final"
+    )
+    final_aliases = json.loads(
+        pathlib.Path(final_task["artifacts"]["aliases"]).read_text(encoding="utf-8")
+    )
+    assert set(invalid_omission["call_ids"]).isdisjoint(
+        final_aliases["aliases"]["calls"].values()
+    )
     persistent_final = json.loads(
         pathlib.Path(persistent_status["final_result_path"]).read_text(
             encoding="utf-8"

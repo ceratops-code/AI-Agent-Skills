@@ -1369,11 +1369,11 @@ def main(argv: list[str] | None = None) -> int:
     command_source = parser.add_mutually_exclusive_group()
     command_source.add_argument(
         "--command",
-        help="Command text to analyze and execute. Defaults to stdin.",
+        help="Plain command text for direct or agent-prepared calls. Defaults to stdin.",
     )
     command_source.add_argument(
         "--encoded-command",
-        help="Base64-encoded UTF-8 command supplied by the Codex hook.",
+        help="Internal base64-encoded UTF-8 command supplied by the automatic Codex hook.",
     )
     command_source.add_argument(
         "--hook",

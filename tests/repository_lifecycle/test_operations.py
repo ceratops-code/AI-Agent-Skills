@@ -7,24 +7,32 @@ import shutil
 import subprocess
 import sys
 
+import pytest
+
 from tests.repository_lifecycle.support import (
-    DEPLOY_CONTRACT_TEMPLATE,
     DEPLOY_OPERATION,
+    REPOSITORY_LIFECYCLE_SOURCE,
+    SDLC_CONTRACT_TEMPLATE,
     run_deploy_operation,
     run_release_operation,
 )
-from tests.support.repositories import (
-    write_deploy_contract,
-    write_release_contract,
+from repository_operation import (
+    OperationProfile,
+    OperationRequest,
+    OperationError,
+    execute_prepared_operations,
+    prepare_operations,
 )
+from tests.support.repositories import write_sdlc_contract
 
 
-def test_deploy_template_is_a_schema_valid_empty_skeleton(
+def test_sdlc_template_is_a_schema_valid_empty_skeleton(
     tmp_path: pathlib.Path,
 ) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
-    shutil.copy2(DEPLOY_CONTRACT_TEMPLATE, write_deploy_contract(repo, {}))
+    contract = write_sdlc_contract(repo, deploy_operations={})
+    shutil.copy2(SDLC_CONTRACT_TEMPLATE, contract)
 
     result = run_deploy_operation(repo, "missing")
 
@@ -36,10 +44,42 @@ def test_deploy_template_is_a_schema_valid_empty_skeleton(
     optional = run_deploy_operation(repo, "missing", if_declared=True)
     assert optional.returncode == 0, optional.stderr
     assert json.loads(optional.stdout) == {
-        "status": "no_op",
-        "operation": "missing",
-        "steps": [],
-        "reason": "operation_not_declared",
+        "status": "completed",
+        "completed_operations": ["missing"],
+        "pending_operations": [],
+        "results": [
+            {
+                "status": "no_op",
+                "operation": "missing",
+                "steps": [],
+                "reason": "operation_not_declared",
+            }
+        ],
+    }
+
+
+def test_absent_sdlc_section_is_a_successful_no_op(
+    tmp_path: pathlib.Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    write_sdlc_contract(repo, release_operations={})
+
+    result = run_deploy_operation(repo, "deploy")
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "status": "completed",
+        "completed_operations": ["deploy"],
+        "pending_operations": [],
+        "results": [
+            {
+                "status": "no_op",
+                "operation": "deploy",
+                "steps": [],
+                "reason": "contract_section_not_declared",
+            }
+        ],
     }
 
 
@@ -59,9 +99,9 @@ def test_deploy_operation_preserves_argv_without_a_shell(
         encoding="utf-8",
         newline="\n",
     )
-    write_deploy_contract(
+    write_sdlc_contract(
         repo,
-        {
+        deploy_operations={
             "verify": {
                 "handoff": "ceratops-skill-lifecycle/deploy",
                 "steps": [
@@ -84,10 +124,18 @@ def test_deploy_operation_preserves_argv_without_a_shell(
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {
-        "status": "deployed",
-        "operation": "verify",
-        "steps": ["argv"],
-        "handoff": "ceratops-skill-lifecycle/deploy",
+        "status": "completed",
+        "completed_operations": ["verify"],
+        "pending_operations": [],
+        "results": [
+            {
+                "status": "deployed",
+                "operation": "verify",
+                "commit": None,
+                "steps": ["argv"],
+                "handoff": "ceratops-skill-lifecycle/deploy",
+            }
+        ],
     }
     assert json.loads(output.read_text(encoding="utf-8")) == [
         "value with spaces",
@@ -95,9 +143,9 @@ def test_deploy_operation_preserves_argv_without_a_shell(
     ]
     assert not injected.exists()
 
-    write_release_contract(
+    write_sdlc_contract(
         repo,
-        {
+        release_operations={
             "publish": {
                 "steps": [
                     {
@@ -118,9 +166,17 @@ def test_deploy_operation_preserves_argv_without_a_shell(
 
     assert published.returncode == 0, published.stderr
     assert json.loads(published.stdout) == {
-        "status": "published",
-        "operation": "publish",
-        "steps": ["argv"],
+        "status": "completed",
+        "completed_operations": ["publish"],
+        "pending_operations": [],
+        "results": [
+            {
+                "status": "published",
+                "operation": "publish",
+                "commit": None,
+                "steps": ["argv"],
+            }
+        ],
     }
     assert json.loads(output.read_text(encoding="utf-8")) == [
         "release value",
@@ -129,11 +185,11 @@ def test_deploy_operation_preserves_argv_without_a_shell(
     wrong_contract = run_release_operation(
         repo,
         "verify",
-        contract=repo / "deploy" / "deploy.yml",
+        contract=repo / "sdlc" / "sdlc.yml",
     )
     assert wrong_contract.returncode == 1
-    assert json.loads(wrong_contract.stderr)["message"].startswith(
-        "Invalid release contract:"
+    assert json.loads(wrong_contract.stderr)["message"] == (
+        "Release operation is not declared: verify"
     )
     assert not injected.exists()
 
@@ -152,9 +208,9 @@ def test_deploy_operation_requires_and_expands_exact_declared_parameters(
         encoding="utf-8",
         newline="\n",
     )
-    write_deploy_contract(
+    write_sdlc_contract(
         repo,
-        {
+        deploy_operations={
             "after_promote": {
                 "parameters": ["base_revision"],
                 "steps": [
@@ -256,9 +312,9 @@ def test_deploy_runs_repository_command_once_from_repository_directory(
         encoding="utf-8",
         newline="\n",
     )
-    write_deploy_contract(
+    write_sdlc_contract(
         repo,
-        {
+        deploy_operations={
             "deploy": {
                 "steps": [
                     {
@@ -298,9 +354,11 @@ def test_deploy_operation_rejects_invalid_schema(
 ) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
-    contract = write_deploy_contract(
+    contract = write_sdlc_contract(
         repo,
-        {"invalid": {"steps": [{"id": "invalid", "run": "python -V"}]}},
+        deploy_operations={
+            "invalid": {"steps": [{"id": "invalid", "run": "python -V"}]}
+        },
     )
 
     result = run_deploy_operation(repo, "invalid", contract=contract)
@@ -319,9 +377,9 @@ def test_deploy_operation_enforces_repository_path_boundaries(
     marker = repo / "must-not-run.txt"
     repo.mkdir()
     outside.mkdir()
-    write_deploy_contract(
+    write_sdlc_contract(
         repo,
-        {
+        deploy_operations={
             "escape": {
                 "steps": [
                     {
@@ -353,7 +411,7 @@ def test_deploy_operation_enforces_repository_path_boundaries(
     )
     assert not marker.exists()
 
-    outside_contract = outside / "deploy.yml"
+    outside_contract = outside / "sdlc.yml"
     outside_contract.write_text(
         json.dumps({"version": 1, "operations": {}}),
         encoding="utf-8",
@@ -384,9 +442,9 @@ def test_deploy_operation_reports_a_bounded_failure_tail(
         encoding="utf-8",
         newline="\n",
     )
-    write_deploy_contract(
+    write_sdlc_contract(
         repo,
-        {
+        deploy_operations={
             "fail": {
                 "steps": [
                     {
@@ -401,7 +459,240 @@ def test_deploy_operation_reports_a_bounded_failure_tail(
     result = run_deploy_operation(repo, "fail")
 
     assert result.returncode == 1
-    message = json.loads(result.stderr)["message"]
-    assert message.startswith("Deployment step failed: expected-failure\nline-4")
-    assert "line-11" in message
-    assert "line-3" not in message
+    payload = json.loads(result.stderr)
+    assert payload["status"] == "operation_failed"
+    assert payload["message"] == "Deployment step failed: expected-failure"
+    assert payload["operation"] == "fail"
+    assert payload["commit"] is None
+    assert payload["steps"] == []
+    assert payload["failed_step"] == "expected-failure"
+    assert payload["diagnostic"] == {
+        "exit_code": 7,
+        "stdout_tail": [],
+        "stderr_tail": [f"line-{index}" for index in range(4, 12)],
+    }
+
+
+def _deployment_profile() -> OperationProfile:
+    return OperationProfile(
+        label="Deployment",
+        section="deploy",
+        default_contract=pathlib.Path("sdlc/sdlc.yml"),
+        schema=(
+            REPOSITORY_LIFECYCLE_SOURCE
+            / "references"
+            / "schemas"
+            / "sdlc.yml.schema.json"
+        ),
+        default_success_status="deployed",
+        operation_statuses={},
+    )
+
+
+def test_prepare_operations_validates_the_whole_sequence_before_execution(
+    tmp_path: pathlib.Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    marker = repo / "must-not-run.txt"
+    write_sdlc_contract(
+        repo,
+        deploy_operations={
+            "first": {
+                "steps": [
+                    {
+                        "id": "mutate",
+                        "run": [
+                            sys.executable,
+                            "-c",
+                            "import pathlib; pathlib.Path('must-not-run.txt').write_text('ran')",
+                        ],
+                    }
+                ]
+            },
+            "invalid-later": {
+                "steps": [
+                    {
+                        "id": "escape",
+                        "cwd": "../outside",
+                        "run": [sys.executable, "-V"],
+                    }
+                ]
+            },
+        },
+    )
+    (tmp_path / "outside").mkdir()
+
+    with pytest.raises(
+        OperationError,
+        match="step cwd must be a directory inside the repository",
+    ):
+        prepare_operations(
+            repo,
+            [OperationRequest("first"), OperationRequest("invalid-later")],
+            _deployment_profile(),
+        )
+
+    assert not marker.exists()
+
+
+def test_operation_cli_prevalidates_and_runs_explicit_ids_in_order(
+    tmp_path: pathlib.Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    log = repo / "order.txt"
+    for name in ("promotion-check.py", "custom-deploy.py"):
+        (repo / name).write_text(
+            "import pathlib, sys\n"
+            "with pathlib.Path('order.txt').open('a', encoding='utf-8') as stream:\n"
+            "    stream.write(sys.argv[1] + '\\n')\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+    write_sdlc_contract(
+        repo,
+        deploy_operations={
+            "promotion-check": {
+                "steps": [
+                    {
+                        "id": "promotion-check",
+                        "run": [sys.executable, "promotion-check.py", "promotion"],
+                    }
+                ]
+            },
+            "custom-deploy": {
+                "steps": [
+                    {
+                        "id": "custom-deploy",
+                        "run": [sys.executable, "custom-deploy.py", "deployment"],
+                    }
+                ]
+            },
+        },
+    )
+
+    prepared = run_deploy_operation(
+        repo,
+        ("promotion-check", "custom-deploy"),
+        prepare_only=True,
+    )
+    assert prepared.returncode == 0, prepared.stderr
+    assert json.loads(prepared.stdout) == {
+        "status": "prepared",
+        "operations": ["promotion-check", "custom-deploy"],
+    }
+    assert not log.exists()
+
+    executed = run_deploy_operation(
+        repo,
+        ("promotion-check", "custom-deploy"),
+    )
+    assert executed.returncode == 0, executed.stderr
+    result = json.loads(executed.stdout)
+    assert result["completed_operations"] == ["promotion-check", "custom-deploy"]
+    assert [item["operation"] for item in result["results"]] == [
+        "promotion-check",
+        "custom-deploy",
+    ]
+    assert log.read_text(encoding="utf-8") == "promotion\ndeployment\n"
+
+
+def test_operation_cli_rejects_a_later_invalid_operation_before_execution(
+    tmp_path: pathlib.Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    marker = repo / "must-not-run.txt"
+    write_sdlc_contract(
+        repo,
+        deploy_operations={
+            "first": {
+                "steps": [
+                    {
+                        "id": "mutate",
+                        "run": [
+                            sys.executable,
+                            "-c",
+                            "import pathlib; pathlib.Path('must-not-run.txt').write_text('ran')",
+                        ],
+                    }
+                ]
+            },
+            "invalid-later": {
+                "steps": [
+                    {
+                        "id": "escape",
+                        "cwd": "../outside",
+                        "run": [sys.executable, "-V"],
+                    }
+                ]
+            },
+        },
+    )
+    (tmp_path / "outside").mkdir()
+
+    result = run_deploy_operation(repo, ("first", "invalid-later"))
+
+    assert result.returncode == 1
+    assert "step cwd must be a directory inside the repository" in json.loads(
+        result.stderr
+    )["message"]
+    assert not marker.exists()
+
+
+def test_execute_prepared_operations_stops_after_failure_with_a_ledger(
+    tmp_path: pathlib.Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    write_sdlc_contract(
+        repo,
+        deploy_operations={
+            "first": {
+                "steps": [
+                    {
+                        "id": "first",
+                        "run": [
+                            sys.executable,
+                            "-c",
+                            "import pathlib; pathlib.Path('first.txt').write_text('ran')",
+                        ],
+                    }
+                ]
+            },
+            "fails": {
+                "steps": [
+                    {
+                        "id": "fails",
+                        "run": [sys.executable, "-c", "raise SystemExit(9)"],
+                    }
+                ]
+            },
+            "later": {
+                "steps": [
+                    {
+                        "id": "later",
+                        "run": [
+                            sys.executable,
+                            "-c",
+                            "import pathlib; pathlib.Path('later.txt').write_text('ran')",
+                        ],
+                    }
+                ]
+            },
+        },
+    )
+    prepared = prepare_operations(
+        repo,
+        [OperationRequest("first"), OperationRequest("fails"), OperationRequest("later")],
+        _deployment_profile(),
+    )
+
+    result = execute_prepared_operations(prepared)
+
+    assert result["status"] == "operation_failed"
+    assert result["completed_operations"] == ["first"]
+    assert result["pending_operations"] == ["fails", "later"]
+    assert (repo / "first.txt").is_file()
+    assert not (repo / "later.txt").exists()
