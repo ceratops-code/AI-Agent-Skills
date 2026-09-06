@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Apply one approved rule update or exact history-ID repair.
+"""Apply approved rule/TOML edits or an exact history-ID repair.
 
 The UTF-8 JSON request has the closed top-level fields ``version``,
 ``task_temp_root``, ownership flags, ``rule_stack``, the exact validated
 candidate path and hash, caller-selected validation evidence, and
 ``history_operations``.
 ``rule_stack`` lists the global source first and every source in one complete
-project scope after it, with hashes in ``rule_stack_sha256``. A validated
-candidate owns rule replacement text when rules change; it is null for a
-history-only ID repair. History operations support approved ``append`` entries
-and simultaneous one-to-one ``rename`` migrations.
+project scope after it, including TOML targets, with hashes in
+``rule_stack_sha256``. A validated
+candidate owns exact rule and TOML replacement text; it is null for a
+history-only ID repair. TOML targets use null history and Markdown policy;
+only TOML-only edits permit empty history operations. History operations
+support approved ``append`` entries and simultaneous one-to-one ``rename``
+migrations. Mixed target formats share the same rollback transaction.
 
 This helper owns stale-text detection, structural validation, change coverage,
 rollback-protected writes, and successful-request cleanup. It deletes the exact
@@ -33,6 +36,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Never, cast
@@ -99,6 +103,7 @@ class PreparedUpdate:
     stack_paths: list[Path]
     originals: dict[Path, TextSource]
     candidates: dict[Path, bytes]
+    toml_paths: set[Path]
     baseline_reviews: set[str]
     expected_history_entries: dict[Path, list[dict[str, object]]]
     task_temp_root: Path
@@ -513,6 +518,7 @@ def prepare(request: dict[str, Any]) -> PreparedUpdate:
     candidate_path: Path | None = None
     expected_candidate_hash: str | None = None
     history_by_rules: dict[Path, Path] = {}
+    toml_sources: dict[Path, TextSource] = {}
     policy_hashes: dict[Path, str] = {}
     candidate_rule_texts = {
         path: source.text for path, source in rule_sources.items()
@@ -578,6 +584,23 @@ def prepare(request: dict[str, Any]) -> PreparedUpdate:
                 target["rules"],
                 f"candidate target {index}.rules",
             )
+            if rules.suffix.lower() == ".toml":
+                # TOML has no rule IDs or companion decision history. Reuse
+                # the validator's exact source snapshot for stale-write checks.
+                if (
+                    target["history"] is not None
+                    or target["markdown_policy"] is not None
+                ):
+                    raise ApplicationError(
+                        f"TOML target requires null history and Markdown policy: {rules}"
+                    )
+                source = validation.sources[rules]
+                if validation.prospective_texts[rules] == source.text:
+                    raise ApplicationError(
+                        f"replacement changes no TOML content: {rules}"
+                    )
+                toml_sources[rules] = source
+                continue
             if target["history"] is None:
                 raise ApplicationError(
                     f"candidate target lacks companion history: {rules}"
@@ -648,8 +671,12 @@ def prepare(request: dict[str, Any]) -> PreparedUpdate:
         changed_by_history.setdefault(history, set()).update(changed)
 
     operation_values = request["history_operations"]
-    if not isinstance(operation_values, list) or not operation_values:
-        raise ApplicationError("history_operations must be a non-empty list")
+    if not isinstance(operation_values, list):
+        raise ApplicationError("history_operations must be a list")
+    if not operation_values and (not toml_sources or history_by_rules):
+        raise ApplicationError(
+            "history_operations must be non-empty unless all edits are TOML-only"
+        )
     append_by_history: dict[Path, list[dict[str, object]]] = {}
     rename_by_history: dict[
         Path,
@@ -658,6 +685,7 @@ def prepare(request: dict[str, Any]) -> PreparedUpdate:
     rules_by_history = {
         rules.with_name("AGENTS.history.json").resolve(): rules
         for rules in stack_paths
+        if rules in candidate_by_path
     }
     for index, value in enumerate(operation_values):
         if not isinstance(value, dict):
@@ -721,12 +749,13 @@ def prepare(request: dict[str, Any]) -> PreparedUpdate:
     if candidate_path is None and not rename_by_history:
         raise ApplicationError("history-only request requires an ID migration")
 
-    originals: dict[Path, TextSource] = {
-        rules: rule_sources[rules] for rules in history_by_rules
-    }
+    originals = dict(toml_sources)
+    originals.update(
+        {rules: rule_sources[rules] for rules in history_by_rules}
+    )
     candidates = {
-        rules: rule_sources[rules].encode(candidate_rule_texts[rules])
-        for rules in history_by_rules
+        path: source.encode(candidate_rule_texts[path])
+        for path, source in originals.items()
     }
     expected_history_entries: dict[Path, list[dict[str, object]]] = {}
     governed_histories = set(changed_by_history).union(rename_by_history)
@@ -843,6 +872,7 @@ def prepare(request: dict[str, Any]) -> PreparedUpdate:
         stack_paths=stack_paths,
         originals=originals,
         candidates=candidates,
+        toml_paths=set(toml_sources),
         baseline_reviews=baseline_reviews,
         expected_history_entries=expected_history_entries,
         task_temp_root=task_temp_root,
@@ -885,9 +915,11 @@ def rollback(
             os.replace(backups[path], path)
         except OSError:
             failures.append(str(path))
-    for path, source in originals.items():
+    # Untouched targets may contain a concurrent edit that caused rejection;
+    # rollback owns only writes attempted by this transaction.
+    for path in applied:
         try:
-            if path.read_bytes() != source.raw and str(path) not in failures:
+            if path.read_bytes() != originals[path].raw and str(path) not in failures:
                 failures.append(str(path))
         except OSError:
             if str(path) not in failures:
@@ -936,6 +968,13 @@ def revalidate(update: PreparedUpdate) -> None:
     )
     if reviews - update.baseline_reviews:
         raise ApplicationError("reopened rule stack adds a semantic review")
+    for path in update.toml_paths:
+        try:
+            tomllib.loads(read_source(path, "TOML source").text)
+        except tomllib.TOMLDecodeError as error:
+            raise ApplicationError(
+                f"invalid reopened TOML: {path}: {error}"
+            ) from error
     for history, expected_entries in update.expected_history_entries.items():
         if load_history_source(history) != expected_entries:
             raise ApplicationError(f"reopened history differs: {history}")
