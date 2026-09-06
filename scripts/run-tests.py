@@ -8,9 +8,8 @@ mode is inferred from ambient state. Collection modes preserve every pytest
 node identity, including parameter IDs, across structural moves without a
 model. The runner uses Git, the checked-in impact manifest, and pytest through
 argv arrays; it never invokes a shell, network client, model, prompt, agent, or
-semantic classifier. A mapping gap deliberately runs every suite and returns
-exit code 3 when pytest passes so CI cannot silently accept incomplete
-ownership data.
+semantic classifier. A mapping gap returns exit code 3 before pytest collection
+or execution so CI cannot silently accept incomplete ownership data.
 """
 
 from __future__ import annotations
@@ -134,11 +133,6 @@ class SelectionReason:
             return (
                 f"{self.suite} selected because deleting {self.path} requires "
                 "full-suite validation."
-            )
-        if self.rule.startswith("mapping-gap:"):
-            return (
-                f"{self.suite} selected because {self.path} triggered full-suite "
-                "fallback for a mapping gap."
             )
         return f"{self.suite} selected because {self.path} matched {self.rule}."
 
@@ -354,8 +348,8 @@ def load_manifest(path: pathlib.Path) -> Manifest:
             raise ImpactError(f"ignore {ignore_id}.paths must not be empty")
         ignored.append(Ignore(ignore_id, paths, reason))
     unmapped = data.get("unmapped_production")
-    if unmapped != "full-and-error":
-        raise ImpactError("unmapped_production must be 'full-and-error'")
+    if unmapped != "error":
+        raise ImpactError("unmapped_production must be 'error'")
     return Manifest(
         suites=suites,
         rules=tuple(rules),
@@ -1180,7 +1174,6 @@ def selection_from_changes(
     gaps: list[dict[str, str]] = []
     ignored_paths: list[dict[str, str]] = []
     full_suite = False
-    fallback = False
     for changed in sorted(changes, key=lambda item: (item.paths, item.status)):
         for path_index, path in enumerate(changed.paths):
             if path.startswith("tests/") and changed.status.startswith("D"):
@@ -1235,10 +1228,6 @@ def selection_from_changes(
                     else f"ambiguous test ownership: {', '.join(owners)}"
                 )
                 gaps.append({"path": path, "reason": detail})
-                fallback = full_suite = True
-                add_all_reasons(
-                    reasons, manifest, path=path, rule=f"mapping-gap:{detail}"
-                )
                 continue
             matched_rules = sorted(
                 (
@@ -1290,10 +1279,6 @@ def selection_from_changes(
             else:
                 detail = "unmapped repository path"
             gaps.append({"path": path, "reason": detail})
-            fallback = full_suite = True
-            add_all_reasons(
-                reasons, manifest, path=path, rule=f"mapping-gap:{detail}"
-            )
     reasons = expand_dependencies(manifest, reasons)
     suites = tuple(sorted({reason.suite for reason in reasons}))
     targets = tuple(
@@ -1314,7 +1299,7 @@ def selection_from_changes(
             sorted(ignored_paths, key=lambda item: (item["path"], item["id"]))
         ),
         full_suite=full_suite,
-        full_suite_fallback=fallback,
+        full_suite_fallback=False,
     )
 
 
@@ -1547,6 +1532,10 @@ def execute(
             "selections": [reason.payload() for reason in selection.reasons],
         }
     )
+    if selection.mapping_gaps:
+        payload["status"] = "mapping-gap"
+        emit(payload)
+        return MAPPING_GAP_EXIT_CODE
     if not selection.pytest_targets:
         payload["status"] = "no-tests-selected"
         emit(payload)
@@ -1601,10 +1590,6 @@ def execute(
         payload["status"] = "diagnostic-cleanup-failed"
         emit(payload)
         return CONFIGURATION_EXIT_CODE
-    if selection.mapping_gaps:
-        payload["status"] = "mapping-gap"
-        emit(payload)
-        return MAPPING_GAP_EXIT_CODE
     payload["status"] = "passed"
     emit(payload)
     return 0

@@ -38,7 +38,7 @@ def sample_manifest(
         ignored_paths=(
             runner.Ignore("documentation-only", ("docs/**",), "Documentation only."),
         ),
-        unmapped_production="full-and-error",
+        unmapped_production="error",
     )
 
 
@@ -233,7 +233,7 @@ def test_duplicate_suite_ids_and_empty_rule_globs_are_rejected(
     duplicate.write_text(
         '{"version":1,"suites":{"alpha":{"pytest":["tests/alpha"],'
         '"depends_on":[]},"alpha":{"pytest":["tests/beta"],"depends_on":[]}},'
-        '"rules":[],"full_suite_paths":[],"unmapped_production":"full-and-error"}\n',
+        '"rules":[],"full_suite_paths":[],"unmapped_production":"error"}\n',
         encoding="utf-8",
         newline="\n",
     )
@@ -249,7 +249,7 @@ def test_duplicate_suite_ids_and_empty_rule_globs_are_rejected(
                     {"id": "alpha-source", "paths": [], "suites": ["alpha"]}
                 ],
                 "full_suite_paths": [],
-                "unmapped_production": "full-and-error",
+                "unmapped_production": "error",
             }
         ),
         encoding="utf-8",
@@ -279,7 +279,7 @@ def test_stale_rule_globs_are_rejected(test_runner_module: Any, tmp_path: pathli
             "tests/test-impact.json",
         ),
         ignored_paths=(),
-        unmapped_production="full-and-error",
+        unmapped_production="error",
     )
 
     def fake_git(command: Any, cwd: pathlib.Path) -> subprocess.CompletedProcess[bytes]:
@@ -314,7 +314,7 @@ def test_worktree_manifest_validation_includes_untracked_paths(
             "tests/test-impact.json",
         ),
         ignored_paths=(),
-        unmapped_production="full-and-error",
+        unmapped_production="error",
     )
 
     def fake_git(command: Any, cwd: pathlib.Path) -> subprocess.CompletedProcess[bytes]:
@@ -338,7 +338,7 @@ def test_worktree_manifest_validation_includes_untracked_paths(
     ) == ()
 
 
-def test_unmapped_path_falls_back_to_full_suite_and_records_gap(
+def test_unmapped_path_records_gap_without_selecting_tests(
     test_runner_module: Any,
 ) -> None:
     runner = test_runner_module
@@ -347,15 +347,15 @@ def test_unmapped_path_falls_back_to_full_suite_and_records_gap(
         (runner.ChangedFile("A", ("src/unowned.py",)),),
     )
 
-    assert selection.suites == ("alpha", "beta", "gamma")
-    assert selection.full_suite
-    assert selection.full_suite_fallback
+    assert selection.suites == ()
+    assert not selection.full_suite
+    assert not selection.full_suite_fallback
     assert selection.mapping_gaps == (
         {"path": "src/unowned.py", "reason": "unmapped repository path"},
     )
 
 
-def test_ambiguous_production_mapping_falls_back_to_full_suite(
+def test_ambiguous_production_mapping_records_gap_without_selecting_tests(
     test_runner_module: Any,
 ) -> None:
     runner = test_runner_module
@@ -374,8 +374,8 @@ def test_ambiguous_production_mapping_falls_back_to_full_suite(
         (runner.ChangedFile("M", ("skills/alpha/core.py",)),),
     )
 
-    assert selection.suites == ("alpha", "beta", "gamma")
-    assert selection.full_suite_fallback
+    assert selection.suites == ()
+    assert not selection.full_suite_fallback
     assert selection.mapping_gaps == (
         {
             "path": "skills/alpha/core.py",

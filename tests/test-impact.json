@@ -149,5 +149,5 @@
       "reason": "These files contain repository documentation or contribution metadata and cannot change executable behavior."
     }
   ],
-  "unmapped_production": "full-and-error"
+  "unmapped_production": "error"
 }

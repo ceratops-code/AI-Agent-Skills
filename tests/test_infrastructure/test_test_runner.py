@@ -334,14 +334,31 @@ def test_committed_diff_treats_deleted_test_as_intentional_full_suite(
     )
 
 
-def test_mapping_gap_runs_full_suite_and_returns_distinct_status(
-    test_runner_module: Any, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize("mode", ["diff", "worktree"])
+@pytest.mark.parametrize(
+    "mapped_path",
+    [
+        None,
+        "skills/ceratops-credit-savings-analysis/scripts/credit_analysis/luna_sol_analysis.py",
+        "pyproject.toml",
+    ],
+)
+@pytest.mark.parametrize("unmapped_path", ["src/unmapped.py", "tests/unmapped/test_new.py"])
+def test_mapping_gap_returns_before_pytest_collection_or_execution(
+    test_runner_module: Any,
+    capsys: pytest.CaptureFixture[str],
+    mode: str,
+    mapped_path: str | None,
+    unmapped_path: str,
 ) -> None:
     runner = test_runner_module
-    execution = DeterministicExecution(runner, b"A\0src/unmapped.py\0")
+    diff = f"A\0{unmapped_path}\0"
+    if mapped_path is not None:
+        diff += f"M\0{mapped_path}\0"
+    execution = DeterministicExecution(runner, diff.encode())
 
     exit_code = runner.execute(
-        ["--base", BASE, "--head", HEAD],
+        ["--worktree"] if mode == "worktree" else ["--base", BASE, "--head", HEAD],
         repo_root=ROOT,
         text_runner=execution.text,
         bytes_runner=execution.bytes,
@@ -350,15 +367,23 @@ def test_mapping_gap_runs_full_suite_and_returns_distinct_status(
 
     assert exit_code == runner.MAPPING_GAP_EXIT_CODE
     assert result["status"] == "mapping-gap"
-    assert result["pytest"]["outcome"] == "passed"
-    assert result["full_suite_fallback"] is True
+    assert result["pytest"] == {"exit_code": None, "outcome": "not-run"}
+    assert result["full_suite_fallback"] is False
     assert result["mapping_gaps"] == [
-        {"path": "src/unmapped.py", "reason": "unmapped repository path"}
+        {
+            "path": unmapped_path,
+            "reason": (
+                "unmapped test path"
+                if unmapped_path.startswith("tests/")
+                else "unmapped repository path"
+            ),
+        }
     ]
-    assert result["selected_suites"] == sorted(
-        runner.load_manifest(ROOT / "tests" / "test-impact.json").suites
+    assert not any(
+        command[:3] == (sys.executable, "-m", "pytest")
+        for command in execution.commands
     )
-    assert len(execution.final_pytest) == 1
+    assert execution.final_pytest == []
 
 
 def test_full_mode_uses_sorted_manifest_targets_without_ambient_inference(
