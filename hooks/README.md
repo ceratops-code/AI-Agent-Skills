@@ -173,20 +173,48 @@ The encoded helper invocation is recognized and allowed without recursion.
 
 ## Direct Execution
 
-Pass command text directly:
+Agent-prepared commands, including `functions.exec` calls, use plain-text
+`--command`. Keep the complete command in one literal argument; do not
+construct base64 with `btoa` or `TextEncoder`, which are unavailable in the
+checked `functions.exec` runtime.
 
 ```powershell
-python .\hooks\windows-shell-sanity.py --command "Get-Date"
+python .\hooks\windows-shell-sanity.py --command 'Get-Date'
 ```
 
-Or provide UTF-8 command text on standard input:
+In `functions.exec`, construct the Windows PowerShell invocation with standard
+JavaScript string operations:
+
+```javascript
+const command = "Write-Output 'literal $name and O''Brien'";
+const argument = command
+  .replace(/(\\*)"/g, '$1$1\\"')
+  .replace(/'/g, "''");
+text(await tools.exec_command({
+  cmd: "$PSNativeCommandArgumentPassing = 'Legacy'; " +
+    'python "$env:CODEX_HOME\\hooks\\windows-shell-sanity.py" ' +
+    "--command '" + argument + "'",
+  shell: "powershell"
+}));
+```
+
+The process-local `Legacy` setting makes native argument passing consistent
+across PowerShell versions. Escape double quotes and their preceding
+backslashes for that native argument layer, then double apostrophes for the
+outer PowerShell literal. This preserves dollar signs, backticks, and newlines
+until the runner analyzes and executes the command. JSON serialization alone
+is not PowerShell quoting.
+
+UTF-8 command text on standard input remains supported:
 
 ```powershell
 Get-Content -LiteralPath .\command.ps1 -Raw |
   python .\hooks\windows-shell-sanity.py
 ```
 
-Hook callers use `--encoded-command` with a base64-encoded UTF-8 payload.
+The automatic hook retains `--encoded-command` with its Python-generated
+base64 UTF-8 payload and recursion guard. Both command inputs use the same
+preflight and execution path.
 `--cwd` selects the child working directory, and `--powershell` selects the
 PowerShell executable. `--pretty` affects only structured blocking errors.
 
