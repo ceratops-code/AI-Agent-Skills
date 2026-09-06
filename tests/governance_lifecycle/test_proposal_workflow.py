@@ -6,6 +6,8 @@ import pathlib
 import subprocess
 import sys
 
+import pytest
+
 from tests.governance_lifecycle.support import (
     ITERATION_CONTROLLER,
     PROPOSAL_WORKFLOW,
@@ -14,8 +16,10 @@ from tests.governance_lifecycle.support import (
 from tests.support.repositories import ROOT
 
 
+@pytest.mark.parametrize("target_name", ["contract.md", "automation.toml"])
 def test_proposal_workflow_validates_context_and_owns_iteration_transition(
     tmp_path: pathlib.Path,
+    target_name: str,
 ) -> None:
     task_temp_root = tmp_path / "task-temp"
     task_temp_root.mkdir()
@@ -23,7 +27,8 @@ def test_proposal_workflow_validates_context_and_owns_iteration_transition(
     regressions = task_temp_root / "regressions.md"
     target_dir = tmp_path / "governed"
     target_dir.mkdir()
-    target = target_dir / "contract.md"
+    target = target_dir / target_name
+    is_toml = target.suffix == ".toml"
     request_path = task_temp_root / "proposal-request.json"
     state = task_temp_root / "proposal-state.json"
     evidence = task_temp_root / "proposal-context.json"
@@ -34,7 +39,7 @@ def test_proposal_workflow_validates_context_and_owns_iteration_transition(
     regressions.write_text("Preserve current scope\n", encoding="utf-8", newline="\n")
     undeclared_input.write_text("Preserve me\n", encoding="utf-8", newline="\n")
     target.write_text(
-        "# Contract\n\nCurrent exact target.\n",
+        'prompt = "Current exact target."\n' if is_toml else "# Contract\n\nCurrent exact target.\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -116,13 +121,13 @@ def test_proposal_workflow_validates_context_and_owns_iteration_transition(
         target.resolve()
     )
     policy = context["candidate_validation"]["targets"][0]["markdown_policy"]
-    assert pathlib.Path(policy["configuration"]) == (
-        ROOT
-        / "skills"
-        / "ceratops-governance-lifecycle"
-        / "references"
-        / ".markdownlint.json"
-    )
+    if is_toml:
+        assert policy is None
+    else:
+        assert pathlib.Path(policy["configuration"]) == (
+            ROOT / "skills" / "ceratops-governance-lifecycle"
+            / "references" / ".markdownlint.json"
+        )
     incomplete = subprocess.run(
         [
             sys.executable,
@@ -145,7 +150,7 @@ def test_proposal_workflow_validates_context_and_owns_iteration_transition(
     candidate_path = pathlib.Path(pending["candidate"])
     candidate_value = json.loads(candidate_path.read_text(encoding="utf-8"))
     candidate_value["targets"][0]["replacements"][0]["replacement"] = (
-        "https://example.test/" + "x" * 80
+        'Broken"quote' if is_toml else "https://example.test/" + "x" * 80
     )
     candidate_path.write_text(
         json.dumps(candidate_value, indent=2) + "\n",
@@ -175,7 +180,7 @@ def test_proposal_workflow_validates_context_and_owns_iteration_transition(
         check=False,
     )
     assert mechanical_failure.returncode == 2
-    assert "indivisible token" in mechanical_failure.stderr
+    assert ("invalid TOML" if is_toml else "indivisible token") in mechanical_failure.stderr
     failed_state = json.loads(state.read_text(encoding="utf-8"))
     assert failed_state["records"] == []
     assert failed_state["pending"]["iteration"] == 1
@@ -215,7 +220,8 @@ def test_proposal_workflow_validates_context_and_owns_iteration_transition(
         candidate_path.read_bytes()
     ).hexdigest()
     fixed_candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
-    assert "\n" in fixed_candidate["targets"][0]["replacements"][0]["replacement"]
+    replacement = fixed_candidate["targets"][0]["replacements"][0]["replacement"]
+    assert ("\n" in replacement) is not is_toml
     assert pathlib.Path(record["validation_evidence"]).is_file()
     champion_bytes = candidate_path.read_bytes()
     completed_state_text = state.read_text(encoding="utf-8")

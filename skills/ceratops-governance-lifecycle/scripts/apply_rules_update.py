@@ -37,19 +37,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Never, cast
 
+from rule_candidate_source import (
+    RuleCandidateValidationError,
+    TextSource,
+    read_source,
+)
 from rule_graph import (
     HISTORY_ENTRY_KEYS,
     HISTORY_VERSION,
-    ParsedRuleSource,
     RULE_ID_PATTERN,
+    ParsedRuleSource,
     RuleRecord,
     load_history_source,
     parse_history_text,
 )
 from validate_rule_candidate import (
-    RuleCandidateValidationError,
-    TextSource,
-    read_source,
     validate_rule_candidate,
     validate_stack_texts,
 )

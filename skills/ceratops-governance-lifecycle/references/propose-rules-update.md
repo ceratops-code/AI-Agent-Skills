@@ -99,7 +99,8 @@ under the history contract in [rule-design.md](rule-design.md).
   caller-selected champion output, mutation authority, side effects, the
   verified task-temp root, iteration artifacts, and disposable roles; set
   `markdown_policy` to null for every source because the helper must resolve and
-  hash the skill-owned `references/.markdownlint.json` for candidate targets;
+  hash the skill-owned `references/.markdownlint.json` for Markdown targets;
+  TOML targets retain null policy and must parse without reformatting;
   use null history only when none exists and include one history-backed source.
   Run `python scripts/proposal-workflow.py prepare --request REQUEST`. The
   helper must verify current source and skill-policy hashes, write compact
