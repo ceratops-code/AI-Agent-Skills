@@ -1,39 +1,83 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/Ceratops-Code/AI-Agent-Skills/schemas/release.yml.schema.json",
-  "title": "Ceratops repository release-publication contract",
+  "$id": "https://github.com/Ceratops-Code/AI-Agent-Skills/schemas/sdlc.yml.schema.json",
+  "title": "Ceratops repository SDLC contract",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "version",
-    "kind",
-    "operations"
+    "kind"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "deploy"
+      ]
+    },
+    {
+      "required": [
+        "release"
+      ]
+    }
   ],
   "properties": {
     "version": {
       "const": 1
     },
     "kind": {
-      "const": "ceratops-release"
+      "const": "ceratops-sdlc"
     },
-    "artifacts": {
-      "type": "array",
-      "uniqueItems": true,
-      "items": {
-        "$ref": "#/$defs/artifact"
-      }
+    "deploy": {
+      "$ref": "#/$defs/deploy"
     },
-    "operations": {
-      "type": "object",
-      "propertyNames": {
-        "pattern": "^[a-z][a-z0-9_-]*$"
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/operation"
-      }
+    "release": {
+      "$ref": "#/$defs/release"
     }
   },
   "$defs": {
+    "deploy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operations"
+      ],
+      "properties": {
+        "operations": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/deployOperation"
+          }
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operations"
+      ],
+      "properties": {
+        "artifacts": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        },
+        "operations": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/releaseOperation"
+          }
+        }
+      }
+    },
     "artifact": {
       "description": "External-artifact record shape. Deterministic validation enforces these fields and their basic types; ND.artifact.identity-contract-fit reviews whether their detailed text is semantically accurate for the real artifact.",
       "type": "object",
@@ -91,7 +135,35 @@
         }
       }
     },
-    "operation": {
+    "deployOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "steps"
+          ]
+        },
+        {
+          "required": [
+            "handoff"
+          ]
+        }
+      ],
+      "properties": {
+        "parameters": {
+          "$ref": "#/$defs/parameters"
+        },
+        "steps": {
+          "$ref": "#/$defs/steps"
+        },
+        "handoff": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?/[a-z][a-z0-9-]*$"
+        }
+      }
+    },
+    "releaseOperation": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -99,20 +171,26 @@
       ],
       "properties": {
         "parameters": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9_]*$"
-          }
+          "$ref": "#/$defs/parameters"
         },
         "steps": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "$ref": "#/$defs/step"
-          }
+          "$ref": "#/$defs/steps"
         }
+      }
+    },
+    "parameters": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/step"
       }
     },
     "step": {

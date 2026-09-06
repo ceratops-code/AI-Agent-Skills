@@ -4,8 +4,8 @@
 When release has advanced, the helper may rebase a clean, unpublished,
 linear-history source in its existing worktree. Failed attempts restore and
 verify the exact source snapshot before blocking. Repository-specific
-validation or installation runs only through a named operation from
-``deploy/deploy.yml`` when explicitly selected. Composed shipping suppresses
+validation or installation runs only through a named deploy operation from
+``sdlc/sdlc.yml`` when explicitly selected. Composed shipping suppresses
 that promotion-time operation and delegates the exact promoted head to the
 sibling ship helper, which owns post-merge release publication, local
 deployment, and cleanup.
@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -33,7 +34,12 @@ PENDING_MANAGER = SCRIPT_ROOT / "manage-pending-work.py"
 DEPLOY_RUNNER = SCRIPT_ROOT / "run-deploy-operation.py"
 SHIP_REPOSITORY = SCRIPT_ROOT / "ship-repository.py"
 RELEASE_BRANCH = "release/local"
+DEFAULT_SDLC_CONTRACT = pathlib.Path("sdlc/sdlc.yml")
+DEFAULT_RELEASE_PREFLIGHT_OPERATIONS = ("preflight",)
+DEFAULT_RELEASE_OPERATIONS = ("publish",)
+DEFAULT_DEPLOY_OPERATIONS = ("deploy",)
 MANAGED_SKILLS_MANIFEST = pathlib.Path("skills/skill-sections.json")
+OPERATION_ID_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
 class PromotionError(RuntimeError):
@@ -464,6 +470,27 @@ def _has_managed_skills(repo_root: pathlib.Path) -> bool:
     return bool(manifest["skills"])
 
 
+def _operation_ids(
+    value: object,
+    default: tuple[str, ...],
+    label: str,
+) -> list[str]:
+    """Resolve and validate one explicit ordered selection or its default."""
+
+    selected = list(default) if value is None else value
+    if (
+        not isinstance(selected, list)
+        or not selected
+        or not all(
+            isinstance(operation, str)
+            and OPERATION_ID_RE.fullmatch(operation) is not None
+            for operation in selected
+        )
+    ):
+        raise PromotionError(f"{label} operations must be valid IDs.")
+    return list(selected)
+
+
 def _ship_after_promotion(
     args: argparse.Namespace,
     repo_root: pathlib.Path,
@@ -497,17 +524,37 @@ def _ship_after_promotion(
         "--commit",
         target_commit,
         "--reusable-head",
-        "--release-contract",
-        str(args.release_contract),
-        "--release-preflight-operation",
-        args.release_preflight_operation,
-        "--release-operation",
-        args.release_operation,
-        "--deploy-contract",
-        str(args.deploy_contract),
-        "--deploy-operation",
-        "deploy",
+        "--sdlc-contract",
+        str(args.sdlc_contract),
     ]
+    for flag, operations in (
+        (
+            "--release-preflight-operation",
+            _operation_ids(
+                args.release_preflight_operation,
+                DEFAULT_RELEASE_PREFLIGHT_OPERATIONS,
+                "Release preflight",
+            ),
+        ),
+        (
+            "--release-operation",
+            _operation_ids(
+                args.release_operation,
+                DEFAULT_RELEASE_OPERATIONS,
+                "Release publication",
+            ),
+        ),
+        (
+            "--deploy-operation",
+            _operation_ids(
+                args.deploy_operation,
+                DEFAULT_DEPLOY_OPERATIONS,
+                "Deployment",
+            ),
+        ),
+    ):
+        for operation in operations:
+            command.extend((flag, operation))
     ship_code, shipped = _run_json(command, repo_root)
     status = shipped.get("status")
     if ship_code == 0:
@@ -527,7 +574,7 @@ def _ship_after_promotion(
         return shipped
     if ship_code == 1:
         message = shipped.get("message")
-        if status not in {"blocked", "error"} or not isinstance(message, str):
+        if status not in {"blocked", "error", "operation_failed"} or not isinstance(message, str):
             raise PromotionError("Shipping returned an incomplete blocker.")
         raise PromotionError(message, shipped)
     raise PromotionError(f"Shipping returned unsupported exit code: {ship_code}")
@@ -543,6 +590,14 @@ def promote(args: argparse.Namespace) -> dict[str, object]:
         raise PromotionError("Repository root is not a directory.")
     branches = list(dict.fromkeys(args.source_branch or []))
     ship_after_promotion = bool(getattr(args, "ship_after_promotion", False))
+    shipping_operations_selected = any(
+        value is not None
+        for value in (
+            args.release_preflight_operation,
+            args.release_operation,
+            args.deploy_operation,
+        )
+    )
     if len(branches) != len(args.source_branch or []):
         raise PromotionError("Source branches must be unique.")
     if args.prepare_release_only:
@@ -551,6 +606,7 @@ def promote(args: argparse.Namespace) -> dict[str, object]:
             or args.run_operation is not None
             or args.no_run_operation
             or ship_after_promotion
+            or shipping_operations_selected
         ):
             raise PromotionError(
                 "Prepare-only cannot select source branches or deployment."
@@ -573,6 +629,10 @@ def promote(args: argparse.Namespace) -> dict[str, object]:
         ):
             raise PromotionError(
                 "Ship-after-promotion is mutually exclusive with operation flags."
+            )
+        if shipping_operations_selected and not ship_after_promotion:
+            raise PromotionError(
+                "Shipping operation selections require --ship-after-promotion."
             )
         if (
             args.run_operation is None
@@ -675,9 +735,9 @@ def promote(args: argparse.Namespace) -> dict[str, object]:
     if record_code:
         raise PromotionError(str(record.get("message", "Scope recording failed.")))
 
-    operation: dict[str, Any] | None = None
+    operations: dict[str, Any] | None = None
     managed_skills: bool | None = None
-    handoff: str | None = None
+    handoffs: list[dict[str, str]] = []
     if args.run_operation is not None:
         managed_skills = _has_managed_skills(repo_root)
         operation_command = [
@@ -686,20 +746,27 @@ def promote(args: argparse.Namespace) -> dict[str, object]:
             "--repo-root",
             str(repo_root),
             "--contract",
-            str(args.deploy_contract),
-            "--operation",
-            args.run_operation,
-            "--if-declared",
+            str(args.sdlc_contract),
         ]
-        operation_code, operation = _run_json(
+        for operation_id in args.run_operation:
+            operation_command.extend(("--operation", operation_id))
+        operation_code, operations = _run_json(
             operation_command,
             SCRIPT_ROOT,
         )
         if operation_code:
-            raise PromotionError(str(operation.get("message", "Deployment failed.")))
-        declared_handoff = operation.get("handoff")
-        if managed_skills and isinstance(declared_handoff, str):
-            handoff = declared_handoff
+            raise PromotionError(
+                str(operations.get("message", "Deployment failed.")),
+                operations,
+            )
+        if managed_skills:
+            for operation_result in operations.get("results", []):
+                declared_handoff = operation_result.get("handoff")
+                operation_id = operation_result.get("operation")
+                if isinstance(declared_handoff, str) and isinstance(operation_id, str):
+                    handoffs.append(
+                        {"operation": operation_id, "handoff": declared_handoff}
+                    )
 
     _clean(repo_root, "before reporting ready state")
     pending_work_scope = record["pending_work_scope"]
@@ -718,13 +785,13 @@ def promote(args: argparse.Namespace) -> dict[str, object]:
         "merged_branches": merged,
         "rebased_branches": rebased,
         "pending_work_scope": pending_work_scope,
-        "operation": operation,
+        "operations": operations,
     }
     if record.get("preserved_sources"):
         result["preserved_sources"] = record["preserved_sources"]
     if managed_skills is not None:
         result["managed_skills"] = managed_skills
-        result["handoff"] = handoff
+        result["handoffs"] = handoffs
     return result
 
 
@@ -749,7 +816,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Prepare the release branch from a clean main checkout and stop.",
     )
     operation = parser.add_mutually_exclusive_group()
-    operation.add_argument("--run-operation")
+    operation.add_argument(
+        "--run-operation",
+        action="append",
+        help="Deploy operation ID to run; repeat to preserve an explicit order.",
+    )
     operation.add_argument(
         "--no-run-operation",
         action="store_true",
@@ -764,16 +835,24 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--release-contract",
+        "--sdlc-contract",
         type=pathlib.Path,
-        default=pathlib.Path("release/release.yml"),
+        default=DEFAULT_SDLC_CONTRACT,
     )
-    parser.add_argument("--release-preflight-operation", default="preflight")
-    parser.add_argument("--release-operation", default="publish")
     parser.add_argument(
-        "--deploy-contract",
-        type=pathlib.Path,
-        default=pathlib.Path("deploy/deploy.yml"),
+        "--release-preflight-operation",
+        action="append",
+        help="Release preflight operation ID for composed shipping; repeat in order.",
+    )
+    parser.add_argument(
+        "--release-operation",
+        action="append",
+        help="Release publication operation ID for composed shipping; repeat in order.",
+    )
+    parser.add_argument(
+        "--deploy-operation",
+        action="append",
+        help="Deploy operation ID for composed shipping; repeat in order.",
     )
     return parser
 

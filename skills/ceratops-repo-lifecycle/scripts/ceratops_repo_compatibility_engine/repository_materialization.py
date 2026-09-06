@@ -24,11 +24,11 @@ from dataclasses import dataclass
 import yaml
 
 from .compatibility_check import check_repository
-from .deploy_contract_validation import DeployContractError, validation_errors
+from .sdlc_contract_validation import SdlcContractError, validation_errors
 
 BUNDLE_ROOT = pathlib.Path(__file__).resolve().parents[2]
 TEMPLATE = BUNDLE_ROOT / "references" / "templates" / "skill-sections-template.json"
-DEPLOY_TEMPLATE = BUNDLE_ROOT / "references" / "templates" / "deploy-template.yml"
+SDLC_TEMPLATE = BUNDLE_ROOT / "references" / "templates" / "sdlc-template.yml"
 SOURCE_REPO_ROOT = BUNDLE_ROOT.parents[1]
 SOURCE_CANONICAL_SECTIONS = SOURCE_REPO_ROOT / "skills" / "sections"
 INSTALLED_CANONICAL_SECTIONS = BUNDLE_ROOT / "skills" / "sections"
@@ -37,7 +37,7 @@ VALIDATOR_TEMPLATE = BUNDLE_ROOT / "references" / "templates" / "validate-reposi
 WORKFLOW_TEMPLATE = BUNDLE_ROOT / "references" / "templates" / "validate.yml.tmpl"
 MANIFEST_RELATIVE = pathlib.Path("skills/skill-sections.json")
 INSTALLER_RELATIVE = pathlib.Path("scripts/install-skills-bootstrap.py")
-DEPLOY_RELATIVE = pathlib.Path("deploy/deploy.yml")
+SDLC_RELATIVE = pathlib.Path("sdlc/sdlc.yml")
 VALIDATOR_RELATIVE = pathlib.Path("scripts/validate-repository.py")
 WORKFLOW_RELATIVE = pathlib.Path(".github/workflows/validate.yml")
 MANAGED_SKILL_HANDOFF = "ceratops-skill-lifecycle/deploy"
@@ -78,7 +78,7 @@ class MaterializationPlan:
     manifest: dict[str, object] | None
     skill_updates: dict[pathlib.Path, tuple[str, str]]
     canonical_sources: dict[str, pathlib.Path]
-    deploy_contract: dict[str, object] | None
+    sdlc_contract: dict[str, object] | None
     validator_text: str | None
     workflow_text: str | None
     validation_checks: list[str]
@@ -549,38 +549,43 @@ def validate_template(template: Mapping[str, object]) -> None:
         raise RuntimeError("skill-sections template is not repository-neutral")
 
 
-def build_deploy_contract_candidate(
+def build_sdlc_contract_candidate(
     repo_root: pathlib.Path,
     *,
     has_skills: bool,
     materialize: bool,
 ) -> dict[str, object] | None:
-    """Preserve operations and own default skill bootstrap and handoff entries."""
+    """Preserve the SDLC contract and own managed-skill deployment entries."""
 
     if not materialize:
         return None
-    reusable = load_yaml_mapping(DEPLOY_TEMPLATE)
+    reusable = load_yaml_mapping(SDLC_TEMPLATE)
     expected = {
         "version": 1,
-        "kind": "ceratops-deploy",
-        "operations": {},
+        "kind": "ceratops-sdlc",
+        "deploy": {"operations": {}},
     }
     if reusable != expected:
-        raise RuntimeError("deploy template is not the empty version 1 skeleton")
-    target = repo_root / DEPLOY_RELATIVE
+        raise RuntimeError("SDLC template is not the empty version 1 skeleton")
+    target = repo_root / SDLC_RELATIVE
     if not has_skills and not target.exists():
         return None
     contract = load_yaml_mapping(target) if target.is_file() else dict(reusable)
     if contract.get("version") != 1:
-        raise RuntimeError("existing deploy contract version must remain 1")
-    if contract.get("kind") != "ceratops-deploy":
-        raise RuntimeError("existing deploy contract kind must be ceratops-deploy")
-    operations = contract.get("operations")
+        raise RuntimeError("existing SDLC contract version must remain 1")
+    if contract.get("kind") != "ceratops-sdlc":
+        raise RuntimeError("existing SDLC contract kind must be ceratops-sdlc")
+    deploy = contract.get("deploy")
+    if deploy is None:
+        deploy = {"operations": {}}
+    if not isinstance(deploy, Mapping):
+        raise RuntimeError("existing SDLC deploy section must be an object")
+    operations = deploy.get("operations")
     if not isinstance(operations, Mapping) or not all(
         isinstance(name, str) and isinstance(operation, Mapping)
         for name, operation in operations.items()
     ):
-        raise RuntimeError("existing deploy contract operations must be objects")
+        raise RuntimeError("existing SDLC deploy operations must be objects")
     updated_operations = dict(operations)
     if has_skills:
         existing_deploy = updated_operations.get("deploy")
@@ -612,17 +617,15 @@ def build_deploy_contract_candidate(
                 updated_operations["deploy"] = updated_deploy
             else:
                 updated_operations.pop("deploy")
-    candidate = {
-        "version": 1,
-        "kind": "ceratops-deploy",
-        "operations": updated_operations,
-    }
+    candidate = dict(contract)
+    if has_skills or "deploy" in contract:
+        candidate["deploy"] = {"operations": updated_operations}
     try:
         errors = validation_errors(candidate)
-    except DeployContractError as exc:
+    except SdlcContractError as exc:
         raise RuntimeError(str(exc)) from exc
     if errors:
-        raise RuntimeError(f"invalid deploy contract: {errors[0]}")
+        raise RuntimeError(f"invalid SDLC contract: {errors[0]}")
     return candidate
 
 
@@ -774,7 +777,7 @@ def plan_materialization(
     template: Mapping[str, object],
     existing: Mapping[str, object],
     *,
-    materialize_deploy: bool,
+    materialize_sdlc: bool,
 ) -> MaterializationPlan:
     """Validate target evidence and compose writes without changing files."""
 
@@ -911,10 +914,10 @@ def plan_materialization(
         manifest=manifest,
         skill_updates=skill_updates,
         canonical_sources=canonical_sources,
-        deploy_contract=build_deploy_contract_candidate(
+        sdlc_contract=build_sdlc_contract_candidate(
             repo_root,
             has_skills=bool(skill_names),
-            materialize=materialize_deploy,
+            materialize=materialize_sdlc,
         ),
         validator_text=validator_text,
         workflow_text=workflow_text,
@@ -958,12 +961,12 @@ def apply_materialization(
             encoding="utf-8",
             newline="\n",
         )
-    if plan.deploy_contract is not None:
-        deploy_path = repo_root / DEPLOY_RELATIVE
-        deploy_path.parent.mkdir(parents=True, exist_ok=True)
-        deploy_path.write_text(
+    if plan.sdlc_contract is not None:
+        sdlc_path = repo_root / SDLC_RELATIVE
+        sdlc_path.parent.mkdir(parents=True, exist_ok=True)
+        sdlc_path.write_text(
             yaml.dump(
-                plan.deploy_contract,
+                plan.sdlc_contract,
                 Dumper=IndentedSafeDumper,
                 sort_keys=False,
             ),
@@ -997,9 +1000,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--target-repo-root", required=True, type=pathlib.Path)
     parser.add_argument("--runtime-source-id")
     parser.add_argument(
-        "--no-deploy-contract",
+        "--no-sdlc-contract",
         action="store_true",
-        help="Leave deploy/deploy.yml absent or unchanged.",
+        help="Leave sdlc/sdlc.yml absent or unchanged.",
     )
     args = parser.parse_args(argv)
     repo_root = args.target_repo_root.resolve()
@@ -1026,7 +1029,7 @@ def main(argv: list[str] | None = None) -> int:
             source_id,
             template,
             existing,
-            materialize_deploy=not args.no_deploy_contract,
+            materialize_sdlc=not args.no_sdlc_contract,
         )
         skill_paths = sorted((repo_root / "skills").glob("*/SKILL.md"))
         mutable_paths = [*skill_paths, existing_path]
@@ -1036,8 +1039,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         if plan.skills:
             mutable_paths.append(repo_root / INSTALLER_RELATIVE)
-        if plan.deploy_contract is not None:
-            mutable_paths.append(repo_root / DEPLOY_RELATIVE)
+        if plan.sdlc_contract is not None:
+            mutable_paths.append(repo_root / SDLC_RELATIVE)
         if plan.validator_text is not None:
             mutable_paths.append(repo_root / VALIDATOR_RELATIVE)
         if plan.workflow_text is not None:
@@ -1049,7 +1052,7 @@ def main(argv: list[str] | None = None) -> int:
                 repo_root / "skills",
                 repo_root / "skills" / "sections",
                 repo_root / "scripts",
-                repo_root / "deploy",
+                repo_root / "sdlc",
                 repo_root / ".github",
                 repo_root / ".github" / "workflows",
             )
@@ -1063,8 +1066,8 @@ def main(argv: list[str] | None = None) -> int:
                 or plan.validator_text is not None
             )
             and (
-                path.name not in {"deploy"}
-                or plan.deploy_contract is not None
+                path.name not in {"sdlc"}
+                or plan.sdlc_contract is not None
             )
             and (
                 path.name not in {".github", "workflows"}
@@ -1124,11 +1127,11 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(
             {
                 "bootstrap": bootstrap_status,
-                "deploy_contract": (
+                "sdlc_contract": (
                     "materialized"
-                    if plan.deploy_contract is not None
+                    if plan.sdlc_contract is not None
                     else "not_configured"
-                    if not (repo_root / DEPLOY_RELATIVE).exists()
+                    if not (repo_root / SDLC_RELATIVE).exists()
                     else "unchanged"
                 ),
                 "repository_validation": {

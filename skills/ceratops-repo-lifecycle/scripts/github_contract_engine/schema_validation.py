@@ -40,8 +40,7 @@ SCHEMA_ASSIGNMENTS = {
     SCHEMAS / "github-contract-source-docs.schema.json": (
         CONTRACTS / "github-contract-source-docs.json",
     ),
-    SCHEMAS / "deploy.yml.schema.json": (),
-    SCHEMAS / "release.yml.schema.json": (),
+    SCHEMAS / "sdlc.yml.schema.json": (),
 }
 
 

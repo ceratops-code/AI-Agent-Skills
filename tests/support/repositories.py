@@ -20,48 +20,34 @@ def run_git(repo: pathlib.Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def write_deploy_contract(
+def write_sdlc_contract(
     repo: pathlib.Path,
-    operations: dict[str, object],
+    *,
+    deploy_operations: dict[str, object] | None = None,
+    release_operations: dict[str, object] | None = None,
+    artifacts: list[dict[str, object]] | None = None,
 ) -> pathlib.Path:
-    """Write one JSON-compatible YAML deployment contract."""
+    """Write or extend one JSON-compatible unified SDLC contract."""
 
-    contract = repo / "deploy" / "deploy.yml"
+    contract = repo / "sdlc" / "sdlc.yml"
     contract.parent.mkdir(parents=True, exist_ok=True)
+    document: dict[str, object] = {
+        "version": 1,
+        "kind": "ceratops-sdlc",
+    }
+    if contract.exists():
+        document = json.loads(contract.read_text(encoding="utf-8"))
+    if deploy_operations is not None:
+        document["deploy"] = {"operations": deploy_operations}
+    if release_operations is not None or artifacts is not None:
+        release = document.setdefault("release", {})
+        assert isinstance(release, dict)
+        if release_operations is not None:
+            release["operations"] = release_operations
+        if artifacts is not None:
+            release["artifacts"] = artifacts
     contract.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "kind": "ceratops-deploy",
-                "operations": operations,
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    return contract
-
-
-def write_release_contract(
-    repo: pathlib.Path,
-    operations: dict[str, object],
-) -> pathlib.Path:
-    """Write one JSON-compatible YAML release-publication contract."""
-
-    contract = repo / "release" / "release.yml"
-    contract.parent.mkdir(parents=True, exist_ok=True)
-    contract.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "kind": "ceratops-release",
-                "operations": operations,
-            },
-            indent=2,
-        )
-        + "\n",
+        json.dumps(document, indent=2) + "\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -125,9 +111,9 @@ def create_compatible_repo(repo: pathlib.Path, source_id: str, skill_names: list
         ROOT / "skills" / "sections" / "core.md",
         repo / "skills" / "sections" / "core.md",
     )
-    write_deploy_contract(
+    write_sdlc_contract(
         repo,
-        {
+        deploy_operations={
             "deploy": {
                 "handoff": "ceratops-skill-lifecycle/deploy",
             },

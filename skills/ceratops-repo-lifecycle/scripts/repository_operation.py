@@ -1,10 +1,10 @@
-"""Execute one schema-validated repository-owned operation without a shell.
+"""Prepare and execute schema-validated repository operations without a shell.
 
-Release publication and local deployment use separate contracts and wrappers,
-but share the safety mechanics here: exact argv arrays, strict parameters,
-repository-bounded working directories, compact results, and bounded failure
-evidence. Callers supply the contract identity and success status so this
-module never conflates remote publication with local deployment.
+Release publication and local deployment select separate sections of one
+repository-owned ``sdlc/sdlc.yml`` while sharing exact argv handling, strict
+parameters, repository-bounded working directories, compact results, and
+bounded structured failure evidence. The executor does not infer lifecycle
+timing or whether an operation is a check or a side effect.
 """
 
 from __future__ import annotations
@@ -19,24 +19,59 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
-from ceratops_repo_compatibility_engine.deploy_contract_validation import (
-    DeployContractError,
+from ceratops_repo_compatibility_engine.sdlc_contract_validation import (
+    SdlcContractError,
     load_contract,
 )
 
 PARAMETER_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 PLACEHOLDER_RE = re.compile(r"^\{(?P<name>[a-z][a-z0-9_]*)\}$")
+FAILURE_TAIL_LINES = 8
+FAILURE_TAIL_CHARS = 4096
 
 
 @dataclass(frozen=True)
 class OperationProfile:
-    """Describe one contract type without weakening shared execution rules."""
+    """Describe one contract section without weakening shared execution rules."""
 
     label: str
+    section: str
     default_contract: pathlib.Path
     schema: pathlib.Path
     default_success_status: str
     operation_statuses: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class OperationRequest:
+    """Select one operation and its exact parameter policy for preparation."""
+
+    operation: str
+    parameters: Mapping[str, str] | None = None
+    parameters_if_declared: Mapping[str, str] | None = None
+    if_declared: bool = False
+
+
+@dataclass(frozen=True)
+class PreparedStep:
+    """One repository-bounded command ready for shell-free execution."""
+
+    step_id: str
+    argv: tuple[str, ...]
+    cwd: pathlib.Path
+
+
+@dataclass(frozen=True)
+class PreparedOperation:
+    """One fully validated operation whose commands have not executed."""
+
+    repo_root: pathlib.Path
+    operation: str
+    label: str
+    success_status: str
+    steps: tuple[PreparedStep, ...]
+    handoff: str | None
+    no_op_reason: str | None = None
 
 
 class OperationError(RuntimeError):
@@ -65,18 +100,29 @@ def _read_contract(
         )
     try:
         return load_contract(resolved, schema_path=profile.schema)
-    except DeployContractError as exc:
+    except SdlcContractError as exc:
         raise OperationError(
             f"Invalid {profile.label.lower()} contract: {exc}"
         ) from exc
 
 
+def _contract_section(
+    contract: Mapping[str, Any], profile: OperationProfile
+) -> Mapping[str, Any] | None:
+    selected = contract.get(profile.section)
+    if selected is None:
+        return None
+    if not isinstance(selected, Mapping):
+        raise OperationError(f"{profile.label} contract section is invalid.")
+    return selected
+
+
 def _operation_steps(
-    contract: Mapping[str, Any],
+    section: Mapping[str, Any],
     operation: str,
     profile: OperationProfile,
 ) -> tuple[Mapping[str, Any], Sequence[Mapping[str, Any]]]:
-    operations = contract.get("operations")
+    operations = section.get("operations")
     if not isinstance(operations, Mapping) or operation not in operations:
         raise OperationError(f"{profile.label} operation is not declared: {operation}")
     selected = operations[operation]
@@ -150,9 +196,246 @@ def _working_directory(
     return cwd
 
 
-def _failure_tail(result: subprocess.CompletedProcess[str]) -> str:
-    output = (result.stderr or result.stdout or "").splitlines()
-    return "\n".join(output[-8:])
+def _repository_commit(repo_root: pathlib.Path) -> str | None:
+    """Return the exact current commit when the operation root is a Git worktree."""
+
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    value = result.stdout.strip()
+    return value if result.returncode == 0 and value else None
+
+
+def _bounded_tail(value: str | None) -> list[str]:
+    """Retain only the final bounded lines of one captured stream."""
+
+    return (value or "")[-FAILURE_TAIL_CHARS:].splitlines()[-FAILURE_TAIL_LINES:]
+
+
+def _supplied_parameters(
+    selected: Mapping[str, Any],
+    request: OperationRequest,
+    profile: OperationProfile,
+) -> dict[str, str]:
+    expected = selected.get("parameters", [])
+    if (
+        not isinstance(expected, Sequence)
+        or isinstance(expected, (str, bytes))
+        or not all(isinstance(value, str) for value in expected)
+    ):
+        raise OperationError(
+            f"{profile.label} operation has invalid parameters: {request.operation}"
+        )
+    declared = set(expected)
+    supplied = dict(request.parameters or {})
+    conditional = dict(request.parameters_if_declared or {})
+    duplicated = sorted(set(supplied) & set(conditional))
+    if duplicated:
+        raise OperationError(
+            f"{profile.label} parameter supplied more than once: "
+            + ", ".join(duplicated)
+        )
+    supplied.update(
+        (name, value) for name, value in conditional.items() if name in declared
+    )
+    missing = sorted(declared - set(supplied))
+    extra = sorted(set(request.parameters or {}) - declared)
+    if missing or extra:
+        detail = []
+        if missing:
+            detail.append("missing " + ", ".join(missing))
+        if extra:
+            detail.append("unexpected " + ", ".join(extra))
+        raise OperationError(
+            f"{profile.label} parameter mismatch: " + "; ".join(detail)
+        )
+    return supplied
+
+
+def _no_op(
+    repo_root: pathlib.Path,
+    request: OperationRequest,
+    profile: OperationProfile,
+    reason: str,
+) -> PreparedOperation:
+    return PreparedOperation(
+        repo_root=repo_root,
+        operation=request.operation,
+        label=profile.label,
+        success_status=profile.operation_statuses.get(
+            request.operation, profile.default_success_status
+        ),
+        steps=(),
+        handoff=None,
+        no_op_reason=reason,
+    )
+
+
+def prepare_operations(
+    repo_root: pathlib.Path,
+    requests: Sequence[OperationRequest],
+    profile: OperationProfile,
+    contract_path: pathlib.Path | None = None,
+) -> list[PreparedOperation]:
+    """Validate an ordered operation sequence completely before any command runs."""
+
+    if not requests:
+        raise OperationError("At least one operation request is required.")
+    root = repo_root.expanduser().resolve(strict=True)
+    if not root.is_dir():
+        raise OperationError("Repository root is not a directory.")
+    contract = _read_contract(root, contract_path or profile.default_contract, profile)
+    section = _contract_section(contract, profile)
+    if section is None:
+        return [
+            _no_op(root, request, profile, "contract_section_not_declared")
+            for request in requests
+        ]
+    operations = section.get("operations")
+    prepared_operations: list[PreparedOperation] = []
+    for request in requests:
+        if (
+            request.if_declared
+            and isinstance(operations, Mapping)
+            and request.operation not in operations
+        ):
+            prepared_operations.append(
+                _no_op(root, request, profile, "operation_not_declared")
+            )
+            continue
+        selected, steps = _operation_steps(section, request.operation, profile)
+        supplied = _supplied_parameters(selected, request, profile)
+        prepared_steps: list[PreparedStep] = []
+        for step in steps:
+            step_id = step.get("id")
+            argv = step.get("run")
+            if (
+                not isinstance(step_id, str)
+                or not isinstance(argv, Sequence)
+                or isinstance(argv, (str, bytes))
+                or not all(isinstance(value, str) and value for value in argv)
+            ):
+                raise OperationError(
+                    f"{profile.label} operation has an invalid step: "
+                    f"{request.operation}"
+                )
+            prepared_steps.append(
+                PreparedStep(
+                    step_id=step_id,
+                    argv=tuple(
+                        _expanded_argv(cast(Sequence[str], argv), supplied, profile)
+                    ),
+                    cwd=_working_directory(root, step, profile),
+                )
+            )
+        handoff = selected.get("handoff")
+        prepared_operations.append(
+            PreparedOperation(
+                repo_root=root,
+                operation=request.operation,
+                label=profile.label,
+                success_status=profile.operation_statuses.get(
+                    request.operation, profile.default_success_status
+                ),
+                steps=tuple(prepared_steps),
+                handoff=handoff if isinstance(handoff, str) else None,
+            )
+        )
+    return prepared_operations
+
+
+def execute_prepared_operation(prepared: PreparedOperation) -> dict[str, object]:
+    """Execute one validated operation and return compact structured evidence."""
+
+    if prepared.no_op_reason is not None:
+        return {
+            "status": "no_op",
+            "operation": prepared.operation,
+            "steps": [],
+            "reason": prepared.no_op_reason,
+        }
+    commit = _repository_commit(prepared.repo_root)
+    completed: list[str] = []
+    for step in prepared.steps:
+        try:
+            result = subprocess.run(
+                list(step.argv),
+                cwd=step.cwd,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError as exc:
+            return {
+                "status": "operation_failed",
+                "message": f"{prepared.label} step could not start: {step.step_id}",
+                "operation": prepared.operation,
+                "commit": commit,
+                "steps": completed,
+                "failed_step": step.step_id,
+                "diagnostic": {
+                    "exit_code": None,
+                    "stdout_tail": [],
+                    "stderr_tail": _bounded_tail(str(exc)),
+                },
+            }
+        if result.returncode != 0:
+            return {
+                "status": "operation_failed",
+                "message": f"{prepared.label} step failed: {step.step_id}",
+                "operation": prepared.operation,
+                "commit": commit,
+                "steps": completed,
+                "failed_step": step.step_id,
+                "diagnostic": {
+                    "exit_code": result.returncode,
+                    "stdout_tail": _bounded_tail(result.stdout),
+                    "stderr_tail": _bounded_tail(result.stderr),
+                },
+            }
+        completed.append(step.step_id)
+
+    operation_result: dict[str, object] = {
+        "status": prepared.success_status,
+        "operation": prepared.operation,
+        "commit": commit,
+        "steps": completed,
+    }
+    if prepared.handoff is not None:
+        operation_result["handoff"] = prepared.handoff
+    return operation_result
+
+
+def execute_prepared_operations(
+    prepared: Sequence[PreparedOperation],
+) -> dict[str, object]:
+    """Execute an ordered prepared sequence and stop with a completed/pending ledger."""
+
+    completed: list[str] = []
+    results: list[dict[str, object]] = []
+    for index, operation in enumerate(prepared):
+        result = execute_prepared_operation(operation)
+        results.append(result)
+        if result.get("status") == "operation_failed":
+            return {
+                **result,
+                "status": "operation_failed",
+                "completed_operations": completed,
+                "pending_operations": [
+                    item.operation for item in prepared[index:]
+                ],
+                "results": results,
+            }
+        completed.append(operation.operation)
+    return {
+        "status": "completed",
+        "completed_operations": completed,
+        "pending_operations": [],
+        "results": results,
+    }
 
 
 def run_operation(
@@ -165,134 +448,54 @@ def run_operation(
     *,
     if_declared: bool = False,
 ) -> dict[str, object]:
-    """Run one declared operation and return its contract-specific result."""
+    """Prepare and run one declared operation through the shared executor."""
 
-    root = repo_root.expanduser().resolve(strict=True)
-    if not root.is_dir():
-        raise OperationError("Repository root is not a directory.")
-    selected_contract = contract_path or profile.default_contract
-    contract = _read_contract(root, selected_contract, profile)
-    operations = contract.get("operations")
-    if (
-        if_declared
-        and isinstance(operations, Mapping)
-        and operation not in operations
-    ):
-        return {
-            "status": "no_op",
-            "operation": operation,
-            "steps": [],
-            "reason": "operation_not_declared",
-        }
-    selected, steps = _operation_steps(contract, operation, profile)
-    expected = selected.get("parameters", [])
-    if (
-        not isinstance(expected, Sequence)
-        or isinstance(expected, (str, bytes))
-        or not all(isinstance(value, str) for value in expected)
-    ):
-        raise OperationError(
-            f"{profile.label} operation has invalid parameters: {operation}"
-        )
-    declared = set(expected)
-    supplied = dict(parameters or {})
-    conditional = dict(parameters_if_declared or {})
-    duplicated = sorted(set(supplied) & set(conditional))
-    if duplicated:
-        raise OperationError(
-            f"{profile.label} parameter supplied more than once: "
-            + ", ".join(duplicated)
-        )
-    supplied.update(
-        (name, value) for name, value in conditional.items() if name in declared
+    prepared = prepare_operations(
+        repo_root,
+        [
+            OperationRequest(
+                operation=operation,
+                parameters=parameters,
+                parameters_if_declared=parameters_if_declared,
+                if_declared=if_declared,
+            )
+        ],
+        profile,
+        contract_path,
     )
-    missing = sorted(declared - set(supplied))
-    extra = sorted(set(parameters or {}) - declared)
-    if missing or extra:
-        detail = []
-        if missing:
-            detail.append("missing " + ", ".join(missing))
-        if extra:
-            detail.append("unexpected " + ", ".join(extra))
-        raise OperationError(
-            f"{profile.label} parameter mismatch: " + "; ".join(detail)
-        )
-
-    prepared: list[tuple[str, list[str], pathlib.Path]] = []
-    for step in steps:
-        step_id = step.get("id")
-        argv = step.get("run")
-        if (
-            not isinstance(step_id, str)
-            or not isinstance(argv, Sequence)
-            or isinstance(argv, (str, bytes))
-            or not all(isinstance(value, str) and value for value in argv)
-        ):
-            raise OperationError(
-                f"{profile.label} operation has an invalid step: {operation}"
-            )
-        prepared.append(
-            (
-                step_id,
-                _expanded_argv(cast(Sequence[str], argv), supplied, profile),
-                _working_directory(root, step, profile),
-            )
-        )
-
-    completed: list[str] = []
-    for step_id, argv, working_directory in prepared:
-        try:
-            completed_process = subprocess.run(
-                argv,
-                cwd=working_directory,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-        except OSError as exc:
-            raise OperationError(
-                f"{profile.label} step could not start: {step_id}: {exc}"
-            ) from exc
-        if completed_process.returncode != 0:
-            tail = _failure_tail(completed_process)
-            suffix = f"\n{tail}" if tail else ""
-            raise OperationError(
-                f"{profile.label} step failed: {step_id}{suffix}"
-            )
-        completed.append(step_id)
-
-    result: dict[str, object] = {
-        "status": profile.operation_statuses.get(
-            operation, profile.default_success_status
-        ),
-        "operation": operation,
-        "steps": completed,
-    }
-    handoff = selected.get("handoff")
-    if isinstance(handoff, str):
-        result["handoff"] = handoff
-    return result
+    return execute_prepared_operation(prepared[0])
 
 
 def build_parser(profile: OperationProfile) -> argparse.ArgumentParser:
-    """Create the parser for one contract-specific executable wrapper."""
+    """Create the parser for one contract-section-specific executable wrapper."""
 
     parser = argparse.ArgumentParser(
         description=(
-            f"Execute one operation from {profile.default_contract.as_posix()}."
+            f"Execute ordered {profile.section} operations from "
+            f"{profile.default_contract.as_posix()}."
         )
     )
     parser.add_argument("--repo-root", type=pathlib.Path, default=pathlib.Path.cwd())
     parser.add_argument(
         "--contract", type=pathlib.Path, default=profile.default_contract
     )
-    parser.add_argument("--operation", required=True)
+    parser.add_argument(
+        "--operation",
+        action="append",
+        required=True,
+        help="Operation ID; repeat to preserve an explicit execution order.",
+    )
     parser.add_argument("--parameter", action="append", default=[])
     parser.add_argument("--parameter-if-declared", action="append", default=[])
     parser.add_argument(
         "--if-declared",
         action="store_true",
         help="Return an explicit no-op when the selected operation is absent.",
+    )
+    parser.add_argument(
+        "--prepare-only",
+        action="store_true",
+        help="Validate every selected operation without executing commands.",
     )
     return parser
 
@@ -305,14 +508,31 @@ def operation_main(
 
     args = build_parser(profile).parse_args(argv)
     try:
-        result = run_operation(
+        parameters = parse_parameters(args.parameter, profile)
+        conditional_parameters = parse_parameters(
+            args.parameter_if_declared, profile
+        )
+        prepared = prepare_operations(
             args.repo_root,
-            args.operation,
+            [
+                OperationRequest(
+                    operation=operation,
+                    parameters=parameters,
+                    parameters_if_declared=conditional_parameters,
+                    if_declared=args.if_declared,
+                )
+                for operation in args.operation
+            ],
             profile,
             args.contract,
-            parse_parameters(args.parameter, profile),
-            parse_parameters(args.parameter_if_declared, profile),
-            if_declared=args.if_declared,
+        )
+        result = (
+            {
+                "status": "prepared",
+                "operations": [operation.operation for operation in prepared],
+            }
+            if args.prepare_only
+            else execute_prepared_operations(prepared)
         )
     except (OperationError, OSError, ValueError) as exc:
         print(
@@ -323,5 +543,6 @@ def operation_main(
             file=sys.stderr,
         )
         return 1
-    print(json.dumps(result, separators=(",", ":")))
-    return 0
+    stream = sys.stderr if result.get("status") == "operation_failed" else sys.stdout
+    print(json.dumps(result, separators=(",", ":")), file=stream)
+    return 1 if result.get("status") == "operation_failed" else 0

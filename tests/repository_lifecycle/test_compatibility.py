@@ -18,6 +18,7 @@ from tests.support.processes import COMPATIBILITY_ENGINE, run_compatibility_engi
 from tests.support.repositories import (
     ROOT,
     create_compatible_repo,
+    write_sdlc_contract,
 )
 
 
@@ -26,6 +27,14 @@ def test_compatibility_materializer_supplies_target_identity_and_assignments(
 ) -> None:
     repo = tmp_path / "compatible"
     create_compatible_repo(repo, "stale/source", ["alpha-tool", "beta-tool"])
+    write_sdlc_contract(
+        repo,
+        release_operations={
+            "publish": {
+                "steps": [{"id": "publish", "run": [sys.executable, "-V"]}]
+            }
+        },
+    )
     (repo / ".git").write_text("gitdir: test\n", encoding="utf-8", newline="\n")
     shutil.rmtree(repo / "skills" / "sections")
     (repo / "skills" / "skill-sections.json").unlink()
@@ -93,19 +102,24 @@ def test_compatibility_materializer_supplies_target_identity_and_assignments(
     ).read_bytes()
     assert "SECTION SOURCE: skills/sections/" not in beta.read_text(encoding="utf-8")
     contract = yaml.safe_load(
-        (repo / "deploy" / "deploy.yml").read_text(encoding="utf-8")
+        (repo / "sdlc" / "sdlc.yml").read_text(encoding="utf-8")
     )
-    assert contract["kind"] == "ceratops-deploy"
-    assert contract["operations"]["deploy"] == {
+    assert contract["kind"] == "ceratops-sdlc"
+    assert contract["deploy"]["operations"]["deploy"] == {
         "handoff": "ceratops-skill-lifecycle/deploy"
     }
-    assert contract["operations"]["bootstrap"] == {
+    assert contract["deploy"]["operations"]["bootstrap"] == {
         "steps": [
             {
                 "id": "bootstrap-skills",
                 "run": ["python", "scripts/install-skills-bootstrap.py"],
             }
         ]
+    }
+    assert contract["release"]["operations"] == {
+        "publish": {
+            "steps": [{"id": "publish", "run": [sys.executable, "-V"]}]
+        }
     }
     assert (repo / "scripts" / "install-skills-bootstrap.py").is_file()
     assert (repo / "scripts" / "validate-repository.py").is_file()
@@ -244,11 +258,11 @@ def test_compatibility_materializer_supports_repositories_without_skills(
     assert result.returncode == 0, result.stdout
     output = json.loads(result.stdout)
     assert output["bootstrap"] == "skipped"
-    assert output["deploy_contract"] == "not_configured"
+    assert output["sdlc_contract"] == "not_configured"
     assert output["runtime_source_id"] is None
     assert output["skill_manifest"] == "not_configured"
     assert not (repo / "skills").exists()
-    assert not (repo / "deploy").exists()
+    assert not (repo / "sdlc").exists()
     assert not (repo / "scripts" / "install-skills-bootstrap.py").exists()
     assert output["repository_validation"] == {
         "checks": ["npm-lint", "unittest"],
@@ -281,17 +295,17 @@ def test_compatibility_materializer_supports_repositories_without_skills(
     assert not validation_temporary.exists()
     assert not list(repo.rglob("__pycache__"))
 
-    omitted = tmp_path / "empty-without-deploy"
+    omitted = tmp_path / "empty-without-sdlc"
     shutil.copytree(repo, omitted)
     omitted_result = run_compatibility_engine(
         engine_scripts,
         "materialize",
         "--target-repo-root",
         str(omitted),
-        "--no-deploy-contract",
+        "--no-sdlc-contract",
     )
     assert omitted_result.returncode == 0, omitted_result.stdout
-    assert not (omitted / "deploy" / "deploy.yml").exists()
+    assert not (omitted / "sdlc" / "sdlc.yml").exists()
     assert json.loads(omitted_result.stdout)["repository_validation"] == {
         "checks": [],
         "validator": "preserved",
@@ -687,7 +701,7 @@ def test_compatibility_materializer_rolls_back_every_target_write_on_blocker(
         repo / "skills" / "sections" / "core.md",
         repo / "skills" / "skill-sections.json",
         repo / "scripts" / "install-skills-bootstrap.py",
-        repo / "deploy" / "deploy.yml",
+        repo / "sdlc" / "sdlc.yml",
     )
     original = {path: path.read_bytes() for path in changed_paths}
 
@@ -727,7 +741,7 @@ def test_compatibility_materializer_blocks_invalid_assignments_before_writes(
         repo / "skills" / "sections" / "core.md",
         manifest_path,
         repo / "scripts" / "install-skills-bootstrap.py",
-        repo / "deploy" / "deploy.yml",
+        repo / "sdlc" / "sdlc.yml",
     )
     original = {
         path: (path.read_bytes(), path.stat().st_mtime_ns)

@@ -11,13 +11,13 @@ from typing import Any
 
 import pytest
 
-from tests.support.repositories import ROOT, run_git, write_deploy_contract
+from tests.support.repositories import ROOT, run_git, write_sdlc_contract
 
 REPOSITORY_LIFECYCLE_SOURCE = ROOT / "skills" / "ceratops-repo-lifecycle"
 REPOSITORY_LIFECYCLE_SCRIPTS = REPOSITORY_LIFECYCLE_SOURCE / "scripts"
 if str(REPOSITORY_LIFECYCLE_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_LIFECYCLE_SCRIPTS))
-DEPLOY_CONTRACT_TEMPLATE = REPOSITORY_LIFECYCLE_SOURCE / "references" / "templates" / "deploy-template.yml"
+SDLC_CONTRACT_TEMPLATE = REPOSITORY_LIFECYCLE_SOURCE / "references" / "templates" / "sdlc-template.yml"
 SECTION_MANIFEST_TEMPLATE = REPOSITORY_LIFECYCLE_SOURCE / "references" / "templates" / "skill-sections-template.json"
 DEPLOY_OPERATION = REPOSITORY_LIFECYCLE_SOURCE / "scripts" / "run-deploy-operation.py"
 RELEASE_OPERATION = REPOSITORY_LIFECYCLE_SOURCE / "scripts" / "run-release-operation.py"
@@ -69,23 +69,26 @@ def merged_pr_state(head: str) -> str:
 
 def run_deploy_operation(
     repo: pathlib.Path,
-    operation: str,
+    operation: str | tuple[str, ...],
     *,
     contract: pathlib.Path | None = None,
     parameters: tuple[str, ...] = (),
     parameters_if_declared: tuple[str, ...] = (),
     if_declared: bool = False,
+    prepare_only: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    """Run one isolated deployment operation."""
+    """Run an isolated ordered deployment selection."""
 
     command = [
         sys.executable,
         str(DEPLOY_OPERATION),
         "--repo-root",
         str(repo),
-        "--operation",
-        operation,
     ]
+    for operation_id in (
+        (operation,) if isinstance(operation, str) else operation
+    ):
+        command.extend(("--operation", operation_id))
     if contract is not None:
         command.extend(("--contract", str(contract)))
     for parameter in parameters:
@@ -94,6 +97,8 @@ def run_deploy_operation(
         command.extend(("--parameter-if-declared", parameter))
     if if_declared:
         command.append("--if-declared")
+    if prepare_only:
+        command.append("--prepare-only")
     return subprocess.run(
         command,
         capture_output=True,
@@ -104,20 +109,22 @@ def run_deploy_operation(
 
 def run_release_operation(
     repo: pathlib.Path,
-    operation: str,
+    operation: str | tuple[str, ...],
     *,
     contract: pathlib.Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run one isolated release-publication operation."""
+    """Run an isolated ordered release-publication selection."""
 
     command = [
         sys.executable,
         str(RELEASE_OPERATION),
         "--repo-root",
         str(repo),
-        "--operation",
-        operation,
     ]
+    for operation_id in (
+        (operation,) if isinstance(operation, str) else operation
+    ):
+        command.extend(("--operation", operation_id))
     if contract is not None:
         command.extend(("--contract", str(contract)))
     return subprocess.run(
@@ -170,9 +177,9 @@ def prepare_repository_lifecycle_repo(
         operation["parameters"] = ["base_revision"]
     if handoff is not None:
         operation["handoff"] = handoff
-    write_deploy_contract(
+    write_sdlc_contract(
         repo,
-        {"deploy": operation},
+        deploy_operations={"deploy": operation},
     )
     if managed_skills:
         (repo / "skills").mkdir()
