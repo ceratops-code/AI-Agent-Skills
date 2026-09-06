@@ -91,20 +91,20 @@ applies them.
   and does not veto an independent finding carried by the same candidate. Route
   every retained Luna candidate exactly once to its preassigned reviewer. Apply
   the unassessed-call ceiling only to the aggregate routed call set. When that
-  aggregate exceeds the ceiling and one Sol slot remains, use it to review only
+  aggregate exceeds the ceiling and both Sol limits permit, review only
   the unassessed calls with their complete run-part context and replace those
   classifications; prioritize this recovery over optional direct-evidence
   review. After the parallel reviewers and any recovery or direct-evidence
   review finish, run one dependent final Sol to merge their compact judgments,
   produce the report, and deeply verify the top three deduplicated owner/control
   findings against exact evidence. Each rejected Sol task receives one automatic
-  corrective retry when the eight-attempt ceiling permits. After a non-final
+  corrective retry when the sixteen-attempt ceiling permits. After a non-final
   task fails validation twice, retain its exact unreviewed candidate, call, and
   byte inventory, exclude that inventory from final transport, and continue to
-  the final merger. Use no more than eight Sol
-  calls total, counting every attempt. The final Sol does not re-adjudicate
-  every
-  candidate or receive the complete source tree.
+  the final merger. Plan at most eight Sol calls, excluding retries and
+  corrective attempts; allow at most sixteen actual Sol invocations including
+  initial calls, retries, and corrective attempts. The final Sol does not
+  re-adjudicate every candidate or receive the complete source tree.
 - Restore canonical identifiers and derive nonsemantic summaries, ordering,
   surfaces, workstreams, repeated evidence, and savings arithmetic in code. Sol
   adjudicators merge overlaps and temporary controls, apply recurrence and ROI
@@ -117,8 +117,9 @@ applies them.
   identity, record count, input bytes, candidate count, and output bytes.
   Continue
   with every admitted part and never imply that the unreviewed remainder was
-  semantically reviewed. When eight Sol calls cannot preserve all accepted Luna
-  findings, retain the exact candidate and byte inventory of the unreviewed
+  semantically reviewed. When eight planned Sol calls cannot preserve all
+  accepted
+  Luna findings, retain the exact candidate and byte inventory of the unreviewed
   overflow.
 - Keep session evidence, accepted surface results, the append-only index, and
   the final machine result at their controller-retained paths. Do not echo raw

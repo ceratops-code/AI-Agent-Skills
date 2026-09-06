@@ -367,7 +367,7 @@ def credit_analysis_request(
             "task_temp_root": str(task_root),
             "evidence_output": str(evidence),
             "pricing_profile": None,
-            "expected_surface_contract_version": 7,
+            "expected_surface_contract_version": 8,
             "mutation_authority": False,
         },
     )
@@ -435,7 +435,7 @@ def credit_analysis_batch_request(
             "task_temp_root": str(task_root),
             "manifest_output": str(task_root / "manifest.json"),
             "pricing_profile": None,
-            "expected_surface_contract_version": 7,
+            "expected_surface_contract_version": 8,
             "expected_source_selection_contract_version": 1,
             "mutation_authority": False,
         },

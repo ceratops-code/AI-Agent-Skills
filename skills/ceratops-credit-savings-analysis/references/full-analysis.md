@@ -77,11 +77,12 @@ Preserve every confirmed finding and report every capacity omission.
    the frozen allowances; never repack or omit an accepted report after Luna
    runs. Select one additional direct-evidence Sol only when deterministic
    signals
-   identify an important run and scheduling it leaves capacity for the final
-   merger and one corrective Sol retry.
+   identify an important run and scheduling it leaves a planned call for the
+   final merger and actual invocation capacity for the final merger and one
+   corrective Sol retry.
 5. Apply the unassessed-call ceiling to the complete routed call set, never to
    one preliminary Sol result in isolation. If the aggregate exceeds the ceiling
-   and one Sol slot remains, prioritize one focused recovery over the optional
+   and both Sol limits permit, prioritize one focused recovery over the optional
    direct-evidence review. Give it only the unassessed calls, their retained
    Luna
    reports, and complete ordered run-part context, then replace those calls'
@@ -92,14 +93,16 @@ Preserve every confirmed finding and report every capacity omission.
    classifications, risks, and ROI inputs; deduplicates likely owner/control
    identity; and deeply verifies and expands the top three findings without
    suppressing other confirmed findings. Each rejected Sol task receives one
-   automatic corrective retry when the eight-attempt ceiling permits. After a
+   automatic corrective retry when the sixteen-attempt ceiling permits. After a
    non-final task fails validation twice, mark its exact candidate, call, and
    byte
    inventory unreviewed and continue to the final merger. A revalidated retained
    result completes its task without a new model call; an invalid retained
    result
-   follows the same automatic retry and omission policy. Use no more than eight
-   Sol calls total, counting every attempt.
+   follows the same automatic retry and omission policy. Plan at most eight
+   Sol calls, excluding retries and corrective attempts; allow at most sixteen
+   actual Sol invocations including initial calls, retries, and corrective
+   attempts.
 6. Persist immutable identities, prompts, results, attempts, latency, and usage.
    Before surfacing one parallel sibling failure, record every already-completed
    sibling attempt. On resume, revalidate complete task-owned attempt artifacts

@@ -65,12 +65,16 @@ it does not prove semantic equivalence. The model remains responsible for
 mapping every operative part of the old text, including commands and examples,
 to preserved behavior or an explicitly approved change.
 
-- (D) For every approved rule mutation or history-only ID repair, create one
-  request naming the complete rule stack, any exact validated champion and
-  hash, every approved history append or ID migration, caller-selected
+- (D) For every approved rule or TOML edit or history-only ID repair,
+  create one request naming the complete rule stack, any exact validated
+  champion and hash, every approved history append or ID migration, caller-selected
   validation evidence, the verified task-temp root, and exact request,
   champion, and evidence ownership; then run `python
   scripts/apply_rules_update.py --request <path>`.
+- TOML targets require null history and Markdown policy; apply their exact
+  approved text and parse the reopened file without reformatting. An empty
+  history-operation list is allowed only for TOML-only edits. Mixed rule,
+  history, and TOML writes share one rollback transaction.
 - (D) The helper must verify current source and policy hashes and, when a
   champion is present, its hash, expected-old uniqueness, and mechanical
   validity through `validate_rule_candidate.py` with fixing disabled; apply

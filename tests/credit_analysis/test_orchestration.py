@@ -24,6 +24,7 @@ from tests.support.repositories import run_git
 def test_full_analysis_uses_run_windows_parallel_tiers_and_exact_coverage(
     tmp_path: pathlib.Path,
 ) -> None:
+    _assert_sol_budget_boundaries(tmp_path)
     workflow = load_credit_analysis_workflow_module()
     request, _, _ = credit_analysis_request(tmp_path)
     runner = FakeCreditModelRunner(temporary_controls=False)
@@ -652,7 +653,8 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     assert plan["analysis_scope_label"] == "full all-run analysis"
     assert plan["projected_luna_calls"] == 6
     assert plan["projected_sol_calls"] == 7
-    assert plan["maximum_sol_calls"] == 8
+    assert plan["maximum_planned_sol_calls"] == 8
+    assert plan["maximum_sol_attempts"] == 16
     assert plan["projected_semantic_calls"] == 13
     assert plan["candidate_count"] > 8
     assert len(json.dumps(plan)) < 20_000
@@ -850,7 +852,7 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     assert all(call["reasoning_effort"] == "max" for call in runner.calls)
     assert sum(call["phase"] == "luna-discovery" for call in runner.calls) == 6
     assert sum(call["phase"] == "sol-adjudication" for call in runner.calls) == 6
-    assert sum(call["phase"] == "sol-direct-evidence" for call in runner.calls) == 0
+    assert sum(call["phase"] == "sol-direct-evidence" for call in runner.calls) == 1
     assert sum(call["phase"] == "sol-final" for call in runner.calls) == 1
     assert sum(
         call["input_sha256"] == orphan_digest for call in runner.calls
@@ -1001,9 +1003,9 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     )
     assert final["model_calls"] == {
         "actual_luna": 6,
-        "actual_sol": 7,
+        "actual_sol": 8,
         "accepted_luna": 6,
-        "accepted_sol": 7,
+        "accepted_sol": 8,
         "bookkeeping": 0,
     }
     assert final["manifest"]["unclassified_calls"] == 0
@@ -1147,8 +1149,8 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
             "sol.final",
         )
     )
-    assert failure_state["execution"]["sol.direct-evidence"]["status"] == "skipped"
-    assert failure_state["model_attempts"]["sol"] == 8
+    assert failure_state["execution"]["sol.direct-evidence"]["status"] == "complete"
+    assert failure_state["model_attempts"]["sol"] == 9
     assert failure_state["omissions"] == []
     failure_call_count = len(failure_runner.calls)
     assert workflow.command_execute_orchestration(
@@ -1265,3 +1267,157 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     assert persistent_final["coverage"]["analyzed_calls"] < persistent_final[
         "coverage"
     ]["eligible_calls"]
+
+
+def _assert_sol_budget_boundaries(tmp_path: pathlib.Path) -> None:
+    """Exercise real scheduling, retry accounting, and interrupted-state resume."""
+
+    workflow = load_credit_analysis_workflow_module()
+
+    class BudgetRunner(FakeCreditModelRunner):
+        def __init__(self, *, all_tasks: bool, final_failure: bool = False) -> None:
+            super().__init__(temporary_controls=False)
+            self.all_tasks = all_tasks
+            self.final_failure = final_failure
+            self.sol_attempts: dict[str, int] = {}
+
+        def run(self, **kwargs: Any) -> dict[str, Any]:
+            result = super().run(**kwargs)
+            task = kwargs["task"]
+            if not task["phase"].startswith("sol-"):
+                return result
+            task_id = task["task_id"]
+            self.sol_attempts[task_id] = self.sol_attempts.get(task_id, 0) + 1
+            if self.final_failure and task["phase"] == "sol-final":
+                raise RuntimeError("synthetic invoked final failure")
+            selected = self.all_tasks or task_id in {
+                "sol.adjudication.0001", "sol.adjudication.0002", "sol.final"
+            }
+            if selected and self.sol_attempts[task_id] == 1:
+                return {}
+            return result
+
+    for name, extra_runs, planned_calls, actual_calls in (
+        ("motivating-final-correction", 1, 6, 9),
+        ("all-eight-tasks-retried", 3, 8, 16),
+    ):
+        scenario = tmp_path / name
+        scenario.mkdir()
+        request, _, _ = credit_analysis_request(
+            scenario, extra_completed_turns=extra_runs, extra_calls_per_turn=4
+        )
+        runner = BudgetRunner(all_tasks=planned_calls == 8)
+        plan = workflow.command_plan_orchestration(
+            request, available_models=runner.available_models
+        )
+        state_path = pathlib.Path(plan["state_path"])
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        contract = workflow._load_contract()
+        assert contract["semantic_call_contract"]["sol_max_planned_calls"] == 8
+        assert contract["semantic_call_contract"]["sol_max_attempts"] == 16
+        assert plan["maximum_planned_sol_calls"] == 8
+        assert plan["maximum_sol_attempts"] == 16
+        oversized = json.loads(json.dumps(state["manifest"]))
+        oversized["sol_tasks"].append({"task_id": "sol.ninth"})
+        with pytest.raises(workflow.CreditAnalysisError, match="Sol task slots"):
+            workflow._validate_holistic_manifest(oversized, contract)
+        assert runner.calls == []
+        completed = workflow.command_execute_orchestration(
+            state_path, runner=runner, available_models=runner.available_models
+        )
+        assert completed["complete"] is True
+        assert len(runner.sol_attempts) == planned_calls
+        assert sum(runner.sol_attempts.values()) == actual_calls
+        assert runner.sol_attempts["sol.final"] == 2
+        assert completed["actual_sol_calls"] == actual_calls
+        assert completed["accepted_sol_calls"] == planned_calls
+        assert completed["omissions"] == []
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        assert state["execution"]["sol.direct-evidence"]["status"] == "complete"
+        assert sum(
+            attempt["model_invoked"]
+            for task in state["manifest"]["sol_tasks"]
+            for attempt in state["execution"][task["task_id"]]["attempts"]
+        ) == actual_calls
+        count = len(runner.calls)
+        assert workflow.command_execute_orchestration(
+            state_path, runner=runner, available_models=runner.available_models
+        )["complete"] is True
+        assert len(runner.calls) == count
+
+        if actual_calls == 16:
+            # Simulate an interrupted state publication after the paid-for final
+            # task result was retained. Recovery must work even at the hard cap.
+            pathlib.Path(completed["final_result_path"]).unlink()
+            pathlib.Path(completed["report_path"]).unlink()
+            state["phase"] = "executing"
+            state["final_result"] = None
+            state["execution"]["sol.final"]["status"] = "pending"
+            state["execution"]["sol.final"]["result"] = None
+            state["model_calls"]["sol"] -= 1
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            recovered = workflow.command_execute_orchestration(
+                state_path, runner=runner, available_models=runner.available_models
+            )
+            assert recovered["complete"] is True
+            assert recovered["actual_sol_calls"] == 16
+            assert recovered["accepted_sol_calls"] == 8
+            assert len(runner.calls) == count
+
+        # The new contract never silently expands a previously frozen contract.
+        retained = state_path.read_text(encoding="utf-8")
+        stale = json.loads(retained)
+        stale["surface_contract_version"] = contract["surface_contract_version"] - 1
+        state_path.write_text(json.dumps(stale), encoding="utf-8")
+        with pytest.raises(workflow.CreditAnalysisError, match="contract version changed"):
+            workflow.command_execute_orchestration(
+                state_path, runner=runner, available_models=runner.available_models
+            )
+        state_path.write_text(retained, encoding="utf-8")
+        assert len(runner.calls) == count
+        stale = json.loads(retained)
+        stale["immutable_artifacts"]["surface_contract"]["sha256"] = "0" * 64
+        state_path.write_text(json.dumps(stale), encoding="utf-8")
+        with pytest.raises(workflow.CreditAnalysisError, match="immutable artifact changed: surface_contract"):
+            workflow.command_execute_orchestration(
+                state_path, runner=runner, available_models=runner.available_models
+            )
+        state_path.write_text(retained, encoding="utf-8")
+        assert len(runner.calls) == count
+
+    exhausted_root = tmp_path / "no-seventeenth-invocation"
+    exhausted_root.mkdir()
+    request, _, _ = credit_analysis_request(
+        exhausted_root, extra_completed_turns=3, extra_calls_per_turn=4
+    )
+    runner = BudgetRunner(all_tasks=True, final_failure=True)
+    plan = workflow.command_plan_orchestration(
+        request, available_models=runner.available_models
+    )
+    state_path = pathlib.Path(plan["state_path"])
+    for expected_calls in (15, 16):
+        with pytest.raises(workflow.CreditAnalysisError, match="synthetic invoked final failure"):
+            workflow.command_execute_orchestration(
+                state_path, runner=runner, available_models=runner.available_models
+            )
+        assert sum(runner.sol_attempts.values()) == expected_calls
+        assert workflow.command_orchestration_status(state_path)["actual_sol_calls"] == expected_calls
+    count = len(runner.calls)
+    with pytest.raises(workflow.CreditAnalysisError, match="Sol attempt ceiling"):
+        workflow.command_execute_orchestration(
+            state_path, runner=runner, available_models=runner.available_models
+        )
+    assert len(runner.calls) == count
+    assert sum(runner.sol_attempts.values()) == 16
+    assert len(runner.sol_attempts) == 8
+    retained = state_path.read_text(encoding="utf-8")
+    for value, message in ((15, "disagrees with retained attempts"), (17, "attempt cap"), (True, "count is invalid")):
+        state = json.loads(retained)
+        state["model_attempts"]["sol"] = value
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        with pytest.raises(workflow.CreditAnalysisError, match=message):
+            workflow.command_execute_orchestration(
+                state_path, runner=runner, available_models=runner.available_models
+            )
+        assert len(runner.calls) == count
+    state_path.write_text(retained, encoding="utf-8")

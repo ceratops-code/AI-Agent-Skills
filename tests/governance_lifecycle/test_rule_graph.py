@@ -1019,6 +1019,180 @@ class RuleGraphTests(unittest.TestCase):
                     commit(rollback_update)
             self.assertEqual(rollback_history.read_bytes(), rollback_before)
 
+    def toml_update_request(self, root, *, mixed=False, newline="\n", bom=False):
+        current = "- [LOCAL-01] Preserve the current rule.\n"
+        replacement = "- [LOCAL-01] Preserve the approved rule.\n"
+        request, rules = self.rules_update_request(root, current, replacement)
+        automation = root / "automation.toml"
+        source = (
+            "# Keep these comments\n"
+            "prompt = '''Run audit.\n"
+            "Keep [labels], {values}, and café.\n"
+            "'''\n"
+            'status = "PAUSED" # existing status\n'
+        ).replace("\n", newline)
+        original = (b"\xef\xbb\xbf" if bom else b"") + source.encode("utf-8")
+        automation.write_bytes(original)
+        candidate_path = pathlib.Path(request["validated_candidate"])
+        candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+        if not mixed:
+            candidate["targets"] = []
+            request["history_operations"] = []
+        request["rule_stack"].append(str(automation.resolve()))
+        request["rule_stack_sha256"][str(automation.resolve())] = hashlib.sha256(original).hexdigest()
+        candidate["rule_stack"] = list(request["rule_stack"])
+        candidate["targets"].append({
+            "rules": str(automation.resolve()),
+            "history": None,
+            "source_sha256": hashlib.sha256(original).hexdigest(),
+            "markdown_policy": None,
+            "replacements": [
+                {"expected_old": "Run audit.", "replacement": "Run approved audit."},
+                {"expected_old": 'status = "PAUSED"', "replacement": 'status = "ACTIVE"'},
+            ],
+        })
+        self.save_update_candidate(request, candidate)
+        expected = original.replace(b"Run audit.", b"Run approved audit.").replace(
+            b'status = "PAUSED"', b'status = "ACTIVE"'
+        )
+        return request, rules, automation, expected
+
+    @staticmethod
+    def save_update_candidate(request, candidate):
+        path = pathlib.Path(request["validated_candidate"])
+        path.write_text(
+            json.dumps(candidate, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8", newline="\n",
+        )
+        request["validated_candidate_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def test_rules_update_toml_preserves_bytes_and_cleans_owned_inputs(self):
+        for newline in ("\n", "\r\n"):
+            for bom in (False, True):
+                with self.subTest(newline=repr(newline), bom=bom), tempfile.TemporaryDirectory() as directory:
+                    root = pathlib.Path(directory)
+                    request, rules, automation, expected = self.toml_update_request(
+                        root, newline=newline, bom=bom
+                    )
+                    history = rules.with_name("AGENTS.history.json")
+                    untouched = {path: path.read_bytes() for path in (rules, history)}
+                    request_path = root / "task-temp" / "request.json"
+                    result = self.run_rules_update(request, request_path)
+
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.strip(), "OK")
+                    self.assertEqual(automation.read_bytes(), expected)
+                    for path, raw in untouched.items():
+                        self.assertEqual(path.read_bytes(), raw)
+                    self.assertFalse(root.joinpath("AGENTS.history.json").exists())
+                    self.assertEqual(list(request_path.parent.iterdir()), [])
+                    self.assertEqual(list(root.rglob("*.rules-update.*")), [])
+
+    def test_rules_update_toml_and_rules_share_history_and_rollback(self):
+        import apply_rules_update as application
+
+        for failure in (None, "write", "parse"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                root = pathlib.Path(directory)
+                request, rules, automation, expected = self.toml_update_request(root, mixed=True)
+                history = rules.with_name("AGENTS.history.json")
+                originals = {path: path.read_bytes() for path in (automation, rules, history)}
+                original_history = json.loads(originals[history])["entries"]
+                update = prepare(request)
+                if failure is None:
+                    commit(update)
+                    self.assertEqual(automation.read_bytes(), expected)
+                    self.assertIn("approved rule", rules.read_text(encoding="utf-8"))
+                    entries = json.loads(history.read_bytes())["entries"]
+                    self.assertEqual(entries[:-1], original_history)
+                    self.assertEqual(entries[-1], request["history_operations"][0]["entry"])
+                else:
+                    if failure == "write":
+                        original_replace = application.os.replace
+
+                        def fail_after_toml(source, target):
+                            if target == history and pathlib.Path(source).suffix == ".new":
+                                self.assertEqual(automation.read_bytes(), expected)
+                                raise OSError("forced write failure after TOML")
+                            return original_replace(source, target)
+
+                        injected = mock.patch.object(application.os, "replace", side_effect=fail_after_toml)
+                    else:
+                        injected = mock.patch.object(
+                            application.tomllib, "loads",
+                            side_effect=application.tomllib.TOMLDecodeError("forced parse failure", "", 0),
+                        )
+                    with injected, self.assertRaisesRegex(ApplicationError, "update rolled back"):
+                        commit(update)
+                    for path, raw in originals.items():
+                        self.assertEqual(path.read_bytes(), raw)
+                    self.assertTrue(pathlib.Path(request["validated_candidate"]).is_file())
+                    self.assertTrue(pathlib.Path(request["validation_evidence"]).is_file())
+                self.assertEqual(list(root.rglob("*.rules-update.*")), [])
+
+    def test_rules_update_toml_rejects_stale_and_invalid_inputs_without_writes(self):
+        for failure in ("syntax", "source", "approval", "stack", "no-change", "history", "missing-history"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                root = pathlib.Path(directory)
+                mixed = failure in ("syntax", "missing-history")
+                request, rules, automation, _ = self.toml_update_request(root, mixed=mixed)
+                history = rules.with_name("AGENTS.history.json")
+                candidate_path = pathlib.Path(request["validated_candidate"])
+                candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+                target = candidate["targets"][-1]
+                expected_error = ""
+                if failure == "syntax":
+                    target["replacements"][1]["replacement"] = 'status = "unterminated'
+                    self.save_update_candidate(request, candidate)
+                    expected_error = "invalid TOML"
+                elif failure == "source":
+                    automation.write_bytes(automation.read_bytes() + b"# newer edit\n")
+                    expected_error = "stale"
+                elif failure == "approval":
+                    candidate_path.write_bytes(candidate_path.read_bytes() + b" ")
+                    expected_error = "validated_candidate_sha256 is stale"
+                elif failure == "stack":
+                    rules.write_bytes(rules.read_bytes() + b"\n")
+                    expected_error = "stale"
+                elif failure == "no-change":
+                    for edit in target["replacements"]:
+                        edit["replacement"] = edit["expected_old"]
+                    self.save_update_candidate(request, candidate)
+                    expected_error = "changes no TOML content"
+                elif failure == "history":
+                    target["history"] = str(history)
+                    self.save_update_candidate(request, candidate)
+                    expected_error = "TOML target requires null history"
+                else:
+                    request["history_operations"] = []
+                    expected_error = "history_operations must be non-empty"
+                originals = {path: path.read_bytes() for path in (automation, rules, history)}
+                request_path = root / "task-temp" / "request.json"
+                result = self.run_rules_update(request, request_path)
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected_error, result.stderr)
+                for path, raw in originals.items():
+                    self.assertEqual(path.read_bytes(), raw)
+                self.assertTrue(request_path.is_file())
+                self.assertTrue(candidate_path.is_file())
+
+    def test_rules_update_toml_detects_source_drift_after_prepare(self):
+        for target_type in ("toml", "rules"):
+            with self.subTest(target_type=target_type), tempfile.TemporaryDirectory() as directory:
+                root = pathlib.Path(directory)
+                request, rules, automation, _ = self.toml_update_request(root, mixed=True)
+                update = prepare(request)
+                target = automation if target_type == "toml" else rules
+                target.write_bytes(target.read_bytes() + b"# concurrent edit\n")
+                history = rules.with_name("AGENTS.history.json")
+                originals = {path: path.read_bytes() for path in (automation, rules, history)}
+                with self.assertRaisesRegex(ApplicationError, "source changed before application"):
+                    commit(update)
+                for path, raw in originals.items():
+                    self.assertEqual(path.read_bytes(), raw)
+                self.assertEqual(list(root.rglob("*.rules-update.*")), [])
+
     def test_rules_update_accepts_list_heavy_approved_metadata(self):
         current = "- [LOCAL-01] Preserve the exact enumeration.\n"
         replacement = (
