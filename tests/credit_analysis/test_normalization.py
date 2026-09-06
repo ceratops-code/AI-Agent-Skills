@@ -502,9 +502,6 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
         and decision["luna_candidate_id"] in reviewed_sources
         for decision in final["candidate_decisions"]
     )
-    final_findings = {
-        finding["id"]: finding for finding in final["confirmed_findings"]
-    }
     transient_review = next(
         review
         for review in final["temporary_control_reviews"]
@@ -587,8 +584,26 @@ def test_credit_analysis_model_catalog_decodes_cli_as_utf8(
     assert specs["sol"]["evidence_token_budget"] > 160_000
 
 
+@pytest.mark.parametrize(
+    ("timed_out", "exit_code", "startup_log", "expected_error"),
+    [
+        (True, 1, "unrelated startup warning\n",
+         "Codex child failed for test-review with exit 1: timed out after 1800s"),
+        (True, 0, "unrelated startup warning\n",
+         "Codex child failed for test-review with exit 0: timed out after 1800s"),
+        (False, 7, "actual child failure\n",
+         "Codex child failed for test-review with exit 7: actual child failure"),
+        (False, 7, "", "Codex child failed for test-review with exit 7"),
+        (False, 0, "unrelated startup warning\n", None),
+    ],
+)
 def test_credit_analysis_child_command_places_global_approval_before_exec(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    timed_out: bool,
+    exit_code: int,
+    startup_log: str,
+    expected_error: str | None,
 ) -> None:
     workflow = load_credit_analysis_workflow_module()
     command = workflow._codex_child_command(
@@ -660,6 +675,54 @@ def test_credit_analysis_child_command_places_global_approval_before_exec(
         )
         assert workflow._terminate_process_tree(process) == 1
         assert signals == [(424242, workflow.signal.SIGTERM)]
+
+    prompt_path = tmp_path / "prompt.md"
+    prompt_path.write_text("Read-only review.", encoding="utf-8")
+    attempt_dir = tmp_path / "attempt"
+    runner_process = FakeProcess()
+    clock = [0.0]
+    terminated: list[FakeProcess] = []
+
+    def fake_popen(*args: Any, **kwargs: Any) -> FakeProcess:
+        kwargs["stderr"].write(startup_log)
+        (attempt_dir / "last-message.json").write_text(
+            '{"value": 1}', encoding="utf-8"
+        )
+        clock[0] = 1800.0
+        return runner_process
+
+    def terminate_child(child: FakeProcess) -> int:
+        terminated.append(child)
+        return exit_code
+
+    with monkeypatch.context() as child_patch:
+        child_patch.setattr(workflow.shutil, "which", lambda name: "codex")
+        child_patch.setattr(workflow.subprocess, "Popen", fake_popen)
+        child_patch.setattr(workflow.time, "monotonic", lambda: clock[0])
+        child_patch.setattr(workflow, "_process_is_alive", lambda pid: True)
+        child_patch.setattr(workflow, "_terminate_process_tree", terminate_child)
+        child_patch.setattr(
+            runner_process, "poll", lambda: None if timed_out else exit_code
+        )
+        result, attempt = workflow._run_codex_child(
+            analysis_id="test-analysis",
+            model="gpt-5.6-sol",
+            task={"task_id": "test-review"},
+            prompt_path=prompt_path,
+            schema_path=tmp_path / "schema.json",
+            attempt_dir=attempt_dir,
+            execution_cwd=tmp_path,
+            timeout_seconds=1800,
+        )
+
+    assert result == ({"value": 1} if expected_error is None else None)
+    assert attempt["error"] == expected_error
+    assert attempt["timed_out"] is timed_out
+    assert attempt["terminated"] is timed_out
+    assert attempt["model_invoked"] is True
+    assert attempt["exit_code"] == exit_code
+    assert terminated == ([runner_process] if timed_out else [])
+    assert pathlib.Path(attempt["stderr_path"]).read_text(encoding="utf-8") == startup_log
 
 
 def test_credit_analysis_workflow_rejects_invalid_and_conflicting_passes(
