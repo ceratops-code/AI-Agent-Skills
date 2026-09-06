@@ -374,3 +374,82 @@ def _holistic_preserve_review_sources(
             raise CreditAnalysisError(f"temporary-control review {review_id} source records changed")
         preserved[review_id] = {**review, "source_reviews": expected_sources}
     return preserved
+
+
+def _holistic_category_reviews(
+    reviews: Sequence[Mapping[str, Any]],
+    categories: Sequence[str],
+    prior_results: Sequence[Mapping[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Consolidate copied, scope-specific checklists without adjudicating them.
+
+    The caller validates each record's fields, evidence, boolean, and reason.
+    Child reviewers must return one record per category. Final output can copy
+    multiple accepted source assessments; differing records must be traceable
+    to those sources before they can be combined. Applicability across reviewed
+    portions is existential, never a vote. A new final assessment may add support
+    but cannot erase applicability established by an accepted source.
+
+    Controller-generated ``source_reviews`` retains every original assessment
+    and its task identity, even when the final model copies only one checklist.
+    Canonical revalidation checks supplied provenance against accepted records.
+    """
+
+    grouped: dict[str, list[Mapping[str, Any]]] = {category: [] for category in categories}
+    for review in reviews:
+        category = review["category"]
+        if not isinstance(category, str) or category not in grouped:
+            raise CreditAnalysisError("helper category review references an unknown category")
+        grouped[category].append(review)
+    missing = [category for category, group in grouped.items() if not group]
+    if missing:
+        raise CreditAnalysisError("helper category reviews are missing: " + ", ".join(missing))
+
+    normalized = []
+    for category, group in grouped.items():
+        if prior_results is None:
+            if len(group) != 1:
+                raise CreditAnalysisError(f"helper category {category} is reviewed more than once")
+            normalized.append(dict(group[0]))
+            continue
+        sources = [
+            {"task_id": result["task_id"], "review": copy.deepcopy(dict(review))}
+            for result in prior_results
+            for review in result["helper_category_reviews"]
+            if review["category"] == category
+        ]
+        distinct = []
+        for review in group:
+            if "source_reviews" in review and (
+                len(group) != 1 or review["source_reviews"] != sources
+            ):
+                raise CreditAnalysisError(f"helper category {category} source records changed")
+            assessment = {key: value for key, value in review.items() if key != "source_reviews"}
+            if assessment not in distinct:
+                distinct.append(assessment)
+        copied = bool(sources) and all(
+            any(review == source["review"] for source in sources)
+            for review in distinct
+        )
+        if len(distinct) > 1 and not copied:
+            raise CreditAnalysisError(f"helper category {category} has untraceable repeated assessments")
+        prior_applies = any(source["review"]["applies"] for source in sources)
+        if copied:
+            summary = {
+                "category": category,
+                "applies": prior_applies,
+                "evidence_refs": list(dict.fromkeys(
+                    ref for source in sources for ref in source["review"]["evidence_refs"]
+                )),
+                "reason": (
+                    "Applicable in at least one reviewed portion; original assessments are retained."
+                    if prior_applies else
+                    "No reviewed portion establishes applicability; original assessments are retained."
+                ),
+            }
+        else:
+            summary = distinct[0]
+            if prior_applies and not summary["applies"]:
+                raise CreditAnalysisError(f"helper category {category} dropped supported applicability")
+        normalized.append({**summary, "source_reviews": sources})
+    return normalized

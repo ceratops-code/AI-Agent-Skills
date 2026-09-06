@@ -1160,7 +1160,7 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     )["complete"] is True
     assert len(failure_runner.calls) == failure_call_count
 
-    capped_root = tmp_path / "saved-final-at-attempt-cap"
+    capped_root = tmp_path / "saved-final-after-validation-retry"
     capped_root.mkdir()
     capped_request, _, _ = credit_analysis_request(
         capped_root, extra_completed_turns=3, extra_calls_per_turn=4,
@@ -1200,11 +1200,11 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
                 available_models=capped_runner.available_models,
             )
         capped_state = json.loads(capped_state_path.read_text(encoding="utf-8"))
-        assert capped_state["model_attempts"]["sol"] == 8
+        assert capped_state["model_attempts"]["sol"] == 9
         final_attempts = capped_state["execution"]["sol.final"]["attempts"]
         assert [attempt["outcome"] for attempt in final_attempts] == ["validation-error", "validation-error"]
         capped_call_count = len(capped_runner.calls)
-        # Invalid saved output cannot buy a ninth attempt or a third final call.
+        # Invalid saved output cannot buy a third final call.
         with pytest.raises(workflow.CreditAnalysisError, match="failed validation after its automatic retry"):
             workflow.command_execute_orchestration(
                 capped_state_path, runner=capped_runner,

@@ -137,6 +137,7 @@ def test_credit_analysis_recovers_packet_local_luna_evidence_without_a_retry(
 
 def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
     tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workflow = load_credit_analysis_workflow_module()
     normalized_groups, classifications, unassessed = (
@@ -195,6 +196,10 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
         @staticmethod
         def _final(packet: Mapping[str, Any]) -> dict[str, Any]:
             result = FakeCreditModelRunner._final(packet)
+            result["helper_category_reviews"] = [
+                dict(review) for prior in packet["prior_adjudication_results"]
+                for review in prior["helper_category_reviews"]
+            ]
             # Reviews already carry the decisions; the final transport can
             # omit their redundant merge links without another model call.
             result["temporary_control_merges"] = []
@@ -248,6 +253,12 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
             digest: str,
         ) -> dict[str, Any]:
             result = super()._sol(task, packet, digest)
+            for review in result["helper_category_reviews"]:
+                review["reason"] += f" Source: {task['task_id']}."
+            result["helper_category_reviews"][0].update(
+                applies=task["task_id"].endswith("0001"),
+                evidence_refs=result["candidate_decisions"][0]["evidence_refs"],
+            )
             call_order = [row[1] for row in packet["call_inventory"]["rows"]]
             packet_candidates = [
                 candidate
@@ -723,6 +734,103 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
             decision["risk_ids"].append(duplicate_risk["id"])
     with pytest.raises(workflow.CreditAnalysisError, match="final ownership is ambiguous"):
         validate_report(ambiguous)
+
+    categories = canonical["helper_category_reviews"]
+    assert [item["category"] for item in categories] == contract["helper_categories"]
+    assert len(json.loads(raw_bytes)["helper_category_reviews"]) > len(categories)
+    category = categories[0]
+    assert {source["review"]["applies"] for source in category["source_reviews"]} == {False, True}
+    assert category["applies"] is True
+    assert set(category["evidence_refs"]) == {
+        ref for source in category["source_reviews"] for ref in source["review"]["evidence_refs"]
+    }
+    for source in category["source_reviews"]:
+        record = active["execution"][source["task_id"]]["result"]
+        prior = json.loads(pathlib.Path(record["path"]).read_text(encoding="utf-8"))
+        assert source["review"] in prior["helper_category_reviews"]
+
+    duplicates = report_copy()
+    negative = next(source["review"] for source in category["source_reviews"] if not source["review"]["applies"])
+    duplicates["helper_category_reviews"] = [*categories[1:], dict(negative), dict(negative)]
+    assert validate_report(duplicates) == canonical
+
+    for field, value, error in (
+        ("category", "unknown-category", "unknown category"),
+        ("applies", "yes", "applicability is invalid"),
+        ("reason", "", "reason is empty"),
+    ):
+        invalid = report_copy()
+        invalid["helper_category_reviews"][0][field] = value
+        with pytest.raises(workflow.CreditAnalysisError, match=error):
+            validate_report(invalid)
+    missing_category = report_copy()
+    missing_category["helper_category_reviews"].pop()
+    with pytest.raises(workflow.CreditAnalysisError, match="category reviews are missing"):
+        validate_report(missing_category)
+    tampered_category = report_copy()
+    tampered_category["helper_category_reviews"][0]["source_reviews"][0]["review"]["reason"] = "Rewritten source."
+    with pytest.raises(workflow.CreditAnalysisError, match="source records changed"):
+        validate_report(tampered_category)
+    conflicting_category = report_copy()
+    conflicting_category["helper_category_reviews"][0].update(applies=False, reason="No issue anywhere.")
+    with pytest.raises(workflow.CreditAnalysisError, match="dropped supported applicability"):
+        validate_report(conflicting_category)
+    untraceable = report_copy()
+    untraceable["helper_category_reviews"] = [
+        *categories[1:], dict(negative), {**negative, "reason": "A new conflicting assessment."},
+    ]
+    with pytest.raises(workflow.CreditAnalysisError, match="untraceable repeated assessments"):
+        validate_report(untraceable)
+
+    snapshot = pathlib.Path(active["immutable_artifacts"]["surface_contract"]["path"])
+    assert snapshot.parent == pathlib.Path(active["paths"]["orchestration_root"])
+    original_contract = snapshot.read_bytes()
+    assert original_contract == workflow.CONTRACT_PATH.read_bytes()
+    try:
+        snapshot.write_bytes(original_contract + b"\n")
+        with pytest.raises(workflow.CreditAnalysisError, match="immutable artifact changed: surface_contract"):
+            workflow._holistic_read_state(pathlib.Path(plan["state_path"]))
+    finally:
+        snapshot.write_bytes(original_contract)
+
+    implementation = workflow._luna_sol_analysis
+    build_audit = implementation._holistic_audit_input
+    for reject_all in (False, True):
+        routing_state = json.loads(json.dumps(active))
+        routing_state.update(routing=None, omissions=[])
+        routing_state["model_attempts"]["sol"] = 0
+        routing_root = tmp_path / ("no-audit-fits" if reject_all else "next-audit-fits")
+        routing_root.mkdir()
+        routing_state["paths"]["orchestration_root"] = str(routing_root)
+        probes = []
+
+        def measured_audit(
+            *, reject_all=reject_all, probes=probes,
+            budget=routing_state["model_specs"]["sol"]["evidence_byte_budget"], **kwargs,
+        ):
+            payload = build_audit(**kwargs)
+            if reject_all or not probes:
+                payload["fixture_overhead"] = "x" * budget
+            probes.append(kwargs["task"]["audit_windows"][0]["luna_task_id"])
+            return payload
+
+        with monkeypatch.context() as patch:
+            patch.setattr(implementation, "_holistic_audit_input", measured_audit)
+            implementation._freeze_sol_routing(routing_state, compact, contract)
+        selected = json.loads(pathlib.Path(routing_state["routing"]["path"]).read_text(encoding="utf-8"))
+        assert len(probes) > 1
+        if reject_all:
+            assert selected["audit_windows"] == []
+            assert len(routing_state["omissions"]) == len(probes)
+        else:
+            assert [item["luna_task_id"] for item in selected["audit_windows"]] == [probes[1]]
+            selected_task = next(item for item in active["manifest"]["luna_tasks"] if item["task_id"] == probes[1])
+            assert selected["audit_candidate_ids"] == selected_task["candidate_ids"]
+            assert len(routing_state["omissions"]) == 1
+        for omission in routing_state["omissions"]:
+            original_task = next(item for item in active["manifest"]["luna_tasks"] if item["task_id"] == omission["task_id"])
+            assert omission["reason"] == "direct-evidence-capacity"
+            assert omission["candidate_ids"] == original_task["candidate_ids"]
 
     combined_review = next(
         review for review in canonical["temporary_control_reviews"]

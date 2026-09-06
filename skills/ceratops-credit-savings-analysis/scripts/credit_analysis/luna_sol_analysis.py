@@ -13,6 +13,7 @@ from .single_thread_analysis import *
 from .source_execution_context import *
 from .report_bookkeeping import (
     _closed_result,
+    _holistic_category_reviews,
     _holistic_preserve_review_sources,
     _holistic_preserve_risk_sources,
     _holistic_surface_ids,
@@ -2592,6 +2593,10 @@ def command_plan_orchestration(
     manifest_path = orchestration_root / "chunk-manifest.json"
     _exclusive_json(manifest_path, manifest, "holistic manifest")
     task_order = [*[task["task_id"] for task in luna_tasks], *[task["task_id"] for task in sol_tasks]]
+    # Runtime deployment must not replace an active run's immutable contract.
+    contract_snapshot = orchestration_root / "surface-contract.json"
+    with contract_snapshot.open("xb") as handle:
+        handle.write(CONTRACT_PATH.read_bytes())
     state = {
         "schema": HOLISTIC_STATE_SCHEMA,
         "version": 5,
@@ -2626,8 +2631,8 @@ def command_plan_orchestration(
         "immutable_artifacts": {
             "request": {"path": str(request["request_path"]), "sha256": request["request_hash"]},
             "surface_contract": {
-                "path": str(CONTRACT_PATH),
-                "sha256": _file_hash(CONTRACT_PATH),
+                "path": str(contract_snapshot),
+                "sha256": _file_hash(contract_snapshot),
             },
             "evidence": {"path": str(request["evidence_path"]), "sha256": evidence_sha},
             "manifest": {"path": str(manifest_path), "sha256": _file_hash(manifest_path)},
@@ -3687,7 +3692,7 @@ def _freeze_sol_routing(
         <= int(limits["sol_max_attempts"])
     )
     preferred_audit_windows = (
-        [max(retained_window_tasks, key=direct_evidence_rank)]
+        sorted(retained_window_tasks, key=direct_evidence_rank, reverse=True)
         if direct_evidence_fits_call_budget
         else []
     )
@@ -3707,6 +3712,8 @@ def _freeze_sol_routing(
 
     audit_windows: list[dict[str, Any]] = []
     audit_budget = int(state["model_specs"]["sol"]["evidence_byte_budget"])
+    # An oversized preferred window must not suppress a complete lower-ranked
+    # window that fits the same optional review slot. Never truncate its evidence.
     for window in preferred_audit_windows:
         if len(audit_windows) == 1:
             break
@@ -5330,10 +5337,13 @@ def _validate_holistic_sol_result(
         surface_order=surface_order,
     )
     category_reviews = _result_objects(raw.get("helper_category_reviews"), "helper category reviews")
-    if [review.get("category") for review in category_reviews] != contract["helper_categories"]:
-        raise CreditAnalysisError("helper category reviews are missing or reordered")
     for index, review in enumerate(category_reviews, start=1):
-        _closed_result(review, {"category", "applies", "evidence_refs", "reason"}, f"helper category review {index}")
+        _closed_result(
+            review,
+            {"category", "applies", "evidence_refs", "reason"}
+            | ({"source_reviews"} if task["phase"] == "sol-final" and "source_reviews" in review else set()),
+            f"helper category review {index}",
+        )
         if not isinstance(review.get("applies"), bool):
             raise CreditAnalysisError("helper category applicability is invalid")
         _holistic_result_refs(review.get("evidence_refs"), "helper category evidence", empty=True)
@@ -5407,6 +5417,9 @@ def _validate_holistic_sol_result(
                 raise CreditAnalysisError("final Sol dropped a prior confirmed finding")
         risks = _holistic_preserve_risk_sources(risks, decisions, prior_results)
         review_by_id = _holistic_preserve_review_sources(review_by_id, decisions, prior_results)
+        category_reviews = _holistic_category_reviews(category_reviews, contract["helper_categories"], prior_results)
+    else:
+        category_reviews = _holistic_category_reviews(category_reviews, contract["helper_categories"])
     return {
         "schema": HOLISTIC_SOL_RESULT_SCHEMA,
         "analysis_id": state["analysis_id"],
