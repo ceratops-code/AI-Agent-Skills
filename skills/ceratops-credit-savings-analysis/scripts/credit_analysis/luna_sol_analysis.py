@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import concurrent.futures
 
+from .execution_outcomes import has_failure_telemetry, has_nonzero_process_result
+
 from .model_input_preparation import *
 from .model_capacity_planning import *
 from .multi_thread_analysis import *
@@ -501,42 +503,6 @@ def _collect_canonical_state_snapshot(
 
 
 
-def _has_failure_telemetry(value: Any) -> bool:
-    """Detect only explicit observable failure, timeout, or termination fields."""
-
-    if isinstance(value, Mapping):
-        for key, item in value.items():
-            normalized = str(key).casefold()
-            if normalized in {"exit_code", "returncode", "code"}:
-                if isinstance(item, int) and not isinstance(item, bool) and item != 0:
-                    return True
-            elif normalized in {"timed_out", "timeout", "terminated", "termination"}:
-                if item is True or (
-                    isinstance(item, str)
-                    and item.casefold() in {"true", "timeout", "terminated", "killed"}
-                ):
-                    return True
-            elif normalized in {"explicit_failure", "semantic_failure"} and item is True:
-                return True
-            elif normalized in {"error", "errors", "stderr"} and (
-                item is not None and item != "" and item != [] and item != {}
-            ):
-                return True
-            elif normalized == "status" and isinstance(item, str) and item.casefold() in {
-                "error",
-                "failed",
-                "failure",
-                "timeout",
-                "terminated",
-            }:
-                return True
-            if _has_failure_telemetry(item):
-                return True
-    elif isinstance(value, list):
-        return any(_has_failure_telemetry(item) for item in value)
-    return False
-
-
 def _observable_high_signal_reasons(
     *,
     call: Mapping[str, Any],
@@ -552,8 +518,10 @@ def _observable_high_signal_reasons(
         call.get("tool_results"),
         *[record.get("structured_outcome") for record in records],
     ]
-    if any(_has_failure_telemetry(item) for item in telemetry):
+    if any(has_failure_telemetry(item) for item in telemetry):
         reasons.append("failure-timeout-or-termination-telemetry")
+    if any(has_nonzero_process_result(item) for item in telemetry):
+        reasons.append("nonzero-process-result")
     if repeated_groups:
         reasons.append("repeated-action-fingerprint")
     searchable = json.dumps(
@@ -7544,7 +7512,6 @@ __all__ = (
     "LUNA_SHARED_CONSOLIDATION_CHILD_ASSESSMENT_FIELDS",
     "LUNA_TEMPORARY_FIELDS",
     "ORCHESTRATION_PRODUCER_GROUP_FIELDS",
-    "OUTCOME_KEYS",
     "SURFACE_EVIDENCE_KEYWORDS",
     "SYNTHESIS_RESULT_FIELDS",
     "TEMPORARY_CONTRIBUTION_FIELDS",
@@ -7566,7 +7533,6 @@ __all__ = (
     "_collect_holistic_evidence",
     "_exclusive_text",
     "_finalize_holistic",
-    "_has_failure_telemetry",
     "_holistic_accept_result",
     "_holistic_call_classifications",
     "_holistic_compact_bundle",
@@ -7609,7 +7575,6 @@ __all__ = (
     "_run_codex_child",
     "_run_index",
     "_shared_relevant_segments",
-    "_structured_outcome",
     "_surface_order_for_request",
     "_surface_reference_text",
     "_task_artifact_paths",

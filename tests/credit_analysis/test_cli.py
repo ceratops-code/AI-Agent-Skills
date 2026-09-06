@@ -274,10 +274,115 @@ def test_model_call_ledger_keeps_full_evidence_out_of_stdout(
     assert classified_summary["totals"]["necessary"] == 2
 
 
+def _assert_execution_outcome_boundaries() -> None:
+    from credit_analysis import execution_outcomes as outcomes
+    from credit_analysis import luna_sol_analysis as controller
+    from credit_analysis import model_input_preparation as preparation
+    from credit_analysis import session_evidence_collector as collector
+
+    def returned(value):
+        return {"type": "function_call_output", "output": json.dumps(value)}
+
+    example = {
+        "isError": True, "exit_code": 23, "timeout": True,
+        "error": "PreToolUse rejected; Script failed; example only",
+    }
+    successful = {
+        "exit_code": 0,
+        "output": json.dumps(example),
+        "stdout": "except CreditAnalysisError as error:",
+        "stderr": "warning: deprecated option",
+        "content": {"example": example},
+        "error": "quoted field, not a tool verdict",
+    }
+    cases = [
+        (returned(successful), [0], False, False),
+        (returned({"exit_code": 0, "output": "Script failed\nWall time 0s\nOutput:"}),
+         [0], False, False),
+        (returned({"exit_code": 1, "output": ""}), [1], False, True),
+        (returned({"exit_code": 17, "stderr": ""}), [17], False, True),
+        (returned({"exit_code": 0, "timed_out": True}), [0], True, False),
+        (returned({"returncode": 0, "terminated": True}), [0], True, False),
+        (returned({"isError": True, "error": "permission denied"}), [], True, False),
+        (returned({"success": False}), [], True, False),
+        (returned({"status": "failed"}), [], True, False),
+        (returned({"schema": "ceratops-command-probe-result.v1", "ok": True,
+                   "matched": False, "tool_returncode": 1}), [], False, False),
+        (returned({"status": "fulfilled", "value": successful}), [0], False, False),
+        (returned({"i": 0, "r": {"status": "fulfilled", "value": successful}}),
+         [0], False, False),
+        (returned({"status": "rejected", "reason": "Tool rejected the command"}),
+         [], True, False),
+        ({"type": "mcp_tool_call_end", "result": {"Ok": {
+            "isError": False, "content": [{"type": "text", "text": json.dumps(example)}],
+            "structuredContent": {"exit_code": 3, "stdout": json.dumps(example)},
+        }}}, [3], False, True),
+        ({"type": "mcp_tool_call_end", "result": {"Err": "connection rejected"}},
+         [], True, False),
+        ({"type": "patch_apply_end", "success": False}, [], True, False),
+        ({"type": "function_call_output", "isError": True, "output": "denied"},
+         [], True, False),
+        ({"type": "mcp_tool_call_end", "result": {"Ok": {
+            "structuredContent": {"exit_code": 5},
+        }}}, [5], False, True),
+        (returned({"type": ["application", "data"], "content": example}),
+         [], False, False),
+        ({"type": "custom_tool_call_output", "output": [
+            {"type": "input_text", "text": "Script failed\nWall time 0.0 seconds\nOutput:\n"},
+            {"type": "input_text", "text": "Script error:\nSyntaxError: unexpected token"},
+        ]}, [], True, False),
+        ({"id": "ctco_example", "output": [
+            {"type": "input_text", "text": "Script completed\nWall time 1s\nOutput:\n"},
+            {"type": "input_text", "text": json.dumps(successful)},
+        ]}, [0], False, False),
+    ]
+    for payload, codes, failed, nonzero in cases:
+        original = json.dumps(payload, sort_keys=True)
+        signals = outcomes.response_outcomes(payload)
+        assert signals["process_exit_codes"] == codes
+        assert outcomes.has_failure_telemetry(payload) is failed
+        assert outcomes.has_nonzero_process_result(payload) is nonzero
+        action = {"nested_calls": [], **signals}
+        provenance = collector.result_failure_provenance(payload, action)
+        assert bool(provenance and provenance["semantic_failure"]) is failed
+        projected = preparation._prepare_bounded_evidence(
+            payload, limit=40, surface_ids=["rework-validation"]
+        )
+        assert projected["mode"] == "retained-projection"
+        reasons = controller._observable_high_signal_reasons(
+            call={}, messages=[], records=[projected], repeated_groups=[], volume={}
+        )
+        assert ("failure-timeout-or-termination-telemetry" in reasons) is failed
+        assert ("nonzero-process-result" in reasons) is nonzero
+        assert json.dumps(payload, sort_keys=True) == original
+
+    # Neither nested application examples nor stale descriptive provenance
+    # can create a new execution signal at later preparation/routing stages.
+    assert outcomes.structured_outcome({"content": {"example": example}}) is None
+    canonical_success = {
+        "process_exit_codes": [0],
+        "outcomes": {"structured_tool_error": False, "timeout": False,
+                     "termination": False, "nonzero_process_result": False},
+        "failure_provenance": {"semantic_failure": True, "reason_label": "quoted error"},
+    }
+    assert not outcomes.has_failure_telemetry(canonical_success)
+    mixed = returned([
+        {"status": "fulfilled", "value": successful},
+        {"status": "fulfilled", "value": {
+            "isError": True, "error": "actual rejection", "exit_code": 7,
+        }},
+    ])
+    assert outcomes.response_outcomes(mixed)["process_exit_codes"] == [0, 7]
+    assert outcomes.has_failure_telemetry(mixed)
+    assert outcomes.failure_details(mixed) == ["actual rejection"]
+    assert collector.failure_reason_label(mixed) == "actual rejection"
+
+
 def test_model_call_ledger_usage_summary_is_ranked_and_evidence_based(
     tmp_path: pathlib.Path,
 ) -> None:
     collector = load_credit_analysis_workflow_module()._load_evidence_collector()
+    _assert_execution_outcome_boundaries()
     assert (
         collector.bounded_command_label("rg sentinel <user-home><local-path>")
         == "rg sentinel <local-path>"
