@@ -198,19 +198,25 @@ applies them.
 
 ### Output Contract
 
-- Retain every confirmed finding in machine evidence. Before the detailed list,
-  report `Confirmed: N; outstanding: M; already addressed: K`. Show details only
-  for outstanding findings unless the user requests all findings.
+- Present findings directly in chat, with artifact paths only on request.
+  Retain every confirmed finding in machine evidence. Before the detailed
+  list, report `Confirmed: N; outstanding: M; already addressed: K`. Show details
+  for every outstanding finding; include already addressed findings only when
+  requested.
 - Give each outstanding finding a plain-language title followed by:
   - `Problem:` two to four sentences naming the owner, concrete episode, what
     failed, and why the resulting work was avoidable.
-  - `Evidence:` the affected-call count and relevant command, tool, artifact,
-    answer, and user-correction sequence; show IDs only on request.
+  - `Evidence:` the affected-call count and concrete command or tool action
+    with its observed result, plus the relevant artifact, answer, and
+    user-correction sequence; show IDs only on request.
   - `Fix:` the exact durable control, its owner, and how it completes the flow
     end to end.
   - `Verification:` the exact behavior test proving every included gap.
-  - `Savings:` observed calls, expected similar-run savings, implementation
-    cost, ongoing complexity, and material assumptions.
+  - `Complexity:` implementation difficulty, one-time implementation cost in
+    model calls, and ongoing maintenance introduced by the fix.
+  - `Savings:` observed avoidable calls and expected savings per similar run,
+    with material assumptions. Distinguish reduced calls from reduced text
+    volume; state when credit or token savings cannot be quantified.
 - Do not show status labels, confidence, internal IDs, or helper taxonomy unless
   requested.
 - Keep every finding concise, self-contained, and understandable without
