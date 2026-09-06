@@ -1183,7 +1183,7 @@ def selection_from_changes(
     fallback = False
     for changed in sorted(changes, key=lambda item: (item.paths, item.status)):
         for path_index, path in enumerate(changed.paths):
-            if changed.status.startswith("D"):
+            if path.startswith("tests/") and changed.status.startswith("D"):
                 full_suite = True
                 add_all_reasons(
                     reasons,
@@ -1281,6 +1281,12 @@ def selection_from_changes(
                 detail = "ambiguous ignore mapping: " + ", ".join(
                     item.ignore_id for item in matched_ignores
                 )
+            elif changed.status.startswith("D"):
+                full_suite = True
+                add_all_reasons(
+                    reasons, manifest, path=path, rule="deleted-path"
+                )
+                continue
             else:
                 detail = "unmapped repository path"
             gaps.append({"path": path, "reason": detail})
