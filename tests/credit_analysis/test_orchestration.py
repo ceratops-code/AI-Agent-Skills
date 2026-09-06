@@ -1160,6 +1160,88 @@ def test_credit_analysis_workflow_end_to_end_uses_sharded_semantic_calls(
     )["complete"] is True
     assert len(failure_runner.calls) == failure_call_count
 
+    capped_root = tmp_path / "saved-final-at-attempt-cap"
+    capped_root.mkdir()
+    capped_request, _, _ = credit_analysis_request(
+        capped_root, extra_completed_turns=3, extra_calls_per_turn=4,
+    )
+    capped_plan = workflow.command_plan_orchestration(
+        capped_request, available_models=holistic_model_catalog(),
+    )
+    capped_state_path = pathlib.Path(capped_plan["state_path"])
+
+    class MergedRiskRunner(FakeCreditModelRunner):
+        @staticmethod
+        def _final(packet: Mapping[str, Any]) -> dict[str, Any]:
+            result = FakeCreditModelRunner._final(packet)
+            risk = result["plausible_risks"][0]
+            original_id = risk["id"]
+            risk["id"] = "merged-prior-risks"
+            risk["description"] = "The prior risks have been consolidated and rewritten."
+            for decision in result["candidate_decisions"]:
+                decision["risk_ids"] = [
+                    risk["id"] if item == original_id else item for item in decision["risk_ids"]
+                ]
+            return result
+
+    capped_runner = MergedRiskRunner()
+    current_validator = workflow._validate_holistic_task_result
+
+    def previous_validator(raw: Mapping[str, Any], **kwargs: Any) -> dict[str, Any]:
+        if kwargs["task"]["phase"] == "sol-final":
+            raise workflow.CreditAnalysisError("simulated prior-risk preservation failure")
+        return current_validator(raw, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(workflow, "_validate_holistic_task_result", previous_validator)
+        with pytest.raises(workflow.CreditAnalysisError, match="simulated prior-risk preservation failure"):
+            workflow.command_execute_orchestration(
+                capped_state_path, runner=capped_runner,
+                available_models=capped_runner.available_models,
+            )
+        capped_state = json.loads(capped_state_path.read_text(encoding="utf-8"))
+        assert capped_state["model_attempts"]["sol"] == 8
+        final_attempts = capped_state["execution"]["sol.final"]["attempts"]
+        assert [attempt["outcome"] for attempt in final_attempts] == ["validation-error", "validation-error"]
+        capped_call_count = len(capped_runner.calls)
+        # Invalid saved output cannot buy a ninth attempt or a third final call.
+        with pytest.raises(workflow.CreditAnalysisError, match="failed validation after its automatic retry"):
+            workflow.command_execute_orchestration(
+                capped_state_path, runner=capped_runner,
+                available_models=capped_runner.available_models,
+            )
+        assert len(capped_runner.calls) == capped_call_count
+
+    raw_path = pathlib.Path(final_attempts[-1]["artifacts"]["raw_output"]["path"])
+    frozen_raw = raw_path.read_bytes()
+    raw_path.write_bytes(frozen_raw + b"\n")
+    with pytest.raises(workflow.CreditAnalysisError, match="changed|hash"):
+        workflow.command_execute_orchestration(
+            capped_state_path, runner=capped_runner,
+            available_models=capped_runner.available_models,
+        )
+    raw_path.write_bytes(frozen_raw)
+    recovered_final = workflow.command_execute_orchestration(
+        capped_state_path, runner=capped_runner,
+        available_models=capped_runner.available_models,
+    )
+    assert recovered_final["complete"] is True
+    assert len(capped_runner.calls) == capped_call_count
+    recovered_state = json.loads(capped_state_path.read_text(encoding="utf-8"))
+    assert recovered_state["model_attempts"] == capped_state["model_attempts"]
+    assert recovered_state["execution"]["sol.final"]["attempts"] == final_attempts
+    assert recovered_state["execution"]["sol.final"]["result"]["recovered_without_model_call"] is True
+    assert raw_path.read_bytes() == frozen_raw
+    recovered_result_path = pathlib.Path(recovered_final["final_result_path"])
+    final_bytes = recovered_result_path.read_bytes()
+    assert any(risk["source_risks"] for risk in json.loads(final_bytes)["plausible_risks"])
+    assert workflow.command_execute_orchestration(
+        capped_state_path, runner=capped_runner,
+        available_models=capped_runner.available_models,
+    )["complete"] is True
+    assert recovered_result_path.read_bytes() == final_bytes
+    assert len(capped_runner.calls) == capped_call_count
+
     persistent_root = tmp_path / "persistent-invalid-sol"
     persistent_root.mkdir()
     persistent_request, _, _ = credit_analysis_request(

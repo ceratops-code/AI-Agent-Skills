@@ -13,8 +13,11 @@ from .single_thread_analysis import *
 from .source_execution_context import *
 from .report_bookkeeping import (
     _closed_result,
+    _holistic_preserve_review_sources,
+    _holistic_preserve_risk_sources,
     _holistic_surface_ids,
     _holistic_temporary_control_merges,
+    _render_holistic_risks,
     _result_deduped_strings,
     _result_objects,
 )
@@ -5107,7 +5110,7 @@ def _validate_holistic_sol_result(
                 "competing_explanations",
                 "missing_fact",
                 "verification_needed",
-            },
+            } | ({"source_risks"} if task["phase"] == "sol-final" and "source_risks" in risk else set()),
             label,
         )
         _identifier(risk.get("id"), f"{label} ID")
@@ -5221,7 +5224,7 @@ def _validate_holistic_sol_result(
                 "finding_id",
                 "no_finding_reason",
                 "contributing_surfaces",
-            },
+            } | ({"source_reviews"} if task["phase"] == "sol-final" and "source_reviews" in review else set()),
             label,
         )
         review_id = _identifier(review.get("id"), f"{label} ID")
@@ -5402,28 +5405,8 @@ def _validate_holistic_sol_result(
                 for final in findings
             ):
                 raise CreditAnalysisError("final Sol dropped a prior confirmed finding")
-        prior_risks = [
-            item for result in prior_results for item in result["plausible_risks"]
-        ]
-        for prior in prior_risks:
-            if str(prior["id"]) in risk_by_id:
-                continue
-            if not any(
-                str(final["description"]) == str(prior["description"])
-                and set(prior["affected_call_ids"])
-                <= set(final["affected_call_ids"])
-                for final in risks
-            ):
-                raise CreditAnalysisError("final Sol dropped a prior plausible risk")
-        prior_review_ids = {
-            str(item["id"])
-            for result in prior_results
-            for item in result["temporary_control_reviews"]
-        }
-        if not prior_review_ids <= set(review_by_id):
-            raise CreditAnalysisError(
-                "final Sol dropped a prior temporary control review"
-            )
+        risks = _holistic_preserve_risk_sources(risks, decisions, prior_results)
+        review_by_id = _holistic_preserve_review_sources(review_by_id, decisions, prior_results)
     return {
         "schema": HOLISTIC_SOL_RESULT_SCHEMA,
         "analysis_id": state["analysis_id"],
@@ -6623,22 +6606,7 @@ def _render_holistic_report(final: Mapping[str, Any]) -> str:
     )
     for classification, count in final["classification_totals"].items():
         lines.append(f"| {classification} | {count} |")
-    lines.extend(["", "## Plausible risks", ""])
-    if not final["plausible_risks"]:
-        lines.append("None.")
-    else:
-        lines.extend(
-            [
-                "| Risk | Calls | Evidence | Verification needed |",
-                "|---|---|---|---|",
-            ]
-        )
-        for risk in final["plausible_risks"]:
-            lines.append(
-                f"| {risk['description']} | {', '.join(risk['affected_call_ids'])} | "
-                f"{', '.join(risk['evidence_refs'])} | "
-                f"{'; '.join(risk['verification_needed'])} |"
-            )
+    lines.extend(_render_holistic_risks(final["plausible_risks"]))
     lines.extend(["", "## Capacity and execution omissions", ""])
     if not final["omissions"]:
         lines.append("None.")
@@ -7059,12 +7027,10 @@ def command_execute_orchestration(
             if not rejected:
                 continue
             task = _holistic_runtime_task(state, base_task)
+            if task["phase"] == "sol-final":
+                # Revalidate frozen output before enforcing limits on new calls.
+                continue
             if rejected > sol_retry_limit:
-                if task["phase"] == "sol-final":
-                    _holistic_save_state(state)
-                    raise CreditAnalysisError(
-                        "final Sol failed validation after its automatic retry"
-                    )
                 _omit_sol_task(
                     state,
                     task,
@@ -7189,6 +7155,15 @@ def command_execute_orchestration(
                     )
                     progressed += 1
                     continue
+            if task["phase"] == "sol-final":
+                if _sol_validation_error_count(state["execution"][task["task_id"]]) > sol_retry_limit:
+                    raise CreditAnalysisError(
+                        "final Sol failed validation after its automatic retry"
+                    )
+                if _sol_attempt_capacity(state, contract, task) == 0:
+                    raise CreditAnalysisError(
+                        "Sol attempt ceiling leaves no final result capacity"
+                    )
             raw: Mapping[str, Any] | None
             unrecorded = _holistic_unrecorded_attempt(
                 state,

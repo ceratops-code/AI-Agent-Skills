@@ -198,6 +198,31 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
             # Reviews already carry the decisions; the final transport can
             # omit their redundant merge links without another model call.
             result["temporary_control_merges"] = []
+            risk = result["plausible_risks"][0]
+            old_id = risk["id"]
+            risk["id"] = "combined-reviewed-risk"
+            risk["description"] = "Several reviewed episodes share an unresolved cause."
+            risk["competing_explanations"] = ["The combined explanation is intentionally shorter."]
+            risk["missing_fact"] = "The combined uncertainty still needs verification."
+            for decision in result["candidate_decisions"]:
+                decision["risk_ids"] = [
+                    risk["id"] if value == old_id else value for value in decision["risk_ids"]
+                ]
+            reviews = result["temporary_control_reviews"]
+            combined = [review for review in reviews if review["disposition"] == "final-state-unclear"]
+            assert len(combined) >= 2
+            merged_review = {
+                **combined[0], "id": "combined-unclear-control",
+                "observed_temporary_control": "Several temporary episodes await a canonical-state check.",
+                "no_finding_reason": "The combined review still lacks evidence of a permanent gap.",
+            }
+            for field in ("source_luna_candidate_ids", "affected_call_ids", "final_canonical_evidence_refs"):
+                merged_review[field] = list(dict.fromkeys(value for review in combined for value in review[field]))
+            call_order = {row[1]: index for index, row in enumerate(packet["call_inventory"]["rows"])}
+            merged_review["affected_call_ids"].sort(key=call_order.__getitem__)
+            result["temporary_control_reviews"] = [
+                review for review in reviews if review["disposition"] != "final-state-unclear"
+            ] + [merged_review]
             return result
 
         def _luna(
@@ -660,8 +685,97 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
     risk["description"] += " Rephrased without retaining its original identity."
     for item in [*rewritten_risk["candidate_decisions"], *rewritten_risk["surface_summaries"]]:
         item["risk_ids"] = [risk["id"] if value == prior_id else value for value in item["risk_ids"]]
-    with pytest.raises(workflow.CreditAnalysisError, match="final Sol dropped a prior plausible risk"):
-        validate_report(rewritten_risk)
+    preserved = validate_report(rewritten_risk)
+    assert preserved["plausible_risks"][0]["source_risks"] == risk["source_risks"]
+    assert len(risk["source_risks"]) >= 3
+    assert len({source["id"] for source in risk["source_risks"]}) == len(risk["source_risks"])
+    report_text = workflow._render_holistic_report(final)
+    for source in risk["source_risks"]:
+        assert source["description"] in report_text
+        assert source["missing_fact"] in report_text
+        assert all(explanation in report_text for explanation in source["competing_explanations"])
+
+    tampered = report_copy()
+    tampered["plausible_risks"][0]["source_risks"][0]["missing_fact"] = "Silently replaced uncertainty."
+    with pytest.raises(workflow.CreditAnalysisError, match="source records changed"):
+        validate_report(tampered)
+
+    for field in ("affected_call_ids", "evidence_refs"):
+        incomplete = report_copy()
+        source_value = incomplete["plausible_risks"][0]["source_risks"][0][field][0]
+        incomplete["plausible_risks"][0][field].remove(source_value)
+        with pytest.raises(workflow.CreditAnalysisError, match="evidence coverage is incomplete"):
+            validate_report(incomplete)
+
+    missing_owner = report_copy()
+    decision = next(item for item in missing_owner["candidate_decisions"] if item["risk_ids"])
+    decision["risk_ids"] = []
+    decision["disposition"] = "confirmed-finding" if decision["finding_ids"] else "dismissed-candidate"
+    with pytest.raises(workflow.CreditAnalysisError, match="final ownership is missing"):
+        validate_report(missing_owner)
+
+    ambiguous = report_copy()
+    duplicate_risk = {**ambiguous["plausible_risks"][0], "id": "another-combined-risk"}
+    duplicate_risk.pop("source_risks")
+    ambiguous["plausible_risks"].append(duplicate_risk)
+    for decision in ambiguous["candidate_decisions"]:
+        if decision["risk_ids"]:
+            decision["risk_ids"].append(duplicate_risk["id"])
+    with pytest.raises(workflow.CreditAnalysisError, match="final ownership is ambiguous"):
+        validate_report(ambiguous)
+
+    combined_review = next(
+        review for review in canonical["temporary_control_reviews"]
+        if review["id"] == "combined-unclear-control"
+    )
+    assert len(combined_review["source_reviews"]) >= 2
+    expected_reviews = {}
+    for shard_task in active["manifest"]["sol_tasks"][:6]:
+        record = active["execution"][shard_task["task_id"]]["result"]
+        if record is not None:
+            prior = workflow._luna_sol_analysis._namespaced_adjudication_result(
+                json.loads(pathlib.Path(record["path"]).read_text(encoding="utf-8")), shard_task["task_id"]
+            )
+            expected_reviews.update({review["id"]: review for review in prior["temporary_control_reviews"]})
+    sources = [source for review in canonical["temporary_control_reviews"] for source in review["source_reviews"]]
+    assert {source["id"]: source for source in sources} == expected_reviews
+    assert len(sources) == len(expected_reviews)
+
+    def review_copy() -> tuple[dict[str, Any], dict[str, Any]]:
+        report = report_copy()
+        review = next(item for item in report["temporary_control_reviews"] if item["id"] == combined_review["id"])
+        return report, review
+
+    tampered, review = review_copy()
+    review["source_reviews"][0]["no_finding_reason"] = "Replaced original judgment."
+    with pytest.raises(workflow.CreditAnalysisError, match="source records changed"):
+        validate_report(tampered)
+
+    for field in ("affected_call_ids", "final_canonical_evidence_refs"):
+        incomplete, review = review_copy()
+        review[field] = [value for value in review[field] if value != review["source_reviews"][0][field][0]]
+        # Keep the outer record well-formed so the preservation check owns the failure.
+        if not review[field]:
+            review[field] = [
+                canonical["plausible_risks"][0]["affected_call_ids" if field == "affected_call_ids" else "evidence_refs"][0]
+            ]
+        with pytest.raises(workflow.CreditAnalysisError, match="coverage is incomplete"):
+            validate_report(incomplete)
+
+    conflicting, review = review_copy()
+    review["disposition"] = "transient-by-design"
+    with pytest.raises(workflow.CreditAnalysisError, match="disposition changed"):
+        validate_report(conflicting)
+
+    missing_owner, review = review_copy()
+    review["owning_producer"] = "unrelated-owner"
+    with pytest.raises(workflow.CreditAnalysisError, match="final ownership is missing"):
+        validate_report(missing_owner)
+
+    ambiguous, review = review_copy()
+    ambiguous["temporary_control_reviews"].append({**review, "id": "another-unclear-control"})
+    with pytest.raises(workflow.CreditAnalysisError, match="final ownership is ambiguous"):
+        validate_report(ambiguous)
 
 
 def test_credit_analysis_model_catalog_decodes_cli_as_utf8(
