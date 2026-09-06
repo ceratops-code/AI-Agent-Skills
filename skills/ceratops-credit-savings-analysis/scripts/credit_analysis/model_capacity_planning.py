@@ -1,8 +1,9 @@
 """Pure capacity planning for the holistic credit-analysis controller.
 
 This module owns byte-bounded run partitioning, Luna admission priority,
-flexible Luna result allowances, and preassigned Sol review capacity.  It never
-reads sessions, launches models, or mutates controller state.  Calls remain
+flexible Luna result allowances, Sol review capacity, invocation limits, and
+retry eligibility. It never reads sessions, launches models, or mutates
+controller state. Calls remain
 attached to their source run; transport parts are an input-capacity mechanism,
 not independent semantic runs.
 """
@@ -368,7 +369,87 @@ def plan_luna_reviewers(
     return planned
 
 
+def _sol_validation_error_count(execution: Mapping[str, Any]) -> int:
+    """Count rejected semantic results without treating runner failures as data."""
+
+    return sum(
+        attempt.get("outcome") == "validation-error"
+        for attempt in execution["attempts"]
+    )
+
+
+def _sol_attempt_capacity(
+    state: Mapping[str, Any],
+    contract: Mapping[str, Any],
+    task: Mapping[str, Any],
+) -> int:
+    """Return launchable Sol attempts while preserving the dependent final slot."""
+
+    maximum = int(contract["semantic_call_contract"]["sol_max_attempts"])
+    reserve_final = int(
+        task["phase"] != "sol-final"
+        and state["execution"]["sol.final"]["status"] == "pending"
+    )
+    return max(
+        0,
+        maximum - int(state["model_attempts"]["sol"]) - reserve_final,
+    )
+
+
+def _can_retry_sol_validation(
+    state: Mapping[str, Any],
+    contract: Mapping[str, Any],
+    task: Mapping[str, Any],
+) -> bool:
+    """Allow one task-local correction only inside the global Sol attempt cap."""
+
+    execution = state["execution"][task["task_id"]]
+    rejected = _sol_validation_error_count(execution)
+    retry_limit = int(
+        contract["semantic_call_contract"][
+            "sol_max_validation_retries_per_task"
+        ]
+    )
+    return 0 < rejected <= retry_limit and _sol_attempt_capacity(
+        state, contract, task
+    ) > 0
+
+
+def _validate_sol_call_budget(
+    state: Mapping[str, Any], contract: Mapping[str, Any]
+) -> None:
+    """Reject oversized plans and counters that disagree with actual invocations.
+
+    Retries belong to their frozen task and never consume a new planned slot.
+    Launch failures with model_invoked=False do not consume invocation budget.
+    This read-only check also applies to completed state and retained recovery.
+    """
+
+    limits = contract["semantic_call_contract"]
+    tasks = state["manifest"]["sol_tasks"]
+    if len(tasks) > int(limits["sol_max_planned_calls"]):
+        raise CreditAnalysisError("Sol planned-call cap was exceeded")
+    attempts = [
+        attempt
+        for task in tasks
+        for attempt in state["execution"][task["task_id"]]["attempts"]
+    ]
+    if any(not isinstance(attempt.get("model_invoked"), bool) for attempt in attempts):
+        raise CreditAnalysisError("Sol invocation accounting is invalid")
+    actual = state["model_attempts"]["sol"]
+    if not isinstance(actual, int) or isinstance(actual, bool) or actual < 0:
+        raise CreditAnalysisError("Sol invocation count is invalid")
+    if actual > int(limits["sol_max_attempts"]):
+        raise CreditAnalysisError("Sol attempt cap was exceeded")
+    if actual != sum(attempt["model_invoked"] for attempt in attempts):
+        raise CreditAnalysisError("Sol invocation count disagrees with retained attempts")
+
+
 __all__ = (
+    "_validate_sol_call_budget",
+    "_sol_validation_error_count",
+    "_sol_attempt_capacity",
+    "_can_retry_sol_validation",
     "partition_luna_inputs",
     "plan_luna_reviewers",
     "select_luna_tasks",

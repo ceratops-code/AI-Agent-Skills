@@ -2219,7 +2219,8 @@ def _validate_holistic_manifest(
     limits = contract["semantic_call_contract"]
     if (
         manifest.get("projected_sol_calls") != limits["sol_target_calls"]
-        or manifest.get("maximum_sol_calls") != limits["sol_max_calls"]
+        or manifest.get("maximum_planned_sol_calls") != limits["sol_max_planned_calls"]
+        or manifest.get("maximum_sol_attempts") != limits["sol_max_attempts"]
     ):
         raise CreditAnalysisError("holistic Sol call range is invalid")
     if manifest.get("projected_semantic_calls") != min(
@@ -2232,7 +2233,7 @@ def _validate_holistic_manifest(
     ):
         raise CreditAnalysisError("holistic manifest surface order is invalid")
     sol_tasks = manifest.get("sol_tasks")
-    if not isinstance(sol_tasks, list) or len(sol_tasks) != 8:
+    if not isinstance(sol_tasks, list) or len(sol_tasks) != limits["sol_max_planned_calls"]:
         raise CreditAnalysisError("holistic Sol task slots are invalid")
     phases = [task.get("phase") for task in sol_tasks]
     if phases != [
@@ -2307,7 +2308,8 @@ def _holistic_public_status(state: Mapping[str, Any]) -> dict[str, Any]:
         "report_path": final.get("report_path") if isinstance(final, Mapping) else None,
         "projected_luna_calls": manifest["projected_luna_calls"],
         "projected_sol_calls": manifest["projected_sol_calls"],
-        "maximum_sol_calls": manifest["maximum_sol_calls"],
+        "maximum_planned_sol_calls": manifest["maximum_planned_sol_calls"],
+        "maximum_sol_attempts": manifest["maximum_sol_attempts"],
         "projected_semantic_calls": manifest["projected_semantic_calls"],
         "planned_luna_parts": len(manifest["luna_tasks"]),
         "candidate_count": len(manifest["candidate_ids"]),
@@ -2616,7 +2618,8 @@ def command_plan_orchestration(
         },
         "projected_luna_calls": len(admitted_luna_ids),
         "projected_sol_calls": int(limits["sol_target_calls"]),
-        "maximum_sol_calls": int(limits["sol_max_calls"]),
+        "maximum_planned_sol_calls": int(limits["sol_max_planned_calls"]),
+        "maximum_sol_attempts": int(limits["sol_max_attempts"]),
         "projected_semantic_calls": len(admitted_luna_ids) + int(limits["sol_target_calls"]),
     }
     _validate_holistic_manifest(
@@ -2916,6 +2919,7 @@ def _holistic_read_state(
             or _content_hash(routing_value) != routing.get("content_hash")
         ):
             raise CreditAnalysisError("Sol routing identity changed")
+    _validate_sol_call_budget(state, contract)
     return state, evidence, contract, compact
 
 
@@ -3730,8 +3734,9 @@ def _freeze_sol_routing(
 
     retry_reserve = int(limits["sol_max_validation_retries_per_task"])
     direct_evidence_fits_call_budget = (
-        adjudicator_count + 1 + retry_reserve + 1
-        <= int(limits["sol_max_calls"])
+        adjudicator_count + 2 <= int(limits["sol_max_planned_calls"])
+        and int(state["model_attempts"]["sol"]) + adjudicator_count + 2 + retry_reserve
+        <= int(limits["sol_max_attempts"])
     )
     preferred_audit_windows = (
         [max(retained_window_tasks, key=direct_evidence_rank)]
@@ -4027,7 +4032,11 @@ def _freeze_focused_review(
         * float(contract["coverage"]["maximum_unassessed_fraction"])
     )
     support_task = _holistic_task_map(state["manifest"])[support_id]
-    support_capacity = _sol_attempt_capacity(state, contract, support_task)
+    support_capacity = max(
+        0,
+        _sol_attempt_capacity(state, contract, support_task)
+        - int(contract["semantic_call_contract"]["sol_max_validation_retries_per_task"]),
+    )
     if len(unassessed_call_ids) > maximum_unassessed and support_capacity:
         record_by_call = {
             str(record["call_id"]): record for record in compact["records"]
@@ -6405,7 +6414,8 @@ def _holistic_final(
             "surface_order": state["manifest"]["surface_order"],
             "projected_luna_calls": state["manifest"]["projected_luna_calls"],
             "projected_sol_calls": state["manifest"]["projected_sol_calls"],
-            "maximum_sol_calls": state["manifest"]["maximum_sol_calls"],
+            "maximum_planned_sol_calls": state["manifest"]["maximum_planned_sol_calls"],
+            "maximum_sol_attempts": state["manifest"]["maximum_sol_attempts"],
             "projected_semantic_calls": state["manifest"]["projected_semantic_calls"],
             "planned_luna_parts": len(state["manifest"]["luna_tasks"]),
             "candidate_count": len(state["manifest"]["candidate_ids"]),
@@ -6792,10 +6802,7 @@ def _finalize_holistic(
         raise CreditAnalysisError("Luna coverage record is incomplete")
     if state["model_attempts"]["luna"] > 70:
         raise CreditAnalysisError("Luna attempt cap was exceeded")
-    if state["model_attempts"]["sol"] > int(
-        contract["semantic_call_contract"]["sol_max_calls"]
-    ):
-        raise CreditAnalysisError("Sol attempt cap was exceeded")
+    _validate_sol_call_budget(state, contract)
     expected_sol = sum(
         state["execution"][task["task_id"]]["status"] == "complete"
         for task in state["manifest"]["sol_tasks"]
@@ -6885,52 +6892,6 @@ def _diagnosed_luna_retry(error: CreditAnalysisError) -> bool:
             "too few items",
         )
     )
-
-
-def _sol_validation_error_count(execution: Mapping[str, Any]) -> int:
-    """Count rejected semantic results without treating runner failures as data."""
-
-    return sum(
-        attempt.get("outcome") == "validation-error"
-        for attempt in execution["attempts"]
-    )
-
-
-def _sol_attempt_capacity(
-    state: Mapping[str, Any],
-    contract: Mapping[str, Any],
-    task: Mapping[str, Any],
-) -> int:
-    """Return launchable Sol attempts while preserving the dependent final slot."""
-
-    maximum = int(contract["semantic_call_contract"]["sol_max_calls"])
-    reserve_final = int(
-        task["phase"] != "sol-final"
-        and state["execution"]["sol.final"]["status"] == "pending"
-    )
-    return max(
-        0,
-        maximum - int(state["model_attempts"]["sol"]) - reserve_final,
-    )
-
-
-def _can_retry_sol_validation(
-    state: Mapping[str, Any],
-    contract: Mapping[str, Any],
-    task: Mapping[str, Any],
-) -> bool:
-    """Allow one task-local correction only inside the global Sol attempt cap."""
-
-    execution = state["execution"][task["task_id"]]
-    rejected = _sol_validation_error_count(execution)
-    retry_limit = int(
-        contract["semantic_call_contract"][
-            "sol_max_validation_retries_per_task"
-        ]
-    )
-    return 0 < rejected <= retry_limit and _sol_attempt_capacity(
-        state, contract, task
-    ) > 0
 
 
 def _holistic_model_attempt(
@@ -7167,16 +7128,11 @@ def command_execute_orchestration(
     luna_attempt_limit = int(
         contract["semantic_call_contract"]["luna_max_attempts"]
     )
-    sol_attempt_limit = int(
-        contract["semantic_call_contract"]["sol_max_calls"]
-    )
     sol_retry_limit = int(
         contract["semantic_call_contract"][
             "sol_max_validation_retries_per_task"
         ]
     )
-    if int(state["model_attempts"]["sol"]) > sol_attempt_limit:
-        raise CreditAnalysisError("Sol attempt cap was exceeded")
     state["phase"] = "executing"
     _holistic_save_state(state)
 
@@ -7229,20 +7185,6 @@ def command_execute_orchestration(
                 progressed += 1
                 sol_omission_changed = True
                 continue
-            if _sol_attempt_capacity(state, contract, task) == 0:
-                if task["phase"] == "sol-final":
-                    _holistic_save_state(state)
-                    raise CreditAnalysisError(
-                        "Sol attempt ceiling leaves no corrective final retry"
-                    )
-                _omit_sol_task(
-                    state,
-                    task,
-                    reason="sol-retry-capacity",
-                    error=str(execution["attempts"][-1].get("error") or "invalid result"),
-                )
-                progressed += 1
-                sol_omission_changed = True
         if sol_omission_changed:
             _holistic_save_state(state)
 
@@ -7280,49 +7222,9 @@ def command_execute_orchestration(
                 for task in ready
                 if task["phase"] in {"sol-adjudication", "sol-direct-evidence"}
             ]
-            launch_capacity = _sol_attempt_capacity(
-                state, contract, ready[0]
-            )
-            deferred = ready[launch_capacity:]
-            deferred_omission_changed = False
-            for task in deferred:
-                execution = state["execution"][task["task_id"]]
-                if _sol_validation_error_count(execution):
-                    _omit_sol_task(
-                        state,
-                        task,
-                        reason="sol-retry-capacity",
-                        error=str(
-                            execution["attempts"][-1].get("error")
-                            or "invalid result"
-                        ),
-                    )
-                    progressed += 1
-                    deferred_omission_changed = True
-            ready = ready[:launch_capacity]
-            if deferred_omission_changed:
-                _holistic_save_state(state)
-            if not ready and deferred:
-                fresh = [
-                    task
-                    for task in deferred
-                    if state["execution"][task["task_id"]]["status"] == "pending"
-                ]
-                if fresh:
-                    _holistic_save_state(state)
-                    raise CreditAnalysisError(
-                        "Sol attempt ceiling leaves no first-stage capacity"
-                    )
             concurrency = len(ready)
         else:
             ready = [ready[0]]
-            if phase == "sol-final" and _sol_attempt_capacity(
-                state, contract, ready[0]
-            ) == 0:
-                _holistic_save_state(state)
-                raise CreditAnalysisError(
-                    "Sol attempt ceiling leaves no final result capacity"
-                )
             concurrency = 1
         if task_budget is not None:
             remaining_tasks = task_budget - progressed
@@ -7493,6 +7395,35 @@ def command_execute_orchestration(
             prepared.append(
                 (task, payload, digest, prompt_path, schema_path, candidate_ids)
             )
+        if phase.startswith("sol-"):
+            # Reuse retained results before spending any remaining launch budget.
+            _validate_sol_call_budget(state, contract)
+            launch_capacity = _sol_attempt_capacity(state, contract, ready[0])
+            deferred = prepared[launch_capacity:]
+            prepared = prepared[:launch_capacity]
+            for task, *_ in deferred:
+                execution = state["execution"][task["task_id"]]
+                if task["phase"] != "sol-final" and _sol_validation_error_count(
+                    execution
+                ):
+                    _omit_sol_task(
+                        state,
+                        task,
+                        reason="sol-retry-capacity",
+                        error=str(execution["attempts"][-1].get("error") or "invalid result"),
+                    )
+                    progressed += 1
+            if deferred:
+                _holistic_save_state(state)
+            if not prepared and any(
+                state["execution"][item[0]["task_id"]]["status"] == "pending"
+                for item in deferred
+            ):
+                raise CreditAnalysisError(
+                    "Sol attempt ceiling leaves no "
+                    + ("final result" if phase == "sol-final" else "first-stage")
+                    + " capacity"
+                )
         if not prepared:
             continue
 
