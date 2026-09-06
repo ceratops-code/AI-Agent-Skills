@@ -14,6 +14,7 @@ from .source_execution_context import *
 from .report_bookkeeping import (
     _closed_result,
     _holistic_category_reviews,
+    _holistic_preserve_finding_sources,
     _holistic_preserve_review_sources,
     _holistic_preserve_risk_sources,
     _holistic_surface_ids,
@@ -4710,6 +4711,7 @@ def _validate_holistic_finding(
     workstreams: Mapping[str, str],
     surface_order: Sequence[str],
     label: str,
+    allow_source_findings: bool = False,
 ) -> dict[str, Any]:
     fields = {
         "id",
@@ -4733,7 +4735,11 @@ def _validate_holistic_finding(
         "helper_categories",
         "contributing_surfaces",
     }
-    _closed_result(finding, fields, label)
+    _closed_result(
+        finding,
+        fields | ({"source_findings"} if allow_source_findings and "source_findings" in finding else set()),
+        label,
+    )
     _identifier(finding.get("id"), f"{label} ID")
     for key in (
         "title",
@@ -5058,6 +5064,7 @@ def _validate_holistic_sol_result(
             workstreams=workstreams,
             surface_order=surface_order,
             label=f"confirmed finding {index}",
+            allow_source_findings=task["phase"] == "sol-final",
         )
         for index, finding in enumerate(
             _result_objects(raw.get("confirmed_findings"), "confirmed findings"),
@@ -5399,22 +5406,7 @@ def _validate_holistic_sol_result(
                         "sol.unassessed-recovery",
                     )
                 )
-        prior_findings = [
-            item for result in prior_results for item in result["confirmed_findings"]
-        ]
-        for prior in prior_findings:
-            if str(prior["id"]) in finding_by_id:
-                continue
-            if not any(
-                str(final["producer_owner"]) == str(prior["producer_owner"])
-                and str(final["proposed_durable_control"])
-                == str(prior["proposed_durable_control"])
-                and str(final["workstream"]) == str(prior["workstream"])
-                and set(prior["affected_call_ids"])
-                <= set(final["affected_call_ids"])
-                for final in findings
-            ):
-                raise CreditAnalysisError("final Sol dropped a prior confirmed finding")
+        findings = _holistic_preserve_finding_sources(findings, decisions, prior_results)
         risks = _holistic_preserve_risk_sources(risks, decisions, prior_results)
         review_by_id = _holistic_preserve_review_sources(review_by_id, decisions, prior_results)
         category_reviews = _holistic_category_reviews(category_reviews, contract["helper_categories"], prior_results)

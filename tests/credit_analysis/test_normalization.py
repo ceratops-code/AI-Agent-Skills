@@ -196,6 +196,19 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
         @staticmethod
         def _final(packet: Mapping[str, Any]) -> dict[str, Any]:
             result = FakeCreditModelRunner._final(packet)
+            finding_ids = {
+                finding["id"]: f"combined-finding-{index}"
+                for index, finding in enumerate(result["confirmed_findings"], start=1)
+            }
+            for finding in result["confirmed_findings"]:
+                finding["id"] = finding_ids[finding["id"]]
+                finding["producer_owner"] = "Reviewed owner: " + finding["producer_owner"]
+                finding["proposed_durable_control"] = "Reviewed correction: " + finding["proposed_durable_control"]
+            for decision in result["candidate_decisions"]:
+                decision["finding_ids"] = [finding_ids[value] for value in decision["finding_ids"]]
+            for review in result["temporary_control_reviews"]:
+                if review["finding_id"] is not None:
+                    review["finding_id"] = finding_ids[review["finding_id"]]
             result["helper_category_reviews"] = [
                 dict(review) for prior in packet["prior_adjudication_results"]
                 for review in prior["helper_category_reviews"]
@@ -611,6 +624,76 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
     def report_copy() -> dict[str, Any]:
         return json.loads(json.dumps(canonical))
 
+    prior_results = []
+    for shard_task in active["manifest"]["sol_tasks"][:6]:
+        record = active["execution"][shard_task["task_id"]]["result"]
+        if record is not None:
+            prior_results.append(workflow._luna_sol_analysis._namespaced_adjudication_result(
+                json.loads(pathlib.Path(record["path"]).read_text(encoding="utf-8")),
+                shard_task["task_id"],
+            ))
+    expected_findings = {
+        finding["id"]: finding for prior in prior_results for finding in prior["confirmed_findings"]
+    }
+    finding_sources = [
+        source for finding in canonical["confirmed_findings"] for source in finding["source_findings"]
+    ]
+    assert {source["id"]: source for source in finding_sources} == expected_findings
+    assert len(finding_sources) == len(expected_findings)
+    assert any(len(finding["source_findings"]) > 1 for finding in canonical["confirmed_findings"])
+    assert all("source_findings" not in finding for finding in json.loads(raw_bytes)["confirmed_findings"])
+    assert {finding["id"]: finding["source_findings"] for finding in final["confirmed_findings"]} == {
+        finding["id"]: finding["source_findings"] for finding in canonical["confirmed_findings"]
+    }
+
+    changed_source = report_copy()
+    changed_source["confirmed_findings"][0]["source_findings"][0]["proposed_durable_control"] = "Replaced original control."
+    with pytest.raises(workflow.CreditAnalysisError, match="source records changed"):
+        validate_report(changed_source)
+    omitted_source = report_copy()
+    omitted_source["confirmed_findings"][0]["source_findings"].pop()
+    with pytest.raises(workflow.CreditAnalysisError, match="source records changed"):
+        validate_report(omitted_source)
+
+    preserve_findings = workflow._luna_sol_analysis._holistic_preserve_finding_sources
+
+    def preserve_report_findings(report: dict[str, Any]) -> list[dict[str, Any]]:
+        return preserve_findings(report["confirmed_findings"], report["candidate_decisions"], prior_results)
+
+    missing_finding_owner = report_copy()
+    merged_finding = missing_finding_owner["confirmed_findings"][0]
+    for decision in missing_finding_owner["candidate_decisions"]:
+        decision["finding_ids"] = [value for value in decision["finding_ids"] if value != merged_finding["id"]]
+    with pytest.raises(workflow.CreditAnalysisError, match="final ownership is missing"):
+        preserve_report_findings(missing_finding_owner)
+
+    for field in ("affected_call_ids", "evidence_refs"):
+        incomplete_finding = report_copy()
+        finding = incomplete_finding["confirmed_findings"][0]
+        finding[field].remove(finding["source_findings"][0][field][0])
+        with pytest.raises(workflow.CreditAnalysisError, match="evidence coverage is incomplete"):
+            preserve_report_findings(incomplete_finding)
+
+    ambiguous_finding = report_copy()
+    first_finding = ambiguous_finding["confirmed_findings"][0]
+    duplicate_finding = {**first_finding, "id": "another-combined-finding"}
+    duplicate_finding.pop("source_findings")
+    ambiguous_finding["confirmed_findings"].append(duplicate_finding)
+    for decision in ambiguous_finding["candidate_decisions"]:
+        if first_finding["id"] in decision["finding_ids"]:
+            decision["finding_ids"].append(duplicate_finding["id"])
+    with pytest.raises(workflow.CreditAnalysisError, match="final ownership is ambiguous"):
+        preserve_report_findings(ambiguous_finding)
+
+    source = expected_findings[next(iter(expected_findings))]
+    with pytest.raises(workflow.CreditAnalysisError, match="unknown source_findings"):
+        workflow._luna_sol_analysis._validate_holistic_finding(
+            {**source, "source_findings": []}, contract=contract,
+            call_order=active["manifest"]["call_ids"],
+            workstreams=workflow._luna_sol_analysis._holistic_workstream_by_call(compact),
+            surface_order=active["manifest"]["surface_order"], label="non-final finding",
+        )
+
     missing = report_copy()
     missing["temporary_control_merges"] = []
     missing_before = json.dumps(missing, sort_keys=True)
@@ -734,6 +817,39 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
             decision["risk_ids"].append(duplicate_risk["id"])
     with pytest.raises(workflow.CreditAnalysisError, match="final ownership is ambiguous"):
         validate_report(ambiguous)
+
+    # One candidate can independently support a merged risk and a narrower
+    # risk. Only a destination covering the entire source can preserve it.
+    source_risk = {**canonical["plausible_risks"][0], "id": "source-risk"}
+    source_risk.pop("source_risks")
+    assert len(source_risk["affected_call_ids"]) > 1
+    full_risk = {**source_risk, "id": "full-risk"}
+    narrow_risk = {
+        **source_risk, "id": "narrow-risk",
+        "affected_call_ids": source_risk["affected_call_ids"][:1],
+        "evidence_refs": source_risk["evidence_refs"][:1],
+    }
+    preserve_risks = workflow._luna_sol_analysis._holistic_preserve_risk_sources
+    source_risk_results = [{
+        "plausible_risks": [source_risk],
+        "candidate_decisions": [{"luna_candidate_id": "risk-candidate", "risk_ids": ["source-risk"]}],
+    }]
+    risk_decisions = [{"luna_candidate_id": "risk-candidate", "risk_ids": ["full-risk", "narrow-risk"]}]
+    preserved_risks = preserve_risks([full_risk, narrow_risk], risk_decisions, source_risk_results)
+    assert preserved_risks[0]["source_risks"] == [source_risk]
+    assert preserved_risks[1]["source_risks"] == []
+    assert preserve_risks(preserved_risks, risk_decisions, source_risk_results) == preserved_risks
+    for full_destination in (
+        {**full_risk, "affected_call_ids": narrow_risk["affected_call_ids"]},
+        {**full_risk, "evidence_refs": narrow_risk["evidence_refs"]},
+    ):
+        with pytest.raises(workflow.CreditAnalysisError, match="evidence coverage is incomplete"):
+            preserve_risks([full_destination, narrow_risk], risk_decisions, source_risk_results)
+    with pytest.raises(workflow.CreditAnalysisError, match="final ownership is ambiguous"):
+        preserve_risks([full_risk, {**full_risk, "id": "narrow-risk"}], risk_decisions, source_risk_results)
+    retained_id = {**narrow_risk, "id": "source-risk"}
+    with pytest.raises(workflow.CreditAnalysisError, match="evidence coverage is incomplete"):
+        preserve_risks([full_risk, retained_id], [{**risk_decisions[0], "risk_ids": ["full-risk", "source-risk"]}], source_risk_results)
 
     categories = canonical["helper_category_reviews"]
     assert [item["category"] for item in categories] == contract["helper_categories"]

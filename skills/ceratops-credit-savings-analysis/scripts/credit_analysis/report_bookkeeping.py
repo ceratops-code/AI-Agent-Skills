@@ -201,6 +201,101 @@ def _holistic_temporary_control_merges(
     return merges
 
 
+def _holistic_source_destination(
+    prior: Mapping[str, Any],
+    outcomes: Mapping[str, Mapping[str, Any]],
+    destinations: set[str],
+    label: str,
+) -> str:
+    """Resolve only candidate-linked destinations covering the complete source.
+
+    One candidate can support multiple independent outcomes. An outcome missing
+    the source's evidence is not an alternative destination for that source.
+    An explicitly retained original ID still has to pass the coverage check.
+    """
+
+    def covers(destination: str) -> bool:
+        summary = outcomes[destination]
+        return (
+            prior["workstream"] == summary["workstream"]
+            and set(prior["affected_call_ids"]) <= set(summary["affected_call_ids"])
+            and set(prior["evidence_refs"]) <= set(summary["evidence_refs"])
+        )
+
+    if not destinations:
+        raise CreditAnalysisError(f"{label} final ownership is missing")
+    if prior["id"] in destinations:
+        destination = prior["id"]
+    elif len(destinations) == 1:
+        destination = next(iter(destinations))
+    else:
+        covered = [destination for destination in destinations if covers(destination)]
+        if not covered:
+            raise CreditAnalysisError(f"{label} evidence coverage is incomplete")
+        if len(covered) != 1:
+            raise CreditAnalysisError(f"{label} final ownership is ambiguous")
+        destination = covered[0]
+    if not covers(destination):
+        raise CreditAnalysisError(f"{label} evidence coverage is incomplete")
+    return destination
+
+
+def _holistic_preserve_finding_sources(
+    findings: Sequence[Mapping[str, Any]],
+    decisions: Sequence[Mapping[str, Any]],
+    prior_results: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Retain accepted findings through the final model's candidate links.
+
+    A rewritten summary is not evidence of semantic equivalence. Each original
+    finding remains intact in controller-derived ``source_findings`` under one
+    destination shared by all of its candidate decisions. The original ID may
+    disambiguate destinations, but cannot bypass call or evidence coverage.
+    Source records are provenance, not additional findings or savings; final
+    judgments and accounting remain with the already validated summary.
+    Revalidation compares supplied provenance with the accepted source records.
+    """
+
+    finding_by_id = {finding["id"]: finding for finding in findings}
+    decision_by_candidate = {
+        decision["luna_candidate_id"]: decision for decision in decisions
+    }
+    prior_by_id: dict[str, Mapping[str, Any]] = {}
+    candidates_by_finding: dict[str, set[str]] = {}
+    for result in prior_results:
+        for finding in result["confirmed_findings"]:
+            finding_id = finding["id"]
+            if finding_id in prior_by_id and prior_by_id[finding_id] != finding:
+                raise CreditAnalysisError(f"prior confirmed finding {finding_id} is conflicting")
+            prior_by_id[finding_id] = finding
+        for decision in result["candidate_decisions"]:
+            for finding_id in decision["finding_ids"]:
+                candidates_by_finding.setdefault(finding_id, set()).add(
+                    decision["luna_candidate_id"]
+                )
+
+    sources: dict[str, list[dict[str, Any]]] = {finding_id: [] for finding_id in finding_by_id}
+    for finding_id, prior in prior_by_id.items():
+        candidates = candidates_by_finding.get(finding_id, set())
+        if not candidates or not candidates <= decision_by_candidate.keys():
+            raise CreditAnalysisError(f"prior confirmed finding {finding_id} candidate ownership is missing")
+        destinations = set(finding_by_id)
+        for candidate_id in candidates:
+            destinations.intersection_update(decision_by_candidate[candidate_id]["finding_ids"])
+        destination = _holistic_source_destination(
+            prior, finding_by_id, destinations, f"prior confirmed finding {finding_id}"
+        )
+        sources[destination].append(copy.deepcopy(dict(prior)))
+
+    preserved = []
+    for finding in findings:
+        expected_sources = sources[finding["id"]]
+        if "source_findings" in finding and finding["source_findings"] != expected_sources:
+            raise CreditAnalysisError(f"confirmed finding {finding['id']} source records changed")
+        preserved.append({**finding, "source_findings": expected_sources})
+    return preserved
+
+
 def _holistic_preserve_risk_sources(
     risks: Sequence[Mapping[str, Any]],
     decisions: Sequence[Mapping[str, Any]],
@@ -243,22 +338,9 @@ def _holistic_preserve_risk_sources(
         destinations = set(risk_by_id)
         for candidate_id in candidates:
             destinations.intersection_update(decision_by_candidate[candidate_id]["risk_ids"])
-        if risk_id in destinations:
-            destination = risk_id
-        elif len(destinations) == 1:
-            destination = next(iter(destinations))
-        else:
-            raise CreditAnalysisError(
-                f"prior plausible risk {risk_id} final ownership is "
-                + ("missing" if not destinations else "ambiguous")
-            )
-        summary = risk_by_id[destination]
-        if (
-            prior["workstream"] != summary["workstream"]
-            or not set(prior["affected_call_ids"]) <= set(summary["affected_call_ids"])
-            or not set(prior["evidence_refs"]) <= set(summary["evidence_refs"])
-        ):
-            raise CreditAnalysisError(f"prior plausible risk {risk_id} evidence coverage is incomplete")
+        destination = _holistic_source_destination(
+            prior, risk_by_id, destinations, f"prior plausible risk {risk_id}"
+        )
         sources[destination].append(copy.deepcopy(dict(prior)))
 
     preserved = []
