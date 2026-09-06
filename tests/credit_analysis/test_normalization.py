@@ -192,6 +192,14 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
             self.expected_unassessed = 0
             self.shard_local_unassessed_limit = 0
 
+        @staticmethod
+        def _final(packet: Mapping[str, Any]) -> dict[str, Any]:
+            result = FakeCreditModelRunner._final(packet)
+            # Reviews already carry the decisions; the final transport can
+            # omit their redundant merge links without another model call.
+            result["temporary_control_merges"] = []
+            return result
+
         def _luna(
             self,
             task: Mapping[str, Any],
@@ -541,6 +549,119 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
         merge["control_key"] != "implemented-control-is-not-a-gap"
         for merge in final["temporary_control_merges"]
     )
+
+    final_execution = state["execution"]["sol.final"]
+    assert len(final_execution["attempts"]) == 1
+    raw_path = pathlib.Path(final_execution["attempts"][0]["artifacts"]["raw_output"]["path"])
+    raw_bytes = raw_path.read_bytes()
+    assert json.loads(raw_bytes)["temporary_control_merges"] == []
+    canonical = json.loads(
+        pathlib.Path(final_execution["result"]["path"]).read_text(encoding="utf-8")
+    )
+    active, evidence, contract, compact = workflow._holistic_read_state(
+        pathlib.Path(plan["state_path"])
+    )
+    task = workflow._holistic_task_map(active["manifest"])["sol.final"]
+    _, digest, _, _, candidate_ids = workflow._holistic_prepare_task(
+        active, evidence, contract, compact, task
+    )
+
+    def validate_report(report: dict[str, Any]) -> dict[str, Any]:
+        return workflow._validate_holistic_task_result(
+            report, state=active, task=task, input_sha256=digest,
+            contract=contract, compact=compact, luna_candidate_ids=candidate_ids,
+        )
+
+    def report_copy() -> dict[str, Any]:
+        return json.loads(json.dumps(canonical))
+
+    missing = report_copy()
+    missing["temporary_control_merges"] = []
+    missing_before = json.dumps(missing, sort_keys=True)
+    assert validate_report(missing) == canonical
+    assert json.dumps(missing, sort_keys=True) == missing_before
+    assert validate_report(report_copy()) == canonical
+    assert raw_path.read_bytes() == raw_bytes
+
+    merge = canonical["temporary_control_merges"][0]
+    linked_ids = merge["review_ids"]
+    assert len(linked_ids) >= 2
+    linked = {
+        review["id"]: review for review in canonical["temporary_control_reviews"]
+        if review["id"] in linked_ids
+    }
+    assert merge["owning_producer"] == linked[linked_ids[0]]["owning_producer"]
+    finding = next(
+        item for item in canonical["confirmed_findings"] if item["id"] == merge["finding_id"]
+    )
+    assert merge["control_key"] == finding["proposed_durable_control"]
+    partial = report_copy()
+    partial["temporary_control_merges"][0]["review_ids"] = linked_ids[:-1]
+    assert validate_report(partial) == canonical
+
+    # Bad supplied ownership must fail before the missing-link repair runs.
+    for field, value, error in (
+        ("review_ids", ["unknown-review"], "review ownership is invalid"),
+        ("finding_id", "unknown-finding", "finding ownership is invalid"),
+        ("finding_id", [], "finding ownership is invalid"),
+        ("owning_producer", "different-owner", "producer ownership is invalid"),
+        ("owning_producer", None, "owning_producer is invalid"),
+        ("control_key", " ", "control_key is invalid"),
+    ):
+        invalid = report_copy()
+        invalid["temporary_control_merges"][0][field] = value
+        with pytest.raises(workflow.CreditAnalysisError, match=error):
+            validate_report(invalid)
+
+    duplicate = report_copy()
+    duplicate["temporary_control_merges"].append(dict(merge))
+    with pytest.raises(workflow.CreditAnalysisError, match="owner/control is merged twice"):
+        validate_report(duplicate)
+    duplicate["temporary_control_merges"][-1]["control_key"] = "another-control"
+    with pytest.raises(workflow.CreditAnalysisError, match="review ownership is invalid"):
+        validate_report(duplicate)
+
+    for owner, error in (
+        ("different-owner", "merge ownership is ambiguous"),
+        (" ", "owner is invalid"),
+    ):
+        ambiguous = report_copy()
+        ambiguous["temporary_control_merges"] = []
+        next(
+            item for item in ambiguous["temporary_control_reviews"] if item["id"] == linked_ids[0]
+        )["owning_producer"] = owner
+        with pytest.raises(workflow.CreditAnalysisError, match=error):
+            validate_report(ambiguous)
+
+    ambiguous = report_copy()
+    ambiguous["temporary_control_merges"] = [
+        {**merge, "review_ids": linked_ids[:1]},
+        {**merge, "review_ids": linked_ids[1:], "control_key": "another-control"},
+    ]
+    ambiguous["temporary_control_reviews"].append(
+        {**linked[linked_ids[0]], "id": "extra-review-without-a-merge"}
+    )
+    with pytest.raises(workflow.CreditAnalysisError, match="merge ownership is ambiguous"):
+        validate_report(ambiguous)
+
+    contradictory = report_copy()
+    contradictory["temporary_control_merges"] = []
+    for group in contradictory["call_classifications"]:
+        group["classification"] = "necessary"
+        group["reason_code"] = "required-workflow"
+    with pytest.raises(workflow.CreditAnalysisError, match="model-call finding has no avoidable call evidence"):
+        validate_report(contradictory)
+
+    rewritten_risk = report_copy()
+    rewritten_risk["temporary_control_merges"] = []
+    risk = rewritten_risk["plausible_risks"][0]
+    prior_id = risk["id"]
+    risk["id"] = "renamed-prior-risk"
+    risk["description"] += " Rephrased without retaining its original identity."
+    for item in [*rewritten_risk["candidate_decisions"], *rewritten_risk["surface_summaries"]]:
+        item["risk_ids"] = [risk["id"] if value == prior_id else value for value in item["risk_ids"]]
+    with pytest.raises(workflow.CreditAnalysisError, match="final Sol dropped a prior plausible risk"):
+        validate_report(rewritten_risk)
 
 
 def test_credit_analysis_model_catalog_decodes_cli_as_utf8(

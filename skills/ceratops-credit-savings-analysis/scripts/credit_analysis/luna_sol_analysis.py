@@ -11,6 +11,13 @@ from .multi_thread_analysis import *
 from .persistent_subthread_analysis import *
 from .single_thread_analysis import *
 from .source_execution_context import *
+from .report_bookkeeping import (
+    _closed_result,
+    _holistic_surface_ids,
+    _holistic_temporary_control_merges,
+    _result_deduped_strings,
+    _result_objects,
+)
 
 def _exclusive_text(path: pathlib.Path, value: str, label: str) -> None:
     """Create one immutable UTF-8 controller artifact."""
@@ -819,55 +826,6 @@ SYNTHESIS_RESULT_FIELDS = {
     "producer_groups",
     "analysis_summary",
 }
-
-
-def _closed_result(value: Mapping[str, Any], fields: set[str], label: str) -> None:
-    if set(value) != fields:
-        missing = sorted(fields - set(value))
-        extra = sorted(set(value) - fields)
-        detail = []
-        if missing:
-            detail.append("missing " + ", ".join(missing))
-        if extra:
-            detail.append("unknown " + ", ".join(extra))
-        raise CreditAnalysisError(f"{label} fields are invalid: {'; '.join(detail)}")
-
-
-
-
-def _result_deduped_strings(
-    value: Any, label: str, *, empty: bool = False
-) -> list[str]:
-    """Normalize only exact duplicate descriptive strings while preserving order."""
-
-    if (
-        not isinstance(value, list)
-        or (not empty and not value)
-        or not all(isinstance(item, str) and item for item in value)
-    ):
-        qualifier = "string list" if empty else "nonempty string list"
-        raise CreditAnalysisError(f"{label} must be a {qualifier}")
-    return list(dict.fromkeys(value))
-
-
-def _result_objects(value: Any, label: str) -> list[dict[str, Any]]:
-    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
-        raise CreditAnalysisError(f"{label} must be an object list")
-    return list(value)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def _validate_recurrence_inputs(value: Any, label: str) -> dict[str, Any]:
@@ -2933,19 +2891,6 @@ def _holistic_result_refs(value: Any, label: str, *, empty: bool = False) -> lis
     if any(not ref.startswith(("evidence://", "analysis://")) for ref in refs):
         raise CreditAnalysisError(f"{label} contains a non-evidence reference")
     return refs
-
-
-def _holistic_surface_ids(
-    value: Any,
-    label: str,
-    surface_order: Sequence[str],
-) -> list[str]:
-    """Validate a surface set and normalize it to the frozen public order."""
-
-    surfaces = _result_deduped_strings(value, label)
-    if not set(surfaces) <= set(surface_order):
-        raise CreditAnalysisError(f"{label} contains an unknown surface")
-    return [surface for surface in surface_order if surface in set(surfaces)]
 
 
 def _holistic_luna_schema(
@@ -5375,68 +5320,12 @@ def _validate_holistic_sol_result(
     if referenced_findings != set(finding_by_id) or referenced_risks != set(risk_by_id):
         raise CreditAnalysisError("Sol outcome is not linked to a Luna candidate")
 
-    raw_merges = _result_objects(
-        raw.get("temporary_control_merges"), "temporary-control merges"
+    merges = _holistic_temporary_control_merges(
+        raw.get("temporary_control_merges"),
+        review_by_id=review_by_id,
+        finding_by_id=finding_by_id,
+        surface_order=surface_order,
     )
-    merges: list[dict[str, Any]] = []
-    merged_reviews: set[str] = set()
-    merge_keys: set[tuple[str, str]] = set()
-    for index, merge in enumerate(raw_merges, start=1):
-        label = f"temporary-control merge {index}"
-        _closed_result(
-            merge,
-            {"control_key", "owning_producer", "review_ids", "contributing_surfaces", "finding_id"},
-            label,
-        )
-        merge_key = (
-            str(merge.get("owning_producer")),
-            str(merge.get("control_key")),
-        )
-        if merge_key in merge_keys:
-            raise CreditAnalysisError("temporary-control owner/control is merged twice")
-        merge_keys.add(merge_key)
-        review_ids = _result_deduped_strings(merge.get("review_ids"), f"{label} reviews")
-        if not set(review_ids) <= set(review_by_id):
-            raise CreditAnalysisError(f"{label} review ownership is invalid")
-        eligible_review_ids = [
-            review_id
-            for review_id in review_ids
-            if review_by_id[review_id]["finding_id"] is not None
-        ]
-        _holistic_surface_ids(
-            merge.get("contributing_surfaces"),
-            f"{label} surfaces",
-            surface_order,
-        )
-        if not eligible_review_ids:
-            continue
-        if set(eligible_review_ids) & merged_reviews:
-            raise CreditAnalysisError(f"{label} review ownership is invalid")
-        finding_id = merge.get("finding_id")
-        if finding_id not in finding_by_id or any(
-            review_by_id[review_id]["finding_id"] != finding_id
-            for review_id in eligible_review_ids
-        ):
-            raise CreditAnalysisError(f"{label} finding ownership is invalid")
-        merged_reviews.update(eligible_review_ids)
-        surfaces = [
-            surface
-            for surface in surface_order
-            if any(
-                surface in review_by_id[review_id]["contributing_surfaces"]
-                for review_id in eligible_review_ids
-            )
-        ]
-        merges.append(
-            {
-                **merge,
-                "review_ids": eligible_review_ids,
-                "contributing_surfaces": surfaces,
-            }
-        )
-    required_merged = {review_id for review_id, review in review_by_id.items() if review["finding_id"] is not None}
-    if merged_reviews != required_merged:
-        raise CreditAnalysisError("temporary-control confirmed findings were not merged once")
     category_reviews = _result_objects(raw.get("helper_category_reviews"), "helper category reviews")
     if [review.get("category") for review in category_reviews] != contract["helper_categories"]:
         raise CreditAnalysisError("helper category reviews are missing or reordered")
