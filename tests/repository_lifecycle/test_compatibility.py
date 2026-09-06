@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 
+import pytest
 import yaml
 
 from tests.repository_lifecycle.support import (
@@ -720,6 +721,74 @@ def test_compatibility_materializer_rolls_back_every_target_write_on_blocker(
     assert {path: path.read_bytes() for path in changed_paths} == original
     assert not (repo / "scripts" / "validate-repository.py").exists()
     assert not (repo / ".github" / "workflows" / "validate.yml").exists()
+
+
+@pytest.mark.parametrize(
+    "retired_contracts",
+    [
+        ("deploy/deploy.yml",),
+        ("release/release.yml",),
+        ("deploy/deploy.yml", "release/release.yml"),
+    ],
+)
+@pytest.mark.parametrize("has_skills", [False, True])
+@pytest.mark.parametrize("has_sdlc_contract", [False, True])
+@pytest.mark.parametrize("omit_sdlc_contract", [False, True])
+def test_compatibility_materializer_rejects_retired_lifecycle_contracts_before_writes(
+    tmp_path: pathlib.Path,
+    retired_contracts: tuple[str, ...],
+    has_skills: bool,
+    has_sdlc_contract: bool,
+    omit_sdlc_contract: bool,
+) -> None:
+    repo = tmp_path / "compatible"
+    create_compatible_repo(repo, "preserved/source", ["alpha-tool"] if has_skills else [])
+    if not has_skills:
+        (repo / "skills" / "skill-sections.json").unlink()
+    (repo / ".git").write_text("gitdir: test\n", encoding="utf-8", newline="\n")
+    if not has_sdlc_contract:
+        (repo / "sdlc" / "sdlc.yml").unlink()
+    for relative in retired_contracts:
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "version: 1\noperations:\n  custom:\n    steps:\n"
+            "      - id: preserve\n        run: [python, -V]\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+    before = {
+        path.relative_to(repo): (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in repo.rglob("*")
+        if path.is_file()
+    }
+
+    result = run_compatibility_engine(
+        REPOSITORY_LIFECYCLE_SCRIPTS,
+        "materialize",
+        "--target-repo-root",
+        str(repo),
+        *(["--no-sdlc-contract"] if omit_sdlc_contract else []),
+    )
+
+    assert result.returncode == 1, result.stdout
+    output = json.loads(result.stdout)
+    assert output == {
+        "phase": "materialization_planning",
+        "reason": (
+            "retired lifecycle contracts require migration: "
+            + ", ".join(retired_contracts)
+            + "; move every operation into sdlc/sdlc.yml and remove the retired "
+            "files before compatibility materialization"
+        ),
+        "rollback": "not_started",
+        "status": "blocked",
+    }
+    assert {
+        path.relative_to(repo): (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in repo.rglob("*")
+        if path.is_file()
+    } == before
 
 
 def test_compatibility_materializer_blocks_invalid_assignments_before_writes(

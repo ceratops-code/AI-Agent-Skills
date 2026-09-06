@@ -557,6 +557,19 @@ def build_sdlc_contract_candidate(
 ) -> dict[str, object] | None:
     """Preserve the SDLC contract and own managed-skill deployment entries."""
 
+    # Refuse omitted operation sources before every early return or target write.
+    retired_contracts = [
+        relative
+        for relative in ("deploy/deploy.yml", "release/release.yml")
+        if (repo_root / relative).exists() or (repo_root / relative).is_symlink()
+    ]
+    if retired_contracts:
+        raise RuntimeError(
+            "retired lifecycle contracts require migration: "
+            + ", ".join(retired_contracts)
+            + "; move every operation into sdlc/sdlc.yml and remove the retired "
+            "files before compatibility materialization"
+        )
     if not materialize:
         return None
     reusable = load_yaml_mapping(SDLC_TEMPLATE)

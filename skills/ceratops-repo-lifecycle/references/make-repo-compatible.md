@@ -81,6 +81,9 @@ Infer the source identity from stable repository evidence before asking.
   manifest; block rather than discard a nonempty skill manifest.
   Preserve valid target-owned custom sections and assignments, portable
   runtime payloads, and maintenance commands.
+- Before any compatibility writes, reject `deploy/deploy.yml` and
+  `release/release.yml`, including with `--no-sdlc-contract`; require their
+  operations in `sdlc/sdlc.yml` and removal of the retired files.
 - Block malformed or unsafe existing declarations before mutation. After the
   first write, restore every changed target file after any caught blocker and
   report the failed phase and rollback state.
