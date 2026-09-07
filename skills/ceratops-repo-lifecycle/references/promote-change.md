@@ -49,6 +49,8 @@ result.
   `release/local`, and remote.
 - Whether the selected action is `promote`, `promote-and-deploy`, or composed
   promotion and shipping.
+- Optional PR `--title` and `--body` require `--ship-after-promotion` and pass
+  unchanged to shipping.
 - Ordered deploy operation IDs for `promote-and-deploy`, or ordered release
   preflight, release publication, and deploy operation IDs for composed
   shipping. An explicit list replaces that phase's default.

@@ -6,6 +6,7 @@ import argparse
 import json
 import pathlib
 import sys
+import tempfile
 import time
 from collections.abc import Mapping
 from typing import Any
@@ -93,6 +94,53 @@ def _check_summary(value: object) -> dict[str, int]:
     return summary
 
 
+def _default_metadata(
+    repo_root: pathlib.Path, base_branch: str, head: str
+) -> tuple[str, str]:
+    """Describe the prepared commit range without assuming a repository domain.
+
+    Merge subjects describe integration rather than the shipped changes. Keep
+    every non-merge message in the body even when the title needs shortening.
+    """
+
+    raw = require_output(
+        _git(
+            repo_root, "log", "--topo-order", "--reverse", "--no-merges", "--format=%B%x00",
+            f"{base_branch}..{head}",
+        ),
+        cwd=repo_root,
+    )
+    messages = [message.strip() for message in raw.split("\0") if message.strip()]
+    if not messages:
+        raise EnsurePrError(
+            "No change commits available for PR metadata; supply --title and --body."
+        )
+    title = "; ".join(message.splitlines()[0] for message in messages)
+    if len(title) > 120:
+        title = title[:117].rstrip() + "..."
+    body = "\n\n".join("- " + message.replace("\n", "\n  ") for message in messages)
+    return title, body
+
+
+def _publish_metadata(
+    command: list[str], *, repo_root: pathlib.Path,
+    title: str | None, body: str | None,
+) -> None:
+    """Apply only supplied fields; own and remove the body file on every exit."""
+
+    if title is not None:
+        command.extend(("--title", title))
+    if body is None:
+        require_success(command, cwd=repo_root)
+        return
+    # A closed UTF-8 file keeps multiline text exact and is readable by gh on
+    # Windows. The temporary directory also cleans up after a failed gh call.
+    with tempfile.TemporaryDirectory(prefix="ceratops-pr-metadata-") as directory:
+        body_file = pathlib.Path(directory) / "body.md"
+        body_file.write_text(body, encoding="utf-8", newline="")
+        require_success([*command, "--body-file", str(body_file)], cwd=repo_root)
+
+
 def ensure_pr(args: argparse.Namespace) -> dict[str, object]:
     """Verify, push, create or update, and observe one prepared branch PR."""
 
@@ -132,9 +180,16 @@ def ensure_pr(args: argparse.Namespace) -> dict[str, object]:
     )
     pr = _open_pr(args)
     if pr is None:
-        title = args.title or "Ship staged skill release"
-        body = args.body or "Staged skill lifecycle release branch."
-        require_success(
+        title, body = args.title, args.body
+        if title is None or body is None:
+            default_title, default_body = _default_metadata(
+                repo_root, args.base_branch, local_head
+            )
+            if title is None:
+                title = default_title
+            if body is None:
+                body = default_body
+        _publish_metadata(
             [
                 "gh",
                 "pr",
@@ -143,20 +198,18 @@ def ensure_pr(args: argparse.Namespace) -> dict[str, object]:
                 args.base_branch,
                 "--head",
                 args.head_branch,
-                "--title",
-                title,
-                "--body",
-                body,
             ],
-            cwd=repo_root,
+            repo_root=repo_root,
+            title=title,
+            body=body,
         )
-    elif args.title or args.body:
-        command = ["gh", "pr", "edit", str(pr["number"])]
-        if args.title:
-            command.extend(("--title", args.title))
-        if args.body:
-            command.extend(("--body", args.body))
-        require_success(command, cwd=repo_root)
+    elif args.title is not None or args.body is not None:
+        _publish_metadata(
+            ["gh", "pr", "edit", str(pr["number"])],
+            repo_root=repo_root,
+            title=args.title,
+            body=args.body,
+        )
 
     pr = wait_for_pr_head(args, local_head)
     return {

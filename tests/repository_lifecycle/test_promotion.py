@@ -232,8 +232,20 @@ def test_promote_repository_runs_explicit_operation_ids_in_order(
     assert log.read_text(encoding="utf-8") == "promotion-check\ncustom-deploy\n"
 
 
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        [],
+        ["--title", "Complete Dev Tools catalog"],
+        ["--body", "Use explicit exclusions.\n\nPreserve deployment.\n"],
+        ["--title", "Complete Dev Tools catalog", "--body", "Exact description"],
+        ["--body", ""],
+    ],
+    ids=["defaults", "title", "body", "both", "empty-body"],
+)
 def test_promote_repository_ship_after_promotion_composes_terminal_workflow(
     tmp_path: pathlib.Path,
+    metadata: list[str],
 ) -> None:
     repo, approved_head, log, _ = prepare_repository_lifecycle_repo(tmp_path)
     loaded = runpy.run_path(str(PROMOTE_REPOSITORY))
@@ -250,6 +262,7 @@ def test_promote_repository_ship_after_promotion_composes_terminal_workflow(
         "--remote-name",
         "origin",
         "--ship-after-promotion",
+        *metadata,
     ]
     parsed = parser.parse_args(arguments)
     assert parsed.ship_after_promotion is True
@@ -348,6 +361,11 @@ def test_promote_repository_ship_after_promotion_composes_terminal_workflow(
     assert ship_command[ship_command.index("--release-operation") + 1] == "publish"
     assert ship_command[ship_command.index("--deploy-operation") + 1] == "deploy"
     assert "--reusable-head" in ship_command
+    for flag in ("--title", "--body"):
+        if flag in metadata:
+            assert ship_command[ship_command.index(flag) + 1] == metadata[metadata.index(flag) + 1]
+        else:
+            assert flag not in ship_command
     assert str(PROMOTE_REPOSITORY.parent / "run-deploy-operation.py") not in (
         command[1] for command in commands
     )
@@ -356,6 +374,26 @@ def test_promote_repository_ship_after_promotion_composes_terminal_workflow(
         "pending_work_scope": recorded["pending_work_scope"],
     }
     assert not log.exists()
+
+
+@pytest.mark.parametrize("mode", ["--prepare-release-only", "--no-run-operation"])
+@pytest.mark.parametrize("metadata", [["--title", "Custom title"], ["--body", ""]])
+def test_promote_repository_metadata_requires_composed_shipping_before_mutation(
+    tmp_path: pathlib.Path, mode: str, metadata: list[str],
+) -> None:
+    loaded = runpy.run_path(str(PROMOTE_REPOSITORY))
+    args = loaded["build_parser"]().parse_args(
+        ["--repo-root", str(tmp_path), mode, *metadata]
+    )
+
+    def unexpected(*args: object, **kwargs: object) -> None:
+        pytest.fail("metadata misuse must block before repository commands")
+
+    promote = loaded["promote"]
+    for name in ("require_output", "require_success", "_run_json"):
+        promote.__globals__[name] = unexpected
+    with pytest.raises(loaded["PromotionError"], match="PR metadata requires --ship-after-promotion"):
+        promote(args)
 
 
 def test_promote_repository_ship_after_promotion_preserves_blocked_state(
