@@ -240,7 +240,7 @@ class Engine:
             finally:
                 if not committed:
                     layout.remove_candidate(candidate)
-            # No fallible post-commit registry reads: a successful activation is success.
+            # No fallible post-commit registry reads:  a successful activation is success.
             running = self.running_version if tool_id == TOOL_ID else None
             return {"tool_id": tool_id, "installed_version": version, "running_version": running,
                     "manifest_sha256": sha256, "reconnection_required": bool(running and running != version)}
