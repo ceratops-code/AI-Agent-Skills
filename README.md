@@ -20,8 +20,10 @@ Reusable Ceratops skills for Codex and other agents compatible with `SKILL.md`.
 ## Layout
 
 The independent [tool deployment manager](tools/ceratops-tool-manager/README.md)
-keeps editable source under `tools/` and installs executables and dependencies
-under the fixed `C:\AI-Agents-Tools` root. Its CLI and local MCP adapters share
+keeps its editable source under `tools/`. Every deployed tool owns
+`C:\AI-Agents-Tools\<tool-id>` with its packages, environments, and state;
+Python and uv are validated global
+prerequisites. Its CLI and local MCP adapters share
 one engine. The tool lifecycle skill contains instructions only; the existing
 skill installer continues to own `.codex` skill deployment.
 
@@ -111,9 +113,9 @@ without repository deduplication.
 | `hooks/preserve-eol-for-apply-patch-tool.py` | Preserves each updated text file's existing encoding and uniform line-ending convention around `apply_patch`. |
 | `hooks/windows-shell-sanity.py` | Repository-owned source for the user-global Windows PowerShell preflight; rewrites exact command defects, annotates ordinary failures, and blocks unreliable or policy-prohibited forms. |
 | `scripts/install-skills-bootstrap.py` | Self-contained first-install bootstrap; stages and validates one complete selected batch under the install root and never calls lifecycle runtime code. |
-| `scripts/bootstrap-tool-manager.py` | First tool-manager installation with pinned uv and managed Python; invokes the shared deployment engine and never changes Codex settings. |
+| `scripts/bootstrap-tool-manager.py` | First tool-manager installation using validated global Python and uv; invokes the shared deployment engine and never changes Codex settings. |
 | `scripts/package-tool-release.py` | Development-only wheel build and exact local release registration from reviewed source, with source dependency lock generation. |
-| `scripts/check-tool-manager.py` | Explicit installed-runtime acceptance with a harmless fixture and a persistent MCP connection across a selected self-update. |
+| `scripts/check-tool-manager.py` | Explicit acceptance using real manager releases and a persistent MCP connection across a selected self-update. |
 | `scripts/tool_manager_support.py` | Imports the authoritative tool-manager source for repository maintenance without duplicating deployment logic. |
 | `scripts/run-tests.py` | Sole test-selection, collection-reconciliation, and pytest-execution owner; validates `tests/test-impact.json`, explains deterministic Git-diff selection, rejects mapping gaps before pytest collection or execution, supports explicit committed-diff, worktree, collection, and `--all` modes, and writes complete failed-pytest streams to a diagnostic file while returning only bounded failure evidence. |
 | `scripts/validate-repository.py` | Local validation coordinator; captures first-failure evidence, delegates its default full test phase to `scripts/run-tests.py --all`, and supports CI's separate runner-owned test phase. |
