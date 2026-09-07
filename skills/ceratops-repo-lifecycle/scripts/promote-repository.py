@@ -390,6 +390,16 @@ def _prepare_source_for_fast_forward(
     if ancestor.returncode != 1:
         raise PromotionError(f"Could not compare source branch: {branch}")
 
+    contained = run_command(
+        _git(repo_root, "merge-base", "--is-ancestor", state.head, release_head),
+        cwd=repo_root,
+    )
+    if contained.returncode == 0:
+        # Re-promoting included work must not rewrite its published history.
+        return None
+    if contained.returncode != 1:
+        raise PromotionError(f"Could not compare source branch: {branch}")
+
     worktree = state.worktree
     if worktree is None or not worktree.is_dir():
         raise PromotionError(

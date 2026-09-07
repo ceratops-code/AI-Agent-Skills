@@ -803,6 +803,28 @@ def test_promote_repository_rejects_noncanonical_release_branch_before_mutation(
     )
     assert run_git(published_worktree, "status", "--porcelain").stdout == ""
 
+    assert run_git(published_repo, "merge", "--no-edit", "approved").returncode == 0
+    included_release_head = run_git(published_repo, "rev-parse", "HEAD").stdout.strip()
+    for keep_worktree in (True, False):
+        if not keep_worktree:
+            assert run_git(published_repo, "worktree", "remove", str(published_worktree)).returncode == 0
+        included = subprocess.run(
+            [
+                sys.executable, str(PROMOTE_REPOSITORY),
+                "--repo-root", str(published_repo),
+                "--source-branch", "approved", "--no-run-operation",
+            ],
+            capture_output=True, text=True, check=False, env=published_environment,
+        )
+        assert included.returncode == 0, included.stderr
+        included_result = json.loads(included.stdout)
+        assert included_result["head"] == included_release_head
+        assert included_result["rebased_branches"] == []
+        assert run_git(published_repo, "rev-parse", "approved").stdout.strip() == published_source_head
+        assert run_git(published_repo, "status", "--porcelain").stdout == ""
+        if keep_worktree:
+            assert run_git(published_worktree, "status", "--porcelain").stdout == ""
+
     nonlinear_root = tmp_path / "automatic-rebase-nonlinear"
     (
         nonlinear_repo,
