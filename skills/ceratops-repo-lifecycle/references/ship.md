@@ -42,7 +42,8 @@ worktrees.
 
 ### Inputs To Capture
 
-- Repository checkout, staged `release/local`, base branch, remote, merge method,
+- Repository checkout, staged `release/local` , base branch, remote, merge
+  method,
   and optional PR `--title`/`--body` overrides.
 - New PRs derive omitted metadata from the staged commits relative to the base.
   Preserve supplied fields exactly and existing PR fields without overrides.
