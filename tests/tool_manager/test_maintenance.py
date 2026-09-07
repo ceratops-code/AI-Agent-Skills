@@ -26,6 +26,7 @@ def load(name):
     return module
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Global runtime prerequisites require Windows")
 @pytest.mark.parametrize("case", ["valid", "missing-python", "missing-uv", "private-runtime", "old-python", "old-uv", "invalid-probe"])
 def test_bootstrap_completes_launchers_after_runtime_record(tmp_path, monkeypatch, case):
     """Validate the global Runtime record before provisioning either launcher."""
