@@ -159,8 +159,22 @@ def ensure_pr(args: argparse.Namespace) -> dict[str, object]:
     local_head = require_output(
         _git(repo_root, "rev-parse", "HEAD"), cwd=repo_root
     ).splitlines()[0].strip()
+    # Pin the fetched remote base so readiness and metadata describe the
+    # same commit range GitHub will compare, even when local main is behind.
+    remote_base = f"refs/remotes/{args.remote_name}/{args.base_branch}"
+    require_success(
+        _git(
+            repo_root, "fetch", "--no-tags", args.remote_name,
+            f"+refs/heads/{args.base_branch}:{remote_base}",
+        ),
+        cwd=repo_root,
+    )
+    base_head = require_output(
+        _git(repo_root, "rev-parse", "--verify", f"{remote_base}^{{commit}}"),
+        cwd=repo_root,
+    ).strip()
     ahead_raw = require_output(
-        _git(repo_root, "rev-list", "--count", f"{args.base_branch}..HEAD"),
+        _git(repo_root, "rev-list", "--count", f"{base_head}..HEAD"),
         cwd=repo_root,
     )
     if int(ahead_raw.splitlines()[0]) <= 0:
@@ -183,7 +197,7 @@ def ensure_pr(args: argparse.Namespace) -> dict[str, object]:
         title, body = args.title, args.body
         if title is None or body is None:
             default_title, default_body = _default_metadata(
-                repo_root, args.base_branch, local_head
+                repo_root, base_head, local_head
             )
             if title is None:
                 title = default_title

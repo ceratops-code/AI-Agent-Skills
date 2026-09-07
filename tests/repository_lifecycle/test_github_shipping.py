@@ -20,11 +20,15 @@ def metadata_repo(tmp_path: pathlib.Path) -> pathlib.Path:
 
     repo = tmp_path / "repo"
     repo.mkdir()
+    remote = tmp_path / "remote.git"
+    assert run_git(tmp_path, "init", "--bare", str(remote)).returncode == 0
     for arguments in (
         ("init", "-b", "main"),
         ("config", "user.email", "test@example.invalid"),
         ("config", "user.name", "Test Agent"),
         ("commit", "--allow-empty", "-m", "Already released baseline"),
+        ("remote", "add", "origin", str(remote)),
+        ("push", "-u", "origin", "main"),
         ("switch", "-c", "release/local"),
     ):
         result = run_git(repo, *arguments)
@@ -102,6 +106,12 @@ def test_ensure_pr_metadata_preserves_overrides_and_existing_fields(
 ) -> None:
     ensure_pr = load_pr_workflow_module(monkeypatch, "ensure_pr")
     repo = metadata_repo
+    local_base = run_git(repo, "rev-parse", "main").stdout.strip()
+    assert run_git(repo, "commit", "--allow-empty", "-m", "Already merged remote change").returncode == 0
+    remote_base = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+    assert run_git(repo, "push", "origin", "HEAD:main").returncode == 0
+    # Keep both local main and its cached remote ref behind the actual remote.
+    assert run_git(repo, "update-ref", "refs/remotes/origin/main", local_base).returncode == 0
     assert run_git(
         repo, "commit", "--allow-empty", "-m", "Complete Dev Tools catalog",
         "-m", "Use explicit collection exclusions.",
@@ -111,6 +121,7 @@ def test_ensure_pr_metadata_preserves_overrides_and_existing_fields(
     responses = iter([pr if existing else None, pr])
     monkeypatch.setattr(ensure_pr, "_open_pr", lambda args: next(responses))
     original_output = ensure_pr.require_output
+    original_success = ensure_pr.require_success
     git_reads: list[list[str]] = []
     published: list[tuple[list[str], bytes | None]] = []
     body_files: list[pathlib.Path] = []
@@ -123,6 +134,9 @@ def test_ensure_pr_metadata_preserves_overrides_and_existing_fields(
     def publish(command: list[str], *, cwd: pathlib.Path) -> None:
         assert cwd == repo
         if command[0] == "git":
+            if command[3] == "fetch":
+                original_success(command, cwd=cwd)
+                return
             assert command[3:] == ["push", "-u", "origin", "release/local:release/local"]
             pushes.append(command)
             return
@@ -140,6 +154,8 @@ def test_ensure_pr_metadata_preserves_overrides_and_existing_fields(
     )
     arguments.title, arguments.body = title, body
     assert ensure_pr.ensure_pr(arguments)["status"] == "pr_ready"
+    assert run_git(repo, "rev-parse", "main").stdout.strip() == local_base
+    assert run_git(repo, "rev-parse", "origin/main").stdout.strip() == remote_base
     assert len(pushes) == 1
     needs_defaults = not existing and (title is None or body is None)
     assert any("log" in command for command in git_reads) == needs_defaults
