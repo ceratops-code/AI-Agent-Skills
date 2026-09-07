@@ -1,5 +1,5 @@
 # Development repository only; do not expose this service to Forms.
-[mcp_servers.ceratops_tool_manager]
+[mcp_servers.ceratops-tool-manager]
 command = 'C:\AI-Agents-Tools\runtime\python\python.exe'
 args = [
   '-I',
