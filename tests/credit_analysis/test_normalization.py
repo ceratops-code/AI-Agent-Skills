@@ -918,7 +918,7 @@ def test_credit_analysis_normalizes_sol_transport_without_changing_judgments(
         routing_root = tmp_path / ("no-audit-fits" if reject_all else "next-audit-fits")
         routing_root.mkdir()
         routing_state["paths"]["orchestration_root"] = str(routing_root)
-        probes = []
+        probes: list[str] = []
 
         def measured_audit(
             *, reject_all=reject_all, probes=probes,

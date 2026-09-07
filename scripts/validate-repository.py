@@ -101,6 +101,7 @@ def build_checks(
                 "ruff",
                 "check",
                 "scripts",
+                "tools",
                 "skills/ceratops-repo-lifecycle/references/templates/"
                 "install-skills-bootstrap-template.py",
             ),

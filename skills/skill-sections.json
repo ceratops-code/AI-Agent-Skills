@@ -70,6 +70,10 @@
     "ceratops-task-lifecycle": [
       "core",
       "multi-action-skill"
+    ],
+    "ceratops-tool-lifecycle": [
+      "core",
+      "multi-action-skill"
     ]
   }
 }

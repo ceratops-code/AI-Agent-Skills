@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "tool_id": "ceratops-deployment-fixture",
+  "distribution": "ceratops-deployment-fixture",
+  "module": "ceratops_deployment_fixture"
+}

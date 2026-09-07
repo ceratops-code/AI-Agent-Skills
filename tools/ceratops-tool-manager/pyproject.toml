@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling==1.32.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ceratops-tool-manager"
+version = "0.1.1"
+description = "Fixed-root local tool installation, updates, and version inspection"
+requires-python = ">=3.13,<3.14"
+dependencies = ["mcp==2.1.1"]
+
+[project.scripts]
+ceratops-tool-manager = "ceratops_tool_manager.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ceratops_tool_manager"]
