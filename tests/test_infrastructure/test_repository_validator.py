@@ -51,6 +51,7 @@ def test_build_checks_owns_order_both_platforms_and_space_safe_paths(
         "ruff",
         "check",
         "scripts",
+        "tools",
         "skills/ceratops-repo-lifecycle/references/templates/"
         "install-skills-bootstrap-template.py",
     )

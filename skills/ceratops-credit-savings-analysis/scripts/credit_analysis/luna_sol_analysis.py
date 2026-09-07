@@ -5,12 +5,26 @@ from __future__ import annotations
 
 import concurrent.futures
 
+from .execution_outcomes import has_failure_telemetry, has_nonzero_process_result
+
 from .model_input_preparation import *
 from .model_capacity_planning import *
 from .multi_thread_analysis import *
 from .persistent_subthread_analysis import *
 from .single_thread_analysis import *
 from .source_execution_context import *
+from .report_bookkeeping import (
+    _closed_result,
+    _holistic_category_reviews,
+    _holistic_preserve_finding_sources,
+    _holistic_preserve_review_sources,
+    _holistic_preserve_risk_sources,
+    _holistic_surface_ids,
+    _holistic_temporary_control_merges,
+    _render_holistic_risks,
+    _result_deduped_strings,
+    _result_objects,
+)
 
 def _exclusive_text(path: pathlib.Path, value: str, label: str) -> None:
     """Create one immutable UTF-8 controller artifact."""
@@ -489,42 +503,6 @@ def _collect_canonical_state_snapshot(
 
 
 
-def _has_failure_telemetry(value: Any) -> bool:
-    """Detect only explicit observable failure, timeout, or termination fields."""
-
-    if isinstance(value, Mapping):
-        for key, item in value.items():
-            normalized = str(key).casefold()
-            if normalized in {"exit_code", "returncode", "code"}:
-                if isinstance(item, int) and not isinstance(item, bool) and item != 0:
-                    return True
-            elif normalized in {"timed_out", "timeout", "terminated", "termination"}:
-                if item is True or (
-                    isinstance(item, str)
-                    and item.casefold() in {"true", "timeout", "terminated", "killed"}
-                ):
-                    return True
-            elif normalized in {"explicit_failure", "semantic_failure"} and item is True:
-                return True
-            elif normalized in {"error", "errors", "stderr"} and (
-                item is not None and item != "" and item != [] and item != {}
-            ):
-                return True
-            elif normalized == "status" and isinstance(item, str) and item.casefold() in {
-                "error",
-                "failed",
-                "failure",
-                "timeout",
-                "terminated",
-            }:
-                return True
-            if _has_failure_telemetry(item):
-                return True
-    elif isinstance(value, list):
-        return any(_has_failure_telemetry(item) for item in value)
-    return False
-
-
 def _observable_high_signal_reasons(
     *,
     call: Mapping[str, Any],
@@ -540,8 +518,10 @@ def _observable_high_signal_reasons(
         call.get("tool_results"),
         *[record.get("structured_outcome") for record in records],
     ]
-    if any(_has_failure_telemetry(item) for item in telemetry):
+    if any(has_failure_telemetry(item) for item in telemetry):
         reasons.append("failure-timeout-or-termination-telemetry")
+    if any(has_nonzero_process_result(item) for item in telemetry):
+        reasons.append("nonzero-process-result")
     if repeated_groups:
         reasons.append("repeated-action-fingerprint")
     searchable = json.dumps(
@@ -819,55 +799,6 @@ SYNTHESIS_RESULT_FIELDS = {
     "producer_groups",
     "analysis_summary",
 }
-
-
-def _closed_result(value: Mapping[str, Any], fields: set[str], label: str) -> None:
-    if set(value) != fields:
-        missing = sorted(fields - set(value))
-        extra = sorted(set(value) - fields)
-        detail = []
-        if missing:
-            detail.append("missing " + ", ".join(missing))
-        if extra:
-            detail.append("unknown " + ", ".join(extra))
-        raise CreditAnalysisError(f"{label} fields are invalid: {'; '.join(detail)}")
-
-
-
-
-def _result_deduped_strings(
-    value: Any, label: str, *, empty: bool = False
-) -> list[str]:
-    """Normalize only exact duplicate descriptive strings while preserving order."""
-
-    if (
-        not isinstance(value, list)
-        or (not empty and not value)
-        or not all(isinstance(item, str) and item for item in value)
-    ):
-        qualifier = "string list" if empty else "nonempty string list"
-        raise CreditAnalysisError(f"{label} must be a {qualifier}")
-    return list(dict.fromkeys(value))
-
-
-def _result_objects(value: Any, label: str) -> list[dict[str, Any]]:
-    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
-        raise CreditAnalysisError(f"{label} must be an object list")
-    return list(value)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def _validate_recurrence_inputs(value: Any, label: str) -> dict[str, Any]:
@@ -2631,6 +2562,10 @@ def command_plan_orchestration(
     manifest_path = orchestration_root / "chunk-manifest.json"
     _exclusive_json(manifest_path, manifest, "holistic manifest")
     task_order = [*[task["task_id"] for task in luna_tasks], *[task["task_id"] for task in sol_tasks]]
+    # Runtime deployment must not replace an active run's immutable contract.
+    contract_snapshot = orchestration_root / "surface-contract.json"
+    with contract_snapshot.open("xb") as handle:
+        handle.write(CONTRACT_PATH.read_bytes())
     state = {
         "schema": HOLISTIC_STATE_SCHEMA,
         "version": 5,
@@ -2665,8 +2600,8 @@ def command_plan_orchestration(
         "immutable_artifacts": {
             "request": {"path": str(request["request_path"]), "sha256": request["request_hash"]},
             "surface_contract": {
-                "path": str(CONTRACT_PATH),
-                "sha256": _file_hash(CONTRACT_PATH),
+                "path": str(contract_snapshot),
+                "sha256": _file_hash(contract_snapshot),
             },
             "evidence": {"path": str(request["evidence_path"]), "sha256": evidence_sha},
             "manifest": {"path": str(manifest_path), "sha256": _file_hash(manifest_path)},
@@ -2933,19 +2868,6 @@ def _holistic_result_refs(value: Any, label: str, *, empty: bool = False) -> lis
     if any(not ref.startswith(("evidence://", "analysis://")) for ref in refs):
         raise CreditAnalysisError(f"{label} contains a non-evidence reference")
     return refs
-
-
-def _holistic_surface_ids(
-    value: Any,
-    label: str,
-    surface_order: Sequence[str],
-) -> list[str]:
-    """Validate a surface set and normalize it to the frozen public order."""
-
-    surfaces = _result_deduped_strings(value, label)
-    if not set(surfaces) <= set(surface_order):
-        raise CreditAnalysisError(f"{label} contains an unknown surface")
-    return [surface for surface in surface_order if surface in set(surfaces)]
 
 
 def _holistic_luna_schema(
@@ -3739,7 +3661,7 @@ def _freeze_sol_routing(
         <= int(limits["sol_max_attempts"])
     )
     preferred_audit_windows = (
-        [max(retained_window_tasks, key=direct_evidence_rank)]
+        sorted(retained_window_tasks, key=direct_evidence_rank, reverse=True)
         if direct_evidence_fits_call_budget
         else []
     )
@@ -3759,6 +3681,8 @@ def _freeze_sol_routing(
 
     audit_windows: list[dict[str, Any]] = []
     audit_budget = int(state["model_specs"]["sol"]["evidence_byte_budget"])
+    # An oversized preferred window must not suppress a complete lower-ranked
+    # window that fits the same optional review slot. Never truncate its evidence.
     for window in preferred_audit_windows:
         if len(audit_windows) == 1:
             break
@@ -4755,6 +4679,7 @@ def _validate_holistic_finding(
     workstreams: Mapping[str, str],
     surface_order: Sequence[str],
     label: str,
+    allow_source_findings: bool = False,
 ) -> dict[str, Any]:
     fields = {
         "id",
@@ -4778,7 +4703,11 @@ def _validate_holistic_finding(
         "helper_categories",
         "contributing_surfaces",
     }
-    _closed_result(finding, fields, label)
+    _closed_result(
+        finding,
+        fields | ({"source_findings"} if allow_source_findings and "source_findings" in finding else set()),
+        label,
+    )
     _identifier(finding.get("id"), f"{label} ID")
     for key in (
         "title",
@@ -5103,6 +5032,7 @@ def _validate_holistic_sol_result(
             workstreams=workstreams,
             surface_order=surface_order,
             label=f"confirmed finding {index}",
+            allow_source_findings=task["phase"] == "sol-final",
         )
         for index, finding in enumerate(
             _result_objects(raw.get("confirmed_findings"), "confirmed findings"),
@@ -5162,7 +5092,7 @@ def _validate_holistic_sol_result(
                 "competing_explanations",
                 "missing_fact",
                 "verification_needed",
-            },
+            } | ({"source_risks"} if task["phase"] == "sol-final" and "source_risks" in risk else set()),
             label,
         )
         _identifier(risk.get("id"), f"{label} ID")
@@ -5276,7 +5206,7 @@ def _validate_holistic_sol_result(
                 "finding_id",
                 "no_finding_reason",
                 "contributing_surfaces",
-            },
+            } | ({"source_reviews"} if task["phase"] == "sol-final" and "source_reviews" in review else set()),
             label,
         )
         review_id = _identifier(review.get("id"), f"{label} ID")
@@ -5375,73 +5305,20 @@ def _validate_holistic_sol_result(
     if referenced_findings != set(finding_by_id) or referenced_risks != set(risk_by_id):
         raise CreditAnalysisError("Sol outcome is not linked to a Luna candidate")
 
-    raw_merges = _result_objects(
-        raw.get("temporary_control_merges"), "temporary-control merges"
+    merges = _holistic_temporary_control_merges(
+        raw.get("temporary_control_merges"),
+        review_by_id=review_by_id,
+        finding_by_id=finding_by_id,
+        surface_order=surface_order,
     )
-    merges: list[dict[str, Any]] = []
-    merged_reviews: set[str] = set()
-    merge_keys: set[tuple[str, str]] = set()
-    for index, merge in enumerate(raw_merges, start=1):
-        label = f"temporary-control merge {index}"
-        _closed_result(
-            merge,
-            {"control_key", "owning_producer", "review_ids", "contributing_surfaces", "finding_id"},
-            label,
-        )
-        merge_key = (
-            str(merge.get("owning_producer")),
-            str(merge.get("control_key")),
-        )
-        if merge_key in merge_keys:
-            raise CreditAnalysisError("temporary-control owner/control is merged twice")
-        merge_keys.add(merge_key)
-        review_ids = _result_deduped_strings(merge.get("review_ids"), f"{label} reviews")
-        if not set(review_ids) <= set(review_by_id):
-            raise CreditAnalysisError(f"{label} review ownership is invalid")
-        eligible_review_ids = [
-            review_id
-            for review_id in review_ids
-            if review_by_id[review_id]["finding_id"] is not None
-        ]
-        _holistic_surface_ids(
-            merge.get("contributing_surfaces"),
-            f"{label} surfaces",
-            surface_order,
-        )
-        if not eligible_review_ids:
-            continue
-        if set(eligible_review_ids) & merged_reviews:
-            raise CreditAnalysisError(f"{label} review ownership is invalid")
-        finding_id = merge.get("finding_id")
-        if finding_id not in finding_by_id or any(
-            review_by_id[review_id]["finding_id"] != finding_id
-            for review_id in eligible_review_ids
-        ):
-            raise CreditAnalysisError(f"{label} finding ownership is invalid")
-        merged_reviews.update(eligible_review_ids)
-        surfaces = [
-            surface
-            for surface in surface_order
-            if any(
-                surface in review_by_id[review_id]["contributing_surfaces"]
-                for review_id in eligible_review_ids
-            )
-        ]
-        merges.append(
-            {
-                **merge,
-                "review_ids": eligible_review_ids,
-                "contributing_surfaces": surfaces,
-            }
-        )
-    required_merged = {review_id for review_id, review in review_by_id.items() if review["finding_id"] is not None}
-    if merged_reviews != required_merged:
-        raise CreditAnalysisError("temporary-control confirmed findings were not merged once")
     category_reviews = _result_objects(raw.get("helper_category_reviews"), "helper category reviews")
-    if [review.get("category") for review in category_reviews] != contract["helper_categories"]:
-        raise CreditAnalysisError("helper category reviews are missing or reordered")
     for index, review in enumerate(category_reviews, start=1):
-        _closed_result(review, {"category", "applies", "evidence_refs", "reason"}, f"helper category review {index}")
+        _closed_result(
+            review,
+            {"category", "applies", "evidence_refs", "reason"}
+            | ({"source_reviews"} if task["phase"] == "sol-final" and "source_reviews" in review else set()),
+            f"helper category review {index}",
+        )
         if not isinstance(review.get("applies"), bool):
             raise CreditAnalysisError("helper category applicability is invalid")
         _holistic_result_refs(review.get("evidence_refs"), "helper category evidence", empty=True)
@@ -5497,44 +5374,12 @@ def _validate_holistic_sol_result(
                         "sol.unassessed-recovery",
                     )
                 )
-        prior_findings = [
-            item for result in prior_results for item in result["confirmed_findings"]
-        ]
-        for prior in prior_findings:
-            if str(prior["id"]) in finding_by_id:
-                continue
-            if not any(
-                str(final["producer_owner"]) == str(prior["producer_owner"])
-                and str(final["proposed_durable_control"])
-                == str(prior["proposed_durable_control"])
-                and str(final["workstream"]) == str(prior["workstream"])
-                and set(prior["affected_call_ids"])
-                <= set(final["affected_call_ids"])
-                for final in findings
-            ):
-                raise CreditAnalysisError("final Sol dropped a prior confirmed finding")
-        prior_risks = [
-            item for result in prior_results for item in result["plausible_risks"]
-        ]
-        for prior in prior_risks:
-            if str(prior["id"]) in risk_by_id:
-                continue
-            if not any(
-                str(final["description"]) == str(prior["description"])
-                and set(prior["affected_call_ids"])
-                <= set(final["affected_call_ids"])
-                for final in risks
-            ):
-                raise CreditAnalysisError("final Sol dropped a prior plausible risk")
-        prior_review_ids = {
-            str(item["id"])
-            for result in prior_results
-            for item in result["temporary_control_reviews"]
-        }
-        if not prior_review_ids <= set(review_by_id):
-            raise CreditAnalysisError(
-                "final Sol dropped a prior temporary control review"
-            )
+        findings = _holistic_preserve_finding_sources(findings, decisions, prior_results)
+        risks = _holistic_preserve_risk_sources(risks, decisions, prior_results)
+        review_by_id = _holistic_preserve_review_sources(review_by_id, decisions, prior_results)
+        category_reviews = _holistic_category_reviews(category_reviews, contract["helper_categories"], prior_results)
+    else:
+        category_reviews = _holistic_category_reviews(category_reviews, contract["helper_categories"])
     return {
         "schema": HOLISTIC_SOL_RESULT_SCHEMA,
         "analysis_id": state["analysis_id"],
@@ -6734,22 +6579,7 @@ def _render_holistic_report(final: Mapping[str, Any]) -> str:
     )
     for classification, count in final["classification_totals"].items():
         lines.append(f"| {classification} | {count} |")
-    lines.extend(["", "## Plausible risks", ""])
-    if not final["plausible_risks"]:
-        lines.append("None.")
-    else:
-        lines.extend(
-            [
-                "| Risk | Calls | Evidence | Verification needed |",
-                "|---|---|---|---|",
-            ]
-        )
-        for risk in final["plausible_risks"]:
-            lines.append(
-                f"| {risk['description']} | {', '.join(risk['affected_call_ids'])} | "
-                f"{', '.join(risk['evidence_refs'])} | "
-                f"{'; '.join(risk['verification_needed'])} |"
-            )
+    lines.extend(_render_holistic_risks(final["plausible_risks"]))
     lines.extend(["", "## Capacity and execution omissions", ""])
     if not final["omissions"]:
         lines.append("None.")
@@ -7170,12 +7000,10 @@ def command_execute_orchestration(
             if not rejected:
                 continue
             task = _holistic_runtime_task(state, base_task)
+            if task["phase"] == "sol-final":
+                # Revalidate frozen output before enforcing limits on new calls.
+                continue
             if rejected > sol_retry_limit:
-                if task["phase"] == "sol-final":
-                    _holistic_save_state(state)
-                    raise CreditAnalysisError(
-                        "final Sol failed validation after its automatic retry"
-                    )
                 _omit_sol_task(
                     state,
                     task,
@@ -7300,6 +7128,15 @@ def command_execute_orchestration(
                     )
                     progressed += 1
                     continue
+            if task["phase"] == "sol-final":
+                if _sol_validation_error_count(state["execution"][task["task_id"]]) > sol_retry_limit:
+                    raise CreditAnalysisError(
+                        "final Sol failed validation after its automatic retry"
+                    )
+                if _sol_attempt_capacity(state, contract, task) == 0:
+                    raise CreditAnalysisError(
+                        "Sol attempt ceiling leaves no final result capacity"
+                    )
             raw: Mapping[str, Any] | None
             unrecorded = _holistic_unrecorded_attempt(
                 state,
@@ -7675,7 +7512,6 @@ __all__ = (
     "LUNA_SHARED_CONSOLIDATION_CHILD_ASSESSMENT_FIELDS",
     "LUNA_TEMPORARY_FIELDS",
     "ORCHESTRATION_PRODUCER_GROUP_FIELDS",
-    "OUTCOME_KEYS",
     "SURFACE_EVIDENCE_KEYWORDS",
     "SYNTHESIS_RESULT_FIELDS",
     "TEMPORARY_CONTRIBUTION_FIELDS",
@@ -7697,7 +7533,6 @@ __all__ = (
     "_collect_holistic_evidence",
     "_exclusive_text",
     "_finalize_holistic",
-    "_has_failure_telemetry",
     "_holistic_accept_result",
     "_holistic_call_classifications",
     "_holistic_compact_bundle",
@@ -7740,7 +7575,6 @@ __all__ = (
     "_run_codex_child",
     "_run_index",
     "_shared_relevant_segments",
-    "_structured_outcome",
     "_surface_order_for_request",
     "_surface_reference_text",
     "_task_artifact_paths",

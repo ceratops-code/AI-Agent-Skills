@@ -7,7 +7,8 @@ import json
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from .single_thread_analysis import CreditAnalysisError, _bounded_value
+from .execution_outcomes import structured_outcome
+from .single_thread_analysis import CreditAnalysisError
 
 
 def _review_record_index(evidence: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
@@ -79,22 +80,6 @@ SURFACE_EVIDENCE_KEYWORDS = {
         "skill",
     ),
 }
-OUTCOME_KEYS = frozenset(
-    {
-        "code",
-        "error",
-        "errors",
-        "exit_code",
-        "returncode",
-        "status",
-        "stderr",
-        "success",
-        "terminated",
-        "termination",
-        "timed_out",
-        "timeout",
-    }
-)
 
 FINAL_ADJUDICATION_FIELDS = {
     "candidate_decisions": (
@@ -332,33 +317,6 @@ def _fit_final_supplemental_evidence(
     )
 
 
-def _structured_outcome(value: Any, *, depth: int = 0) -> Any:
-    """Project explicit process/result telemetry without semantic judgment."""
-
-    if depth > 5:
-        return None
-    if isinstance(value, Mapping):
-        result: dict[str, Any] = {}
-        for key, item in value.items():
-            normalized = str(key).casefold()
-            if normalized in OUTCOME_KEYS:
-                result[str(key)] = _bounded_value(item, text_limit=600)
-                continue
-            nested = _structured_outcome(item, depth=depth + 1)
-            if nested not in (None, {}, []):
-                result[str(key)] = nested
-        return result or None
-    if isinstance(value, list):
-        items = [
-            projected
-            for item in value
-            if (projected := _structured_outcome(item, depth=depth + 1))
-            is not None
-        ]
-        return items or None
-    return None
-
-
 def _relevant_segments(text: str, surface_id: str) -> list[dict[str, Any]]:
     """Retain bounded deterministic windows around surface-relevant terms."""
 
@@ -446,7 +404,7 @@ def _prepare_bounded_evidence(
         "mode": "retained-projection",
         "chars": len(serialized),
         "sha256": hashlib.sha256(serialized.encode("utf-8")).hexdigest(),
-        "structured_outcome": _structured_outcome(value),
+        "structured_outcome": structured_outcome(value),
         "head": serialized[: min(300, limit // 3)],
         "relevant_segments": segments,
         "tail": serialized[-min(300, limit // 3) :],
@@ -455,7 +413,6 @@ def _prepare_bounded_evidence(
 
 __all__ = (
     "FINAL_ADJUDICATION_FIELDS",
-    "OUTCOME_KEYS",
     "SURFACE_EVIDENCE_KEYWORDS",
     "_compact_final_adjudication_result",
     "_compact_final_call_inventory",
@@ -465,5 +422,4 @@ __all__ = (
     "_relevant_segments",
     "_review_record_index",
     "_shared_relevant_segments",
-    "_structured_outcome",
 )

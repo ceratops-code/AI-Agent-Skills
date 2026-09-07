@@ -35,7 +35,25 @@ import re
 import sys
 import uuid
 from collections import Counter
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING or __package__:
+    from .execution_outcomes import (
+        empty_outcomes,
+        failure_details,
+        failure_family,
+        merge_outcomes,
+        response_outcomes,
+    )
+else:
+    # Preserve the collector CLI as well as package imports.
+    from execution_outcomes import (
+        empty_outcomes,
+        failure_details,
+        failure_family,
+        merge_outcomes,
+        response_outcomes,
+    )
 
 SCHEMA = "ceratops-session-evidence.v1"
 SUMMARY_SCHEMA = "ceratops-session-evidence-summary.v1"
@@ -68,16 +86,6 @@ PRICING_FIELDS = (
     "mode_multiplier",
 )
 WAIT_ACTION_NAMES = frozenset({"wait", "wait_agent", "wait_threads"})
-PROCESS_CODE_FIELDS = frozenset(
-    {"exit_code", "return_code", "returncode", "process_exit_code"}
-)
-TIMEOUT_FIELDS = frozenset({"timed_out", "timeout"})
-TERMINATION_FIELDS = frozenset({"terminated", "termination"})
-ERROR_STATUSES = frozenset({"error", "failed", "failure"})
-TIMEOUT_STATUSES = frozenset({"timed_out", "timeout"})
-TERMINATION_STATUSES = frozenset(
-    {"cancelled", "canceled", "killed", "terminated"}
-)
 REDACTED = "<redacted>"
 USER_HOME = "<user-home>"
 LOCAL_PATH = "<local-path>"
@@ -145,11 +153,6 @@ NESTED_TOOL_CALL_RE = re.compile(
 )
 NESTED_COMMAND_PROPERTY_RE = re.compile(
     r"(?:^|[,{])\s*(?:cmd|command|[\"'](?:cmd|command)[\"'])\s*:\s*"
-)
-TEXT_EXIT_CODE_RE = re.compile(
-    r"(?:Exit code:|[\"']?(?:exit_code|returncode)[\"']?\s*[:=])\s*"
-    r"(?P<code>\d+)",
-    re.IGNORECASE,
 )
 FUNCTIONS_EXEC_NAMES = frozenset({"exec", "functions.exec"})
 STATIC_COMMAND_TOOLS = frozenset({"exec_command", "shell_command"})
@@ -776,39 +779,6 @@ def functions_exec_child_calls(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return children
 
 
-def result_text_fragments(value: Any, *, key: object | None = None) -> list[str]:
-    """Return only failure-bearing result text, excluding unrelated payload values."""
-
-    signal = re.compile(
-        r"PreToolUse|rejected|Script (?:failed|timed out)|timed out|"
-        r"(?:^|\W)error(?:\W|$)|exit[_ ]code|returncode|terminated|killed",
-        re.IGNORECASE,
-    )
-    if key is not None and sensitive_key(key):
-        return []
-    if isinstance(value, str):
-        try:
-            decoded = json.loads(value)
-        except json.JSONDecodeError:
-            return [value] if signal.search(value) else []
-        if isinstance(decoded, (dict, list)):
-            return result_text_fragments(decoded, key=key)
-        return [value] if signal.search(value) else []
-    if isinstance(value, list):
-        return [
-            fragment
-            for item in value
-            for fragment in result_text_fragments(item, key=key)
-        ]
-    if isinstance(value, dict):
-        return [
-            fragment
-            for item_key, item in value.items()
-            for fragment in result_text_fragments(item, key=item_key)
-        ]
-    return []
-
-
 def failure_reason_label(value: Any) -> str:
     """Retain one bounded redacted result excerpt nearest an observable failure."""
 
@@ -818,7 +788,7 @@ def failure_reason_label(value: Any) -> str:
         re.IGNORECASE,
     )
     fallback = ""
-    for fragment in result_text_fragments(value):
+    for fragment in failure_details(value):
         lines = [line.strip() for line in fragment.splitlines() if line.strip()]
         if not lines:
             continue
@@ -836,65 +806,6 @@ def failure_reason_label(value: Any) -> str:
     return compact[: FAILURE_REASON_LABEL_LIMIT - 3] + "..."
 
 
-def failure_family(
-    command: str,
-    reason: str,
-    action: dict[str, Any],
-) -> tuple[str | None, bool]:
-    """Classify exact observable failure provenance without judging credit waste."""
-
-    direct = f"{command}\n{reason}".casefold()
-    if "pretooluse" in direct and "reject" in direct:
-        return "pre_tool_use_rejection", True
-    families = (
-        ("empty pipe element", "powershell_empty_pipe"),
-        ("convertfrom-json", "powershell_json_parse"),
-        ("invalid json primitive", "powershell_json_parse"),
-        ("unicodeencodeerror", "python_output_encoding"),
-        ("missing required system tool", "missing_system_tool"),
-        ("selection must produce exactly one", "ambiguous_selection"),
-        ("the following arguments are required", "missing_cli_argument"),
-    )
-    for marker, family in families:
-        if marker in direct:
-            return family, True
-    if "windows-shell-sanity.py" in direct and any(
-        marker in direct
-        for marker in (
-            "foreach_pipeline",
-            "select_object_",
-            "json_pipeline_contract",
-            "python_non_ascii_output",
-            "blocking_count",
-        )
-    ):
-        return "windows_shell_sanity_block", True
-    if "tool" in direct and "rejected" in direct:
-        return "tool_rejected", True
-    if "timed out" in direct or action["timeout"]:
-        return "command_timeout", True
-    if action["termination"]:
-        return "termination", True
-    if action["structured_tool_error"]:
-        return "structured_tool_error", True
-    exit_match = TEXT_EXIT_CODE_RE.search(reason)
-    codes = action["process_exit_codes"]
-    exit_code = (
-        int(exit_match.group("code"))
-        if exit_match is not None
-        else next((code for code in codes if code != 0), None)
-    )
-    if exit_code is not None and exit_code != 0:
-        return f"exit_code_{exit_code}", False
-    if re.search(
-        r"Script (?:failed|timed out)|(?:^|\W)error(?:\W|$)|rejected",
-        reason,
-        re.IGNORECASE,
-    ):
-        return "failure_signal", True
-    return None, False
-
-
 def result_failure_provenance(
     payload: dict[str, Any],
     action: dict[str, Any],
@@ -903,12 +814,7 @@ def result_failure_provenance(
 
     reason = failure_reason_label(payload)
     nested_calls = action["nested_calls"]
-    command = (
-        nested_calls[0]["command_label"]
-        if len(nested_calls) == 1
-        else ""
-    )
-    category, semantic_failure = failure_family(command, reason, action)
+    category, semantic_failure = failure_family(reason, action)
     if category is None:
         return None
     return {
@@ -1283,150 +1189,6 @@ def response_result_character_count(payload: dict[str, Any]) -> int:
         if field in payload:
             return serialized_character_count(payload[field])
     return 0
-
-
-def empty_outcomes() -> dict[str, Any]:
-    """Return the closed structured-result signal set for one tool action."""
-
-    return {
-        "structured_tool_error": False,
-        "nonzero_process_result": False,
-        "timeout": False,
-        "termination": False,
-        "structured_outcome": False,
-        "process_result_observed": False,
-        "process_exit_codes": [],
-    }
-
-
-def scan_structured_signals(
-    value: Any,
-    signals: dict[str, Any],
-    *,
-    envelope: bool,
-) -> None:
-    """Read explicit result fields without interpreting prose result content."""
-
-    if isinstance(value, str):
-        try:
-            decoded = json.loads(value)
-        except json.JSONDecodeError:
-            return
-        if isinstance(decoded, (dict, list)):
-            scan_structured_signals(decoded, signals, envelope=False)
-        return
-    if isinstance(value, list):
-        for item in value:
-            scan_structured_signals(item, signals, envelope=False)
-        return
-    if not isinstance(value, dict):
-        return
-
-    if envelope:
-        if "Err" in value:
-            signals["structured_outcome"] = True
-            signals["structured_tool_error"] = True
-        success = value.get("success")
-        if isinstance(success, bool):
-            signals["structured_outcome"] = True
-            signals["structured_tool_error"] |= not success
-        status = value.get("status")
-        if isinstance(status, str):
-            normalized_status = status.casefold()
-            signals["structured_outcome"] = True
-            signals["structured_tool_error"] |= normalized_status in ERROR_STATUSES
-            signals["timeout"] |= normalized_status in TIMEOUT_STATUSES
-            signals["termination"] |= normalized_status in TERMINATION_STATUSES
-
-    for key, item in value.items():
-        normalized_key = str(key).casefold()
-        if normalized_key in {"iserror", "is_error"} and isinstance(item, bool):
-            signals["structured_outcome"] = True
-            signals["structured_tool_error"] |= item
-        elif normalized_key in PROCESS_CODE_FIELDS and (
-            isinstance(item, int) and not isinstance(item, bool)
-        ):
-            signals["structured_outcome"] = True
-            signals["process_result_observed"] = True
-            signals["nonzero_process_result"] |= item != 0
-            signals["process_exit_codes"].append(item)
-        elif normalized_key in TIMEOUT_FIELDS and isinstance(item, bool):
-            signals["structured_outcome"] = True
-            signals["timeout"] |= item
-        elif normalized_key in TERMINATION_FIELDS and isinstance(item, bool):
-            signals["structured_outcome"] = True
-            signals["termination"] |= item
-        if isinstance(item, (dict, list, str)):
-            scan_structured_signals(item, signals, envelope=False)
-
-
-def structured_function_output(payload: dict[str, Any]) -> Any | None:
-    """Decode only a complete JSON function result, never prose output text."""
-
-    if payload.get("type") != "function_call_output":
-        return None
-    output = payload.get("output")
-    if isinstance(output, (dict, list)):
-        return output
-    if not isinstance(output, str):
-        return None
-    try:
-        decoded = json.loads(output)
-    except json.JSONDecodeError:
-        return None
-    return decoded if isinstance(decoded, (dict, list)) else None
-
-
-def response_outcomes(payload: dict[str, Any]) -> dict[str, Any]:
-    """Collect structured signals exposed directly by one tool-result item."""
-
-    signals = empty_outcomes()
-    scan_structured_signals(payload, signals, envelope=True)
-    return signals
-
-
-def mcp_outcomes(payload: dict[str, Any]) -> dict[str, Any]:
-    """Collect the MCP result envelope and structured process signals."""
-
-    signals = empty_outcomes()
-    result = payload.get("result")
-    if not isinstance(result, dict):
-        return signals
-    if "Err" in result:
-        signals["structured_outcome"] = True
-        signals["structured_tool_error"] = True
-    ok = result.get("Ok")
-    if not isinstance(ok, dict):
-        return signals
-    is_error = ok.get("isError")
-    if isinstance(is_error, bool):
-        signals["structured_outcome"] = True
-        signals["structured_tool_error"] |= is_error
-    structured = ok.get("structuredContent")
-    if isinstance(structured, (dict, list)):
-        scan_structured_signals(structured, signals, envelope=False)
-    return signals
-
-
-def patch_outcomes(payload: dict[str, Any]) -> dict[str, Any]:
-    """Collect the explicit apply-patch completion signal."""
-
-    signals = empty_outcomes()
-    success = payload.get("success")
-    if isinstance(success, bool):
-        signals["structured_outcome"] = True
-        signals["structured_tool_error"] = not success
-    return signals
-
-
-def merge_outcomes(target: dict[str, Any], source: dict[str, Any]) -> None:
-    """Merge multiple recorded result events for one top-level tool action."""
-
-    for field, value in source.items():
-        if field == "process_exit_codes":
-            target[field].extend(value)
-        else:
-            target[field] = bool(target.get(field)) or value
 
 
 def token_usage(payload: dict[str, Any]) -> dict[str, int]:
@@ -2583,11 +2345,7 @@ def build_usage_evidence(
             if result_action is None:
                 continue
             result_action["result_recorded"] = True
-            signals = (
-                mcp_outcomes(payload)
-                if payload.get("type") == "mcp_tool_call_end"
-                else patch_outcomes(payload)
-            )
+            signals = response_outcomes(payload)
             merge_outcomes(result_action, signals)
             provenance = result_failure_provenance(payload, result_action)
             if provenance is not None:
@@ -2792,7 +2550,7 @@ def build_usage_evidence(
             "action_scope": "top_level_response_items",
             "duration_source": "task_complete.duration_ms",
             "retry_definition": "same_turn_repeat_after_explicit_failure",
-            "result_signal_source": "structured_result_fields_only",
+            "result_signal_source": "result_envelopes_and_transport_headers",
             "top_level_tool_actions": len(all_actions),
             "result_recorded_actions": result_recorded,
             "structured_outcome_actions": structured_results,

@@ -27,6 +27,7 @@ PRODUCER_REGISTRY = {
     ),
     "repository": (
         "/repository/repo/*",
+        "/repository/pages/*",
         "/repository/actions/*",
         "/repository/content/*",
         "/repository/enforcement",
@@ -127,10 +128,12 @@ CONDITION_STATE_PATTERNS = (
     "repository.codeowners_present",
     "repository.content.dependabot_label_referenced",
     "repository.private_fork_enabled",
+    "repository.pages.build_type",
     "repository.security.dependabot_prs.available",
     "repository.security.dependabot_prs.items",
     "type.workflow_surface",
     "workflow_contains_artifact_metadata_write",
+    "workflow_emits_github_artifact_attestation",
     "workflow_emits_attestation_or_provenance",
 )
 
@@ -325,6 +328,9 @@ def _artifact_state(
         "attestation_detected": bool(
             local.get("workflows", {}).get("attestation_detected")
         ),
+        "github_artifact_attestation_detected": bool(
+            local.get("workflows", {}).get("github_artifact_attestation_detected")
+        ),
         "immutable_release_detected": immutable_release_detected,
         "release_assets": release_assets,
         "live_metadata": {
@@ -463,6 +469,9 @@ def collect_observed_states(desired_state: dict[str, Any]) -> dict[str, Any]:
         "detected_external_artifact_count": artifact["external_count"],
         "audit_only": artifact["audit_only"],
         "publish_workflow_detected": artifact["publish_workflow_detected"],
+        "workflow_emits_github_artifact_attestation": artifact[
+            "github_artifact_attestation_detected"
+        ],
         "workflow_emits_attestation_or_provenance": artifact["attestation_detected"],
         "immutable_release_detected": artifact["immutable_release_detected"],
         "workflow_contains_artifact_metadata_write": bool(

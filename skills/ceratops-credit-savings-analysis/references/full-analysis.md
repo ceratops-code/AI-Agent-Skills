@@ -175,12 +175,11 @@ Similar Runs | Additional Calls per Affected Run for Implemented Fix | Est.
 Calls Saving by Fix per Similar Run | New Complexity Introduced by Fix |
 One-time implementation cost (model calls) | Recommendation`.
 
-Retain every confirmed finding in machine evidence. Present every verified
-unimplemented Minimal finding whose durable correction is one or two lines,
-regardless of count, and every other unimplemented finding whose low-end
-expected saving exceeds one model call per similar run. Follow the parent
-plain-language `Problem` and `Fix` format. Present remaining confirmed controls
-in the control table and counts without claiming they received deep review.
+Retain every confirmed finding in machine evidence. Present every outstanding
+finding in chat using all fields in the parent Output Contract, regardless of
+complexity or expected call savings. Keep every outstanding control in the
+control table and counts without claiming that every finding received deep
+review.
 
 Before selecting the top three for extra verification, deduplicate by likely
 owner/control. Rank deterministically by recurrence across runs, affected-call
@@ -196,8 +195,8 @@ state when none was confirmed.
 Explain plausible risks under the parent contract. Also report necessary,
 protocol-overhead, reviewed-no-confirmed-waste, and unassessed totals;
 outstanding avoidable calls versus total calls; priced cost only when
-available; and the retained analysis-result path.
+available.
 
 For a batch, group similar findings across threads under plain-language problem
 titles, apply the same ordering, identify affected threads, report per-thread
-totals, and provide the retained batch result.
+totals, and present the batch findings in chat.

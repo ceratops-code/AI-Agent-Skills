@@ -355,6 +355,12 @@ def _permission_matches(
     return result
 
 
+def _workflow_uses_github_artifact_attestation(text: str) -> bool:
+    """Return whether workflow text invokes a GitHub artifact-attestation action."""
+
+    return re.search(r"(?i)\bactions/attest(?:-[a-z0-9_-]+)?@", text) is not None
+
+
 def _visible_versions(text: str, tool: str) -> list[str]:
     """Extract explicitly visible runtime or CLI versions from workflow text."""
 
@@ -972,6 +978,10 @@ def collect_local_repository(
                     r"(?i)(actions/attest|attestations:\s*write|--provenance\b|sbom|cosign)",
                     workflow_text,
                 )
+            ),
+            "github_artifact_attestation_detected": any(
+                _workflow_uses_github_artifact_attestation(text)
+                for text in workflows.values()
             ),
             "verification_command_detected": bool(
                 re.search(

@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "tool_id": "ceratops-tool-manager",
+  "distribution": "ceratops-tool-manager",
+  "module": "ceratops_tool_manager"
+}
