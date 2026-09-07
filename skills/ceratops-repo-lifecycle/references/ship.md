@@ -42,8 +42,11 @@ worktrees.
 
 ### Inputs To Capture
 
-- Repository checkout, staged `release/local`, base branch, remote, merge method,
-  and PR title/body.
+- Repository checkout, staged `release/local` , base branch, remote, merge
+  method,
+  and optional PR `--title`/`--body` overrides.
+- New PRs derive omitted metadata from the staged commits relative to the base.
+  Preserve supplied fields exactly and existing PR fields without overrides.
 - Whether the head is reusable after merge.
 - Optional repository-owned `sdlc/sdlc.yml` path and ordered release preflight,
   release publication, and deploy operation IDs. Repeat the phase-specific CLI
